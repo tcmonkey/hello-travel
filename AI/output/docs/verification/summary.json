@@ -1,0 +1,40 @@
+{
+  "scope": "phase05_code_generation_checks_not_full_self_test_or_CR",
+  "recorded_at": "2026-09-17T20:54:48.325936+08:00",
+  "java_source_files": 246,
+  "mysql_business_tables": 17,
+  "flyway_version": "11.20.3",
+  "migration_sha256": "24c7e95ff500378edead0ef52a05b2038635288420e3498eec0f3119d8f0525f",
+  "frontend_lock_sha256": "64bb5361504443771a04f8865c99d4629fab1ab73fc7ec3826619a94342a3da2",
+  "default_start_jar_sha256": "75d8543276580a1fe458b8d0729a385fd31d90376118d64b893aaf149edabd9c",
+  "backend": "install_success_checkstyle_zero_violations",
+  "offline_checks": {
+    "tests": 7,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "revision_override": "0.0.1-verification_package_success_tests_skipped",
+  "independent_consumer": "success",
+  "frontend": "types_format_production_build_success",
+  "http_sanity": [
+    {
+      "path": "/actuator/health",
+      "status": 200,
+      "code": "UP"
+    },
+    {
+      "path": "/api/v1/auth/challenge",
+      "status": 503,
+      "code": "UNAVAILABLE"
+    },
+    {
+      "path": "/api/v1/chat/bootstrap",
+      "status": 401,
+      "code": "UNAUTHORIZED"
+    }
+  ],
+  "external_end_to_end": "not_run",
+  "background_workers_during_startup": false,
+  "mysql_schema_final_readback": "17_business_tables_account_count_0_flyway_v1_success"
+}

@@ -1,0 +1,175 @@
+{
+  "schema_version": "1.5",
+  "template_version": "0.8.0",
+  "artifact_layout": "consolidated-lazy",
+  "artifact_overrides": {},
+  "project_name": "hello-travel",
+  "delivery_mode": "full",
+  "execution_goal": "auto",
+  "interaction_mode": "guided",
+  "revision": 5,
+  "current_phase": "development",
+  "phases": {
+    "intake": {
+      "status": "complete",
+      "required": true,
+      "approved_at": null,
+      "note": "已接收SRC-001并建输入清单；环境声明未核验"
+    },
+    "requirements": {
+      "status": "review",
+      "required": true,
+      "approved_at": null,
+      "note": "SRC-017用户明确要求执行，按当前方案实施；未伪造独立的历史全文审批"
+    },
+    "product": {
+      "status": "review",
+      "required": true,
+      "approved_at": null,
+      "note": "SRC-017用户明确要求执行，按当前方案实施；未伪造独立的历史全文审批"
+    },
+    "ui": {
+      "status": "review",
+      "required": true,
+      "approved_at": null,
+      "note": "SRC-017用户明确要求执行，按当前方案实施；未伪造独立的历史全文审批"
+    },
+    "technical": {
+      "status": "review",
+      "required": true,
+      "approved_at": null,
+      "note": "SRC-017用户明确要求执行，按当前方案实施；未伪造独立的历史全文审批"
+    },
+    "planning": {
+      "status": "complete",
+      "required": true,
+      "approved_at": null,
+      "note": "04内嵌11任务，编码状态与证据统一05；无默认工时估算"
+    },
+    "development": {
+      "status": "complete",
+      "required": true,
+      "approved_at": null,
+      "note": "当前四层入口与工程目录整改完成；实际构建/回归及限制见AI/output/05和docs/verification/boundary-summary.json"
+    },
+    "developer_self_test": {
+      "status": "not_started",
+      "required": true,
+      "approved_at": null,
+      "note": "未开始完整06；编码阶段有限检查记录05，不代替全部验收/外部联调"
+    },
+    "code_review": {
+      "status": "not_started",
+      "required": true,
+      "approved_at": null
+    },
+    "testing": {
+      "status": "not_started",
+      "required": true,
+      "approved_at": null
+    },
+    "release_preparation": {
+      "status": "not_started",
+      "required": true,
+      "approved_at": null
+    },
+    "initial_release": {
+      "status": "not_started",
+      "required": true,
+      "approved_at": null
+    },
+    "observation": {
+      "status": "not_started",
+      "required": true,
+      "approved_at": null
+    },
+    "rollout": {
+      "status": "not_started",
+      "required": true,
+      "approved_at": null
+    },
+    "full_release": {
+      "status": "not_started",
+      "required": true,
+      "approved_at": null
+    },
+    "effect_evaluation": {
+      "status": "not_started",
+      "required": true,
+      "approved_at": null
+    }
+  },
+  "approvals": [],
+  "open_questions": [
+    {
+      "id": "Q-001",
+      "question": "单库单表是否表示不分库分表、允许多张业务表",
+      "owner": "user",
+      "status": "resolved",
+      "resolved_source": "SRC-002",
+      "resolved_at": "2026-09-17T17:29:00+08:00",
+      "answer": "hello-travel单库多业务表，不分库分表"
+    },
+    {
+      "id": "Q-002",
+      "question": "不同设备并行，同设备新登录踢旧会话是否为正确含义",
+      "owner": "user",
+      "status": "resolved",
+      "resolved_source": "SRC-002",
+      "resolved_at": "2026-09-17T17:29:00+08:00",
+      "answer": "不同设备并行且新消息同步；同设备新页面主动登录踢旧会话，新登录全量恢复"
+    }
+  ],
+  "runtime": {
+    "platform": "codex",
+    "model": "unknown",
+    "capabilities": {
+      "filesystem": "read-write",
+      "shell": "available",
+      "python": "python3",
+      "repository": "local",
+      "browser": "available",
+      "persistence": "durable"
+    }
+  },
+  "last_actor": {
+    "platform": "codex",
+    "model": "unknown",
+    "updated_at": "2026-09-17T23:53:04+08:00"
+  },
+  "handoff": {
+    "summary": "SRC-021/022三项工程边界整改完成：50主入口完整try-catch，无throws/捕获重抛，保留HTTP错误与事务失败分类；前端迁同级hello-travel-app，AI设计/证据/资料迁AI/output，正式V1冻结。根install及10条离线检查、前端类型格式构建、独立消费者和401/400/503路径通过；17业务表/账号0/Flyway校验和不变，临时Java已停。公共规范1.7/快照1.5、三宿主及portable已同步，93源文件及134核心资源SHA一致；技术0.4/开发0.2更新，06至14仍未开始。",
+    "next_action": "用户审阅当前04第7章、05第7章和代码；本次按05代码生成终点暂停，真实模型/Milvus/SMTP、多设备全链路、独立CR和发布需后续实际执行。"
+  },
+  "last_updated": "2026-09-17T23:53:04+08:00",
+  "execution_goal_detail": {
+    "type": "custom",
+    "original_request": "本次仅做到代码生成完，审阅方案文档和代码质量",
+    "terminal_phase": "development",
+    "terminal_step": "05",
+    "selected_by": "user",
+    "note": "execution_goal=auto为现有枚举兼容；自定义终点以本对象和工作台为准"
+  },
+  "authorizations": [
+    {
+      "id": "AUTH-DB-001",
+      "source": "SRC-002",
+      "actor": "user",
+      "scope": "创建本机hello-travel专用库，允许多表结构设计；未把业务表草案当技术批准",
+      "executed": "专用数据库已建设，Flyway V1迁移17业务表，账号0"
+    },
+    {
+      "id": "AUTH-DEV-001",
+      "source": "SRC-017",
+      "actor": "user",
+      "scope": "执行修订方案的一期编码和合理构建检查，终点05；允许专用库迁移，不扩展为部署/消息发送/计费调用"
+    },
+    {
+      "id": "AUTH-BOUNDARY-001",
+      "source": "SRC-021",
+      "actor": "user",
+      "scope": "三个工程边界约束沉淀solo及ddd；全面检查并修改hello-travel与ddd四层主入口，执行相关开发回归与目录迁移",
+      "executed": "完整捕获/失败回滚/错误分类、同级前端、AI/output已完成；保留历史审批、未开始CR/发布"
+    }
+  ]
+}

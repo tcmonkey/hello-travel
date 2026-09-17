@@ -1,0 +1,39 @@
+package com.hellotravel.application.auth.service;
+
+import com.hellotravel.application.auth.command.AuthCommand;
+import com.hellotravel.application.auth.result.AuthResult;
+import com.hellotravel.application.auth.workflow.AuthFlow;
+import com.hellotravel.common.result.Result;
+
+import org.springframework.stereotype.Service;
+
+/**
+ * 认证应用入口，明确动作并将结果交给协议assembler。
+ *
+ * @author AIGenerator
+ */
+@Service
+public final class AuthApplication {
+
+    private final AuthFlow flow;
+
+    public AuthApplication(AuthFlow flow) {
+        this.flow = flow;
+    }
+
+    /**
+     * 执行指定认证用例，失败异常越过事务边界。
+     *
+     * @author AIGenerator
+     * @param authCommand 当前用例命令，归属来自服务端
+     * @return 当前操作的业务结果
+     */
+    public Result<AuthResult> authenticate(AuthCommand authCommand) {
+        try {
+            AuthResult result = flow.perform(authCommand);
+            return Result.success(result);
+        } catch (Exception exception) {
+            return com.hellotravel.application.support.ApplicationFailures.capture(exception);
+        }
+    }
+}

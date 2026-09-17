@@ -1,0 +1,18 @@
+# 编码阶段有限检查证据
+
+这些记录只证明所列检查，不等同06完整开发自测、07独立CR或08产品验收。未调用真实模型、嵌入、高德或SMTP，启动检查禁用后台调度。
+
+- backend-install.log：九项目聚合构建/安装、默认Checkstyle/Flatten、7条离线检查。
+- revision-override.log：覆盖revision的实际源码构建，测试明确跳过。
+- independent-consumer.log：源码聚合工程之外消费安装后的application及传递依赖。
+- frontend-build.log/frontend-format.log：TypeScript、生产打包、Prettier检查。
+- startup-excerpt.log：最终JAR迁移校验及启动，仅摘取不含配置值的证明行。
+- http-error-paths.json：健康、缺SMTP、未登录路径；没有模拟正常登录或真实生成。
+- mysql-schema.txt：专用库表名，其后0是账号数，最后1/1是Flyway版本1及成功标志。
+- summary.json：记录时刻、范围和迁移/lockfile/JAR校验和。
+
+install隔离项目坐标使用临时本地仓库，复用第三方依赖缓存；不是完全无缓存构建，也未远程发布。正式库V1最初执行时使用Boot默认Flyway，最终版本升11.20.3后再次校验同一V1通过，无repair或改写迁移。
+
+## SRC-021当前整改证据
+
+boundary-*及entry-audit.csv是当前10条离线检查/50入口审计/HTTP分类/独立消费者证据；app-*来自独立同级hello-travel-app。原文件为SRC-020历史证据，原summary.json保留历史哈希，当前哈希见boundary-summary.json。

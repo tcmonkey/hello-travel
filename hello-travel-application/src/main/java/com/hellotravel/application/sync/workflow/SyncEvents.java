@@ -1,0 +1,103 @@
+package com.hellotravel.application.sync.workflow;
+
+import com.hellotravel.application.persistence.TravelRepositories;
+import com.hellotravel.application.support.Json;
+import com.hellotravel.application.tx.Transactions;
+import com.hellotravel.domain.auth.model.entity.UserAccountEntity;
+import com.hellotravel.domain.sync.model.aggregate.OutboxEventAggregate;
+import com.hellotravel.domain.sync.model.aggregate.SyncEventAggregate;
+import com.hellotravel.domain.sync.model.entity.OutboxEventEntity;
+import com.hellotravel.domain.sync.model.entity.SyncEventEntity;
+
+import org.springframework.stereotype.Component;
+
+/**
+ * 业务短事务内写有序事件和可靠发件箱；推送不是唯一事实源。
+ *
+ * @author AIGenerator
+ */
+@Component
+public final class SyncEvents {
+
+    private final TravelRepositories repositories;
+
+    private final com.hellotravel.application.persistence.DomainWrites writes;
+
+    public SyncEvents(
+            com.hellotravel.application.persistence.DomainWrites writes,
+            TravelRepositories repositories) {
+        this.writes = writes;
+        this.repositories = repositories;
+    }
+
+    /**
+     * 在业务事务内保存账号连续事件及发件箱。
+     *
+     * @author AIGenerator
+     * @param account 受控account参数
+     * @param type 目标协议类型
+     * @param publicId 受控publicId参数
+     * @param version 受控version参数
+     * @param target 受控target参数
+     * @param payload 受控payload参数
+     */
+    public void append(
+            UserAccountEntity account,
+            String type,
+            String publicId,
+            long version,
+            String target,
+            String payload) {
+        SyncEventEntity event =
+                new SyncEventEntity(
+                        null,
+                        account.id(),
+                        account.syncSeq(),
+                        type,
+                        publicId,
+                        version,
+                        target,
+                        payload,
+                        java.time.LocalDateTime.now(java.time.ZoneOffset.UTC),
+                        java.time.LocalDateTime.now(java.time.ZoneOffset.UTC).plusHours(72));
+        Transactions.require(writes.saveSyncEvent(new SyncEventAggregate(event)));
+        outbox(
+                account.id(),
+                "SYNC",
+                account.publicId() + ":" + account.syncSeq(),
+                Json.encode(java.util.Map.of("seq", account.syncSeq())));
+    }
+
+    /**
+     * 在当前事务内保存受限任务引用。
+     *
+     * @author AIGenerator
+     * @param userId 认证账号主键
+     * @param type 目标协议类型
+     * @param key 受控key参数
+     * @param payload 受控payload参数
+     */
+    public void outbox(Long userId, String type, String key, String payload) {
+        OutboxEventEntity event =
+                new OutboxEventEntity(
+                        null,
+                        com.hellotravel.common.identity.Ids.next(),
+                        userId,
+                        type,
+                        key,
+                        payload,
+                        "PENDING",
+                        0,
+                        8,
+                        java.time.LocalDateTime.now(java.time.ZoneOffset.UTC),
+                        null,
+                        0L,
+                        null,
+                        null,
+                        null,
+                        java.time.LocalDateTime.now(java.time.ZoneOffset.UTC),
+                        java.time.LocalDateTime.now(java.time.ZoneOffset.UTC),
+                        0L);
+        Transactions.require(writes.saveOutboxEvent(new OutboxEventAggregate(event)));
+    }
+}

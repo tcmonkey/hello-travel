@@ -1,0 +1,44 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>com.hellotravel</groupId>
+        <artifactId>hello-travel</artifactId>
+        <version>${revision}</version>
+    </parent>
+    <artifactId>hello-travel-application</artifactId>
+    <dependencies>
+        <dependency>
+            <groupId>com.hellotravel</groupId>
+            <artifactId>hello-travel-common</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.hellotravel</groupId>
+            <artifactId>hello-travel-model</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.hellotravel</groupId>
+            <artifactId>hello-travel-domain</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-context</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-tx</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.bsc.langgraph4j</groupId>
+            <artifactId>langgraph4j-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>jakarta.annotation</groupId>
+            <artifactId>jakarta.annotation-api</artifactId>
+        </dependency>
+    </dependencies>
+</project>

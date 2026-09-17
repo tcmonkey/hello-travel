@@ -1,0 +1,6 @@
+
+> hello-travel-app@0.0.1 format:check
+> prettier --check src vite.config.ts index.html *.json
+
+Checking formatting...
+All matched files use Prettier code style!

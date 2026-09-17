@@ -1,0 +1,22 @@
+[
+  {
+    "path": "/actuator/health",
+    "status": 200,
+    "code": "UP"
+  },
+  {
+    "path": "/api/v1/auth/challenge",
+    "status": 503,
+    "code": "UNAVAILABLE"
+  },
+  {
+    "path": "/api/v1/chat/bootstrap",
+    "status": 401,
+    "code": "UNAUTHORIZED"
+  },
+  {
+    "path": "/api/v1/auth/login",
+    "status": 400,
+    "code": "INVALID"
+  }
+]

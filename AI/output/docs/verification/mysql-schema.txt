@@ -1,0 +1,20 @@
+flyway_schema_history
+ht_chat_run
+ht_conversation
+ht_device
+ht_email_challenge
+ht_index_job
+ht_knowledge_chunk
+ht_knowledge_document
+ht_login_session
+ht_memory_fact
+ht_memory_fact_source
+ht_memory_summary
+ht_message
+ht_model_invocation
+ht_outbox_event
+ht_refresh_receipt
+ht_sync_event
+ht_user_account
+0
+1	1
