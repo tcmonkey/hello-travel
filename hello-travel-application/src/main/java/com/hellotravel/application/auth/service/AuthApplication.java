@@ -2,7 +2,7 @@ package com.hellotravel.application.auth.service;
 
 import com.hellotravel.application.auth.command.AuthCommand;
 import com.hellotravel.application.auth.result.AuthResult;
-import com.hellotravel.application.auth.workflow.AuthFlow;
+import com.hellotravel.application.auth.usecase.AuthActionDispatcher;
 import com.hellotravel.application.support.ApplicationFailures;
 import com.hellotravel.common.result.Result;
 
@@ -16,10 +16,10 @@ import org.springframework.stereotype.Service;
 @Service
 public final class AuthApplication {
 
-    private final AuthFlow flow;
+    private final AuthActionDispatcher dispatcher;
 
-    public AuthApplication(AuthFlow flow) {
-        this.flow = flow;
+    public AuthApplication(AuthActionDispatcher dispatcher) {
+        this.dispatcher = dispatcher;
     }
 
     /**
@@ -32,7 +32,7 @@ public final class AuthApplication {
     public Result<AuthResult> authenticate(AuthCommand authCommand) {
         try {
             // 1. 取得本段结果并准备本层转换，随后显式核对成功状态。
-            AuthResult result = flow.perform(authCommand);
+            AuthResult result = dispatcher.dispatch(authCommand);
             // 2. 将本层成功数据封装为标准结果，保持对外模型隔离。
             return Result.success(result);
         } catch (Exception exception) {

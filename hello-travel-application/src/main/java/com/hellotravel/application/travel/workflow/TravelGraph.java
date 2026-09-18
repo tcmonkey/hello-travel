@@ -1,19 +1,20 @@
 package com.hellotravel.application.travel.workflow;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.hellotravel.application.chat.support.ChatRepositories;
 import com.hellotravel.application.exception.ApplicationErrorCode;
 import com.hellotravel.application.exception.ApplicationException;
-import com.hellotravel.application.knowledge.workflow.RagFlow;
+import com.hellotravel.application.knowledge.retrieval.RagRetrievalService;
 import com.hellotravel.application.memory.assembler.ContextApplicationAssembler;
-import com.hellotravel.application.memory.workflow.MemoryFlow;
+import com.hellotravel.application.memory.context.MemoryContextService;
 import com.hellotravel.application.model.adaptor.ModelOutAdaptor;
 import com.hellotravel.application.model.assembler.ModelCommandAssembler;
 import com.hellotravel.application.model.command.PromptMessageCommand;
 import com.hellotravel.application.model.policy.ModelContextPolicy;
-import com.hellotravel.application.persistence.TravelRepositories;
 import com.hellotravel.application.support.Json;
 import com.hellotravel.application.travel.adaptor.TravelOutAdaptor;
 import com.hellotravel.application.travel.assembler.TravelCommandAssembler;
+import com.hellotravel.application.travel.execution.RunExecutionService;
 import com.hellotravel.domain.chat.model.entity.ChatRunEntity;
 import com.hellotravel.domain.chat.model.entity.MessageEntity;
 import com.hellotravel.domain.memory.model.value.ContextBudgetValue;
@@ -35,10 +36,10 @@ import java.util.Map;
 @Component
 public final class TravelGraph {
 
-    private final TravelRepositories repositories;
-    private final RunCoordinator coordinator;
-    private final MemoryFlow memory;
-    private final RagFlow rag;
+    private final ChatRepositories chatRepositories;
+    private final RunExecutionService coordinator;
+    private final MemoryContextService memory;
+    private final RagRetrievalService rag;
     private final ModelOutAdaptor model;
     private final TravelOutAdaptor tools;
     private final ModelContextPolicy contextPolicy;
@@ -47,17 +48,17 @@ public final class TravelGraph {
     private final TravelCommandAssembler travelCommandAssembler;
 
     public TravelGraph(
-            TravelRepositories repositories,
-            RunCoordinator coordinator,
-            MemoryFlow memory,
-            RagFlow rag,
+            ChatRepositories chatRepositories,
+            RunExecutionService coordinator,
+            MemoryContextService memory,
+            RagRetrievalService rag,
             ModelOutAdaptor model,
             TravelOutAdaptor tools,
             ModelContextPolicy contextPolicy,
             ContextApplicationAssembler contextApplicationAssembler,
             ModelCommandAssembler modelCommandAssembler,
             TravelCommandAssembler travelCommandAssembler) {
-        this.repositories = repositories;
+        this.chatRepositories = chatRepositories;
         this.coordinator = coordinator;
         this.memory = memory;
         this.rag = rag;
@@ -160,7 +161,7 @@ public final class TravelGraph {
         coordinator.requireCurrent(context.run);
         // 2. 更新本次处理的局部数据或上下文，后续步骤读取同一快照。
         context.input =
-                repositories.message.findById(context.run.userMessageId()).entity().content();
+                chatRepositories.message.findById(context.run.userMessageId()).entity().content();
         context.recent = memory.recent(context.run);
         context.recentSources = memory.recentEntities(context.run);
         context.summary = memory.summary(context.run);

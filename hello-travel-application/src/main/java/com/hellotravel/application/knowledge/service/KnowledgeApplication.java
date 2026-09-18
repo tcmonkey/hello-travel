@@ -2,7 +2,7 @@ package com.hellotravel.application.knowledge.service;
 
 import com.hellotravel.application.knowledge.command.KnowledgeCommand;
 import com.hellotravel.application.knowledge.result.KnowledgeResult;
-import com.hellotravel.application.knowledge.workflow.KnowledgeFlow;
+import com.hellotravel.application.knowledge.usecase.KnowledgeActionDispatcher;
 import com.hellotravel.application.support.ApplicationFailures;
 import com.hellotravel.common.result.Result;
 
@@ -16,10 +16,10 @@ import org.springframework.stereotype.Service;
 @Service
 public final class KnowledgeApplication {
 
-    private final KnowledgeFlow flow;
+    private final KnowledgeActionDispatcher dispatcher;
 
-    public KnowledgeApplication(KnowledgeFlow flow) {
-        this.flow = flow;
+    public KnowledgeApplication(KnowledgeActionDispatcher dispatcher) {
+        this.dispatcher = dispatcher;
     }
 
     /**
@@ -31,7 +31,7 @@ public final class KnowledgeApplication {
      */
     public Result<KnowledgeResult> manage(KnowledgeCommand knowledgeCommand) {
         try {
-            return Result.success(flow.perform(knowledgeCommand));
+            return Result.success(dispatcher.dispatch(knowledgeCommand));
         } catch (Exception exception) {
             return ApplicationFailures.capture(exception);
         }

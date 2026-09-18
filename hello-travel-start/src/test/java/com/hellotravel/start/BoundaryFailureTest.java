@@ -13,7 +13,11 @@ import com.hellotravel.application.chat.service.ChatApplication;
 import com.hellotravel.application.knowledge.service.KnowledgeApplication;
 import com.hellotravel.application.sync.service.SyncApplication;
 import com.hellotravel.common.result.Result;
-import com.hellotravel.domain.persistence.service.TravelWriteDomainService;
+import com.hellotravel.domain.auth.service.AuthDomainService;
+import com.hellotravel.domain.chat.service.ChatDomainService;
+import com.hellotravel.domain.knowledge.service.KnowledgeDomainService;
+import com.hellotravel.domain.memory.service.MemoryDomainService;
+import com.hellotravel.domain.sync.service.SyncDomainService;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -81,7 +85,11 @@ class BoundaryFailureTest {
                         ChatApplication.class,
                         KnowledgeApplication.class,
                         SyncApplication.class,
-                        TravelWriteDomainService.class)) {
+                        AuthDomainService.class,
+                        ChatDomainService.class,
+                        MemoryDomainService.class,
+                        KnowledgeDomainService.class,
+                        SyncDomainService.class)) {
             var constructor = type.getConstructors()[0];
             Object[] dependencies =
                     Arrays.stream(constructor.getParameterTypes())
@@ -100,7 +108,7 @@ class BoundaryFailureTest {
                 }
             }
         }
-        assertEquals(38, checked);
+        assertEquals(24, checked);
     }
 
     private static Object failingDependency(Class<?> type) {

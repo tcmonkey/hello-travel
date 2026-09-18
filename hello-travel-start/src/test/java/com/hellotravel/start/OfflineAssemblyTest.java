@@ -5,7 +5,11 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import com.hellotravel.application.auth.service.AuthApplication;
 import com.hellotravel.application.knowledge.service.KnowledgeApplication;
 import com.hellotravel.application.travel.workflow.TravelGraph;
-import com.hellotravel.domain.persistence.service.TravelWriteDomainService;
+import com.hellotravel.domain.auth.service.AuthDomainService;
+import com.hellotravel.domain.chat.service.ChatDomainService;
+import com.hellotravel.domain.knowledge.service.KnowledgeDomainService;
+import com.hellotravel.domain.memory.service.MemoryDomainService;
+import com.hellotravel.domain.sync.service.SyncDomainService;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -49,7 +53,11 @@ class OfflineAssemblyTest {
 
     @Test
     void realWiringIncludesDomainAndModelGraph() {
-        assertNotNull(context.getBean(TravelWriteDomainService.class));
+        assertNotNull(context.getBean(AuthDomainService.class));
+        assertNotNull(context.getBean(ChatDomainService.class));
+        assertNotNull(context.getBean(MemoryDomainService.class));
+        assertNotNull(context.getBean(KnowledgeDomainService.class));
+        assertNotNull(context.getBean(SyncDomainService.class));
         assertNotNull(context.getBean(TravelGraph.class));
         assertNotNull(context.getBean(AuthApplication.class));
         assertNotNull(context.getBean(KnowledgeApplication.class));

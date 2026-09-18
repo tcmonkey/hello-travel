@@ -2,7 +2,7 @@ package com.hellotravel.application.chat.service;
 
 import com.hellotravel.application.chat.command.ChatCommand;
 import com.hellotravel.application.chat.result.ChatResult;
-import com.hellotravel.application.chat.workflow.ChatFlow;
+import com.hellotravel.application.chat.usecase.ChatActionDispatcher;
 import com.hellotravel.application.support.ApplicationFailures;
 import com.hellotravel.common.result.Result;
 
@@ -16,10 +16,10 @@ import org.springframework.stereotype.Service;
 @Service
 public final class ChatApplication {
 
-    private final ChatFlow flow;
+    private final ChatActionDispatcher dispatcher;
 
-    public ChatApplication(ChatFlow flow) {
-        this.flow = flow;
+    public ChatApplication(ChatActionDispatcher dispatcher) {
+        this.dispatcher = dispatcher;
     }
 
     /**
@@ -32,7 +32,7 @@ public final class ChatApplication {
     public Result<ChatResult> manage(ChatCommand chatCommand) {
         try {
             // 1. 取得本段结果并准备本层转换，随后显式核对成功状态。
-            ChatResult result = flow.perform(chatCommand);
+            ChatResult result = dispatcher.dispatch(chatCommand);
             // 2. 将本层成功数据封装为标准结果，保持对外模型隔离。
             return Result.success(result);
         } catch (Exception exception) {

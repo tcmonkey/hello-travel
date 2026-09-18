@@ -7,7 +7,7 @@
   "delivery_mode": "full",
   "execution_goal": "auto",
   "interaction_mode": "guided",
-  "revision": 10,
+  "revision": 12,
   "current_phase": "development",
   "phases": {
     "intake": {
@@ -50,7 +50,7 @@
       "status": "complete",
       "required": true,
       "approved_at": null,
-      "note": "SRC-025/026异常归属与实际映射职责整改完成；292类/816方法构造器/399流程块，35后端/4前端，规范1.9；当前终点05，完整06及独立CR未开始；SRC-027仅整理公共规范适用范围，当前规范1.10/快照说明1.8，业务代码及此前回归证据不变；SRC-028仅依赖字段空行整改，规范1.11/快照1.9，非空行内容不变；SRC-029无参数@Component省略括号，规范1.12，业务逻辑不变"
+      "note": "SRC-030/031/050纠正业务、模式和对象命名的维度；auth/chat/memory/knowledge/sync领域服务按业务职责命名，20动作保留写入语义；294类/790方法构造器/371流程块，39后端回归通过，规范1.14；终点05，完整06/独立CR未开始"
     },
     "developer_self_test": {
       "status": "not_started",
@@ -135,13 +135,13 @@
   "last_actor": {
     "platform": "codex",
     "model": "unknown",
-    "updated_at": "2026-09-18T17:12:25+08:00"
+    "updated_at": "2026-09-18T18:09:11+08:00"
   },
   "handoff": {
-    "summary": "SRC-029无参@Component去空括号38处，FMT-007规范1.12与发行/19副本同步；默认validate、结构与流程10/安装16通过，业务逻辑和Bean命名不变",
-    "next_action": "保留05编码终点暂停；开发记录0.7记载风格修订，不把既有业务回归当此次执行，完整06与独立CR尚未开始"
+    "summary": "SRC-050：五个真实领域服务改为业务职责名，写入语义保留在用例与公开动作；规范1.14、参考说明、项目副本及回归同步。39项后端、36入口审计、DDD根与快照各7项、流程10和安装16通过。",
+    "next_action": "按用户05编码终点暂停；审阅领域服务命名与规范1.14，完整06、独立CR、真实外部联调和发布仍未开始"
   },
-  "last_updated": "2026-09-18T17:12:25+08:00",
+  "last_updated": "2026-09-18T18:09:11+08:00",
   "execution_goal_detail": {
     "type": "custom",
     "original_request": "本次仅做到代码生成完，审阅方案文档和代码质量",
@@ -184,6 +184,20 @@
       "actor": "user",
       "scope": "全面检查并修正hello-travel异常归属、assembler/converter和OO职责；依据既有授权同步相关solo/ddd规范、门禁、模板，执行合理针对性编码回归",
       "executed": "完成，终点05；没有完整06/独立CR/部署/计费调用/邮件或业务数据库写入"
+    },
+    {
+      "id": "AUTH-VERTICAL-001",
+      "source": "SRC-030",
+      "actor": "user",
+      "scope": "依据当前架构纠正和既有整改授权，修正业务域与开发模式维度，修改完整相关代码/规范/DDD参考和合理针对性回归",
+      "executed": "完成业务垂直写读链路及规范1.13同步，未新增业务功能或写已安装服务数据；终点05"
+    },
+    {
+      "id": "AUTH-NAMING-001",
+      "source": "SRC-050",
+      "actor": "user",
+      "scope": "按业务职责命名真实领域服务，理解模式与对象身份边界；同步通用规范、DDD说明和合理回归",
+      "executed": "五个领域服务重命名为业务职责名，规范1.14与参考说明/项目副本同步；终点仍05"
     }
   ]
 }

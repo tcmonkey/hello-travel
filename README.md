@@ -58,3 +58,7 @@ java scripts/JavaBusinessQuality.java . --report AI/output/docs/verification/qua
 ```
 
 实际范围与证据见[当前开发交付记录](<AI/output/05 开发交付记录.md>)和AI/output/docs/verification/quality-summary.json；旧日志/哈希保留原日期。
+
+## 业务领域与开发模式
+
+领域与应用代码按auth、chat、memory、knowledge、sync组织；各域WriteDomainService只依赖本域仓储，Param/assembler/协作归对应业务目录。普通读、外部读、写、规则计算、纯计算是每个业务可采用的用例模式，不是全项目按模式各建总服务。跨域事务由Application/Flow显式协调；没有统一写入路由或全局仓储集合。详见AI/output/04技术方案第10章和05开发记录第13章。

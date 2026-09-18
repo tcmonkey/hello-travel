@@ -1,12 +1,13 @@
 package com.hellotravel.application.sync.service;
 
+import com.hellotravel.application.auth.support.AuthRepositories;
 import com.hellotravel.application.exception.ApplicationErrorCode;
 import com.hellotravel.application.exception.ApplicationException;
-import com.hellotravel.application.persistence.TravelRepositories;
 import com.hellotravel.application.support.ApplicationFailures;
 import com.hellotravel.application.sync.assembler.SyncApplicationAssembler;
 import com.hellotravel.application.sync.command.SyncCommand;
 import com.hellotravel.application.sync.result.SyncResult;
+import com.hellotravel.application.sync.support.SyncRepositories;
 import com.hellotravel.common.result.Result;
 import com.hellotravel.domain.query.model.value.QueryValue;
 
@@ -20,12 +21,16 @@ import org.springframework.stereotype.Service;
 @Service
 public final class SyncApplication {
 
-    private final TravelRepositories repositories;
+    private final SyncRepositories syncRepositories;
+    private final AuthRepositories authRepositories;
     private final SyncApplicationAssembler syncApplicationAssembler;
 
     public SyncApplication(
-            TravelRepositories repositories, SyncApplicationAssembler syncApplicationAssembler) {
-        this.repositories = repositories;
+            SyncRepositories syncRepositories,
+            AuthRepositories authRepositories,
+            SyncApplicationAssembler syncApplicationAssembler) {
+        this.syncRepositories = syncRepositories;
+        this.authRepositories = authRepositories;
         this.syncApplicationAssembler = syncApplicationAssembler;
     }
 
@@ -45,14 +50,15 @@ public final class SyncApplication {
                 throw new ApplicationException(ApplicationErrorCode.INVALID);
             }
             // 2. 按可信内部标识读取账号当前快照。
-            long high = repositories.userAccount.findById(syncCommand.userId()).entity().syncSeq();
+            long high =
+                    authRepositories.userAccount.findById(syncCommand.userId()).entity().syncSeq();
             // 3. 核对分页游标与快照上界，防止越界或无法推进的恢复。
             if (syncCommand.afterSeq() > high) {
                 throw new ApplicationException(ApplicationErrorCode.SYNC_RESET_REQUIRED);
             }
             // 4. 读取同步事件，限定当前用户及查询窗口。
             var rows =
-                    repositories.syncEvent.query(
+                    syncRepositories.syncEvent.query(
                             QueryValue.all("event_seq", syncCommand.limit())
                                     .where("user_id", "EQ", syncCommand.userId())
                                     .where("event_seq", "GT", syncCommand.afterSeq())
