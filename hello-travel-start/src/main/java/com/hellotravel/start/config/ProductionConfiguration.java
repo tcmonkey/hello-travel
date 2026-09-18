@@ -28,7 +28,9 @@ public class ProductionConfiguration {
      */
     @PostConstruct
     public void verify() {
+        // 1. 取得待序列化的上下文用量字段，供本段后续处理使用。
         var values = new java.util.HashSet<String>();
+        // 2. 逐项处理当前数据窗口，并在循环中核对可用状态与停止条件。
         for (String name :
                 java.util.List.of("OTP_HMAC_KEY", "OTP_DELIVERY_KEY", "DEVICE_SIGNING_KEY")) {
             String value = environment.getRequiredProperty(name);
@@ -36,10 +38,13 @@ public class ProductionConfiguration {
                 throw new IllegalStateException("security keys must be independent 32-byte values");
             }
         }
+        // 3. 生产配置必须启用安全Cookie，避免明文传输认证凭据。
         if (!environment.getProperty("COOKIE_SECURE", Boolean.class, false)) {
             throw new IllegalStateException("production cookies require HTTPS");
         }
+        // 4. 取得允许跨域的来源地址清单，供本段后续处理使用。
         String origins = environment.getRequiredProperty("ALLOWED_ORIGINS");
+        // 5. 逐项处理当前数据窗口，并在循环中核对可用状态与停止条件。
         for (String origin : origins.split(",")) {
             var uri = java.net.URI.create(origin);
             if (!"https".equals(uri.getScheme())
@@ -51,6 +56,7 @@ public class ProductionConfiguration {
                 throw new IllegalStateException("production requires precise HTTPS origins");
             }
         }
+        // 6. 已配置SMTP时必须启用STARTTLS，拒绝不安全生产配置。
         if (environment.containsProperty("SMTP_HOST")
                 && !environment.getProperty("SMTP_STARTTLS", Boolean.class, true)) {
             throw new IllegalStateException("production SMTP requires TLS");

@@ -1,5 +1,6 @@
 package com.hellotravel.application.sync.workflow;
 
+import com.hellotravel.application.persistence.DomainWrites;
 import com.hellotravel.application.persistence.TravelRepositories;
 import com.hellotravel.application.support.Json;
 import com.hellotravel.application.tx.Transactions;
@@ -21,11 +22,9 @@ public final class SyncEvents {
 
     private final TravelRepositories repositories;
 
-    private final com.hellotravel.application.persistence.DomainWrites writes;
+    private final DomainWrites writes;
 
-    public SyncEvents(
-            com.hellotravel.application.persistence.DomainWrites writes,
-            TravelRepositories repositories) {
+    public SyncEvents(DomainWrites writes, TravelRepositories repositories) {
         this.writes = writes;
         this.repositories = repositories;
     }
@@ -48,19 +47,22 @@ public final class SyncEvents {
             long version,
             String target,
             String payload) {
+        // 1. 通过领域聚合语义准备业务快照，固定状态由实体封装。
         SyncEventEntity event =
-                new SyncEventEntity(
-                        null,
-                        account.id(),
-                        account.syncSeq(),
-                        type,
-                        publicId,
-                        version,
-                        target,
-                        payload,
-                        java.time.LocalDateTime.now(java.time.ZoneOffset.UTC),
-                        java.time.LocalDateTime.now(java.time.ZoneOffset.UTC).plusHours(72));
+                SyncEventAggregate.committed(
+                                account.id(),
+                                account.syncSeq(),
+                                type,
+                                publicId,
+                                version,
+                                target,
+                                payload,
+                                java.time.LocalDateTime.now(java.time.ZoneOffset.UTC),
+                                java.time.LocalDateTime.now(java.time.ZoneOffset.UTC).plusHours(72))
+                        .entity();
+        // 2. 持久化当前完整聚合，失败必须中断事务而非继续提交。
         Transactions.require(writes.saveSyncEvent(new SyncEventAggregate(event)));
+        // 3. 同事务登记可恢复后台任务，外部调用在提交之后执行。
         outbox(
                 account.id(),
                 "SYNC",
@@ -78,26 +80,18 @@ public final class SyncEvents {
      * @param payload 受控payload参数
      */
     public void outbox(Long userId, String type, String key, String payload) {
+        // 1. 通过领域聚合语义准备业务快照，固定状态由实体封装。
         OutboxEventEntity event =
-                new OutboxEventEntity(
-                        null,
-                        com.hellotravel.common.identity.Ids.next(),
-                        userId,
-                        type,
-                        key,
-                        payload,
-                        "PENDING",
-                        0,
-                        8,
-                        java.time.LocalDateTime.now(java.time.ZoneOffset.UTC),
-                        null,
-                        0L,
-                        null,
-                        null,
-                        null,
-                        java.time.LocalDateTime.now(java.time.ZoneOffset.UTC),
-                        java.time.LocalDateTime.now(java.time.ZoneOffset.UTC),
-                        0L);
+                OutboxEventAggregate.pending(
+                                userId,
+                                type,
+                                key,
+                                payload,
+                                java.time.LocalDateTime.now(java.time.ZoneOffset.UTC),
+                                java.time.LocalDateTime.now(java.time.ZoneOffset.UTC),
+                                java.time.LocalDateTime.now(java.time.ZoneOffset.UTC))
+                        .entity();
+        // 2. 持久化当前完整聚合，失败必须中断事务而非继续提交。
         Transactions.require(writes.saveOutboxEvent(new OutboxEventAggregate(event)));
     }
 }

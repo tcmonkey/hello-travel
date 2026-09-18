@@ -9,6 +9,8 @@ import com.hellotravel.domain.query.model.value.QueryValue;
 import com.hellotravel.infrastructure.TravelBaseRepository;
 import com.hellotravel.infrastructure.auth.mysql.mapper.UserAccountMapper;
 import com.hellotravel.infrastructure.auth.mysql.pojo.UserAccountPO;
+import com.hellotravel.infrastructure.exception.InfrastructureErrorCode;
+import com.hellotravel.infrastructure.exception.InfrastructureException;
 
 import org.springframework.stereotype.Repository;
 
@@ -33,7 +35,9 @@ public class UserAccountRepositoryImpl
      * @return 当前操作的业务结果
      */
     public UserAccountAggregate findById(Long id) {
+        // 1. 转换完整聚合为本仓储PO，映射与状态决策分开。
         UserAccountPO po = getById(id);
+        // 2. 显式处理不存在的记录，并恢复聚合快照。
         return po == null ? null : restore(po);
     }
 
@@ -45,6 +49,7 @@ public class UserAccountRepositoryImpl
      * @return 当前操作的业务结果
      */
     public List<UserAccountAggregate> query(QueryValue queryValue) {
+        // 1. 按字段白名单组装参数绑定条件，禁止任意列或拼接SQL。
         QueryWrapper<UserAccountPO> wrapper =
                 conditions(
                         queryValue,
@@ -61,6 +66,7 @@ public class UserAccountRepositoryImpl
                                 "updated_at",
                                 "version"));
         Page<UserAccountPO> page = new Page<>(1, queryValue.limit(), false);
+        // 2. 读取有界PO集合并恢复完整聚合，不向上暴露ORM对象。
         return page(page, wrapper).getRecords().stream().map(this::restore).toList();
     }
 
@@ -73,23 +79,16 @@ public class UserAccountRepositoryImpl
      */
     public Boolean save(UserAccountAggregate aggregate) {
         try {
-            UserAccountPO po = new UserAccountPO();
-            po.setId(aggregate.entity().id());
-            po.setPublicId(aggregate.entity().publicId());
-            po.setEmailNormalized(aggregate.entity().emailNormalized());
-            po.setPasswordHash(aggregate.entity().passwordHash());
-            po.setEmailVerifiedAt(aggregate.entity().emailVerifiedAt());
-            po.setStatus(aggregate.entity().status());
-            po.setAuthEpoch(aggregate.entity().authEpoch());
-            po.setSyncSeq(aggregate.entity().syncSeq());
-            po.setCreatedAt(aggregate.entity().createdAt());
-            po.setUpdatedAt(aggregate.entity().updatedAt());
-            po.setVersion(aggregate.entity().version());
+            // 1. 转换完整聚合为本仓储PO，映射与状态决策分开。
+            UserAccountPO po = toPersistence(aggregate);
+            // 2. 区分新快照新增与已保存快照的版本CAS更新。
             if (po.getId() == null) {
                 return super.save(po);
             }
+            // 3. 映射本段快照字段，业务状态规则不放入PO赋值。
             po.setUpdatedAt(java.time.LocalDateTime.now(java.time.ZoneOffset.UTC));
             po.setVersion(aggregate.entity().version() + 1);
+            // 4. 按内部主键及原版本执行CAS更新，零匹配由上层处理为冲突。
             return super.update(
                     po,
                     new QueryWrapper<UserAccountPO>()
@@ -97,11 +96,9 @@ public class UserAccountRepositoryImpl
                             .eq("version", aggregate.entity().version()));
         } catch (org.springframework.dao.TransientDataAccessException
                 | org.springframework.dao.DataIntegrityViolationException exception) {
-            throw new com.hellotravel.infrastructure.exception.InfrastructureException(
-                    com.hellotravel.infrastructure.exception.InfrastructureErrorCode.CONFLICT);
+            throw new InfrastructureException(InfrastructureErrorCode.CONFLICT);
         } catch (org.springframework.dao.DataAccessResourceFailureException exception) {
-            throw new com.hellotravel.infrastructure.exception.InfrastructureException(
-                    com.hellotravel.infrastructure.exception.InfrastructureErrorCode.UNAVAILABLE);
+            throw new InfrastructureException(InfrastructureErrorCode.UNAVAILABLE);
         }
     }
 
@@ -130,5 +127,32 @@ public class UserAccountRepositoryImpl
                         po.getCreatedAt(),
                         po.getUpdatedAt(),
                         po.getVersion()));
+    }
+
+    private
+    /**
+     * 将完整聚合快照转换为本仓储PO，映射不参与业务状态决策。
+     *
+     * @param aggregate 待保存聚合
+     * @return 数据库存储快照
+     * @author AIGenerator
+     */
+    UserAccountPO toPersistence(UserAccountAggregate aggregate) {
+        // 1. 转换完整聚合为本仓储PO，映射与状态决策分开。
+        UserAccountPO po = new UserAccountPO();
+        // 2. 映射本段快照字段，业务状态规则不放入PO赋值。
+        po.setId(aggregate.entity().id());
+        po.setPublicId(aggregate.entity().publicId());
+        po.setEmailNormalized(aggregate.entity().emailNormalized());
+        po.setPasswordHash(aggregate.entity().passwordHash());
+        po.setEmailVerifiedAt(aggregate.entity().emailVerifiedAt());
+        po.setStatus(aggregate.entity().status());
+        po.setAuthEpoch(aggregate.entity().authEpoch());
+        po.setSyncSeq(aggregate.entity().syncSeq());
+        po.setCreatedAt(aggregate.entity().createdAt());
+        po.setUpdatedAt(aggregate.entity().updatedAt());
+        po.setVersion(aggregate.entity().version());
+        // 3. 返回完整存储快照，由保存步骤决定新增或版本CAS更新。
+        return po;
     }
 }

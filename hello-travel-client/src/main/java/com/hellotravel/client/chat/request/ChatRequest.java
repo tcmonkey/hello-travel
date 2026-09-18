@@ -28,4 +28,4 @@ public record ChatRequest(
         Long historyEpoch,
         Long after,
         Integer limit) {
-        }
+}

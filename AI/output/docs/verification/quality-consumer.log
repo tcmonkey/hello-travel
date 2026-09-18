@@ -1,0 +1,22 @@
+[INFO] Scanning for projects...
+[INFO] 
+[INFO] ----------------< verification:ht-independent-consumer >----------------
+[INFO] Building ht-independent-consumer 1
+[INFO]   from pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- clean:3.2.0:clean (default-clean) @ ht-independent-consumer ---
+[INFO] Deleting /tmp/ht-independent-consumer/target
+[INFO] 
+[INFO] --- resources:3.4.0:resources (default-resources) @ ht-independent-consumer ---
+[INFO] skip non existing resourceDirectory /tmp/ht-independent-consumer/src/main/resources
+[INFO] 
+[INFO] --- compiler:3.13.0:compile (default-compile) @ ht-independent-consumer ---
+[INFO] Recompiling the module because of changed source code.
+[INFO] Compiling 1 source file with javac [debug release 17] to target/classes
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD SUCCESS
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  0.822 s
+[INFO] Finished at: 2026-09-18T11:14:34+08:00
+[INFO] ------------------------------------------------------------------------

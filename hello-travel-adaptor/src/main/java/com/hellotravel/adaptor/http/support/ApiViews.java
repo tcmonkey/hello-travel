@@ -1,6 +1,7 @@
 package com.hellotravel.adaptor.http.support;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.hellotravel.common.result.Result;
 
 import org.springframework.stereotype.Component;
 
@@ -40,11 +41,12 @@ public final class ApiViews {
      * @return 独立公开协议结果
      * @author AIGenerator
      */
-    public <T> com.hellotravel.common.result.Result<T> respond(
-            com.hellotravel.common.result.Result<?> result, Class<T> type) {
+    public <T> Result<T> respond(Result<?> result, Class<T> type) {
+        // 1. 依据下层标准结果的成功状态处理分支，避免继续使用无效数据。
         if (!result.success()) {
             return HttpResults.failure(result);
         }
-        return com.hellotravel.common.result.Result.success(convert(result.data(), type));
+        // 2. 将本层成功数据封装为标准结果，保持对外模型隔离。
+        return Result.success(convert(result.data(), type));
     }
 }

@@ -15,7 +15,7 @@ public final class HttpIdentity {
      * @author AIGenerator
      */
     private HttpIdentity() {
-    }
+}
 
     /**
      * 读取认证过滤器提供的账号主键。
@@ -47,7 +47,9 @@ public final class HttpIdentity {
      * @return 当前操作的业务结果
      */
     public static String access(HttpServletRequest request) {
+        // 1. 取得协议头中待解析的字段，供本段后续处理使用。
         String header = request.getHeader("Authorization");
+        // 2. 返回本段实际处理结果，保持本层输出契约。
         return header != null && header.startsWith("Bearer ") ? header.substring(7) : null;
     }
 
@@ -60,6 +62,7 @@ public final class HttpIdentity {
      * @return 当前操作的业务结果
      */
     public static String cookie(HttpServletRequest request, String name) {
+        // 1. 从已有Cookie中寻找指定凭据，缺失时不创建虚假的身份。
         if (request.getCookies() != null) {
             for (var cookie : request.getCookies()) {
                 if (name.equals(cookie.getName())) {
@@ -67,6 +70,7 @@ public final class HttpIdentity {
                 }
             }
         }
+        // 2. 返回本段实际处理结果，保持本层输出契约。
         return null;
     }
 }

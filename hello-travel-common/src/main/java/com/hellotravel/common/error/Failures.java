@@ -15,7 +15,7 @@ public final class Failures {
      * @author AIGenerator
      */
     private Failures() {
-    }
+}
 
     /**
      * 将入口捕获的异常转换为安全失败结果，不返回异常正文或堆栈。
@@ -27,9 +27,11 @@ public final class Failures {
      * @author AIGenerator
      */
     public static <T> Result<T> capture(Exception exception, ErrorCode fallback) {
+        // 1. 保留已分类的业务错误码，未知故障继续走本层兜底码。
         if (exception instanceof BaseException business) {
             return Result.failure(business.errorCode());
         }
+        // 2. 传播稳定失败分类，不泄漏原始技术异常。
         return Result.failure(fallback);
     }
 }

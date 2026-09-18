@@ -3,6 +3,7 @@ package com.hellotravel.application.persistence;
 import com.hellotravel.domain.auth.repository.DeviceRepository;
 import com.hellotravel.domain.auth.repository.EmailChallengeRepository;
 import com.hellotravel.domain.auth.repository.LoginSessionRepository;
+import com.hellotravel.domain.auth.repository.RefreshReceiptRepository;
 import com.hellotravel.domain.auth.repository.UserAccountRepository;
 import com.hellotravel.domain.chat.repository.ChatRunRepository;
 import com.hellotravel.domain.chat.repository.ConversationRepository;
@@ -27,7 +28,7 @@ import org.springframework.stereotype.Component;
 @Component
 public final class TravelRepositories {
 
-    public final com.hellotravel.domain.auth.repository.RefreshReceiptRepository refreshReceipt;
+    public final RefreshReceiptRepository refreshReceipt;
 
     public final UserAccountRepository userAccount;
 
@@ -62,7 +63,7 @@ public final class TravelRepositories {
     public final ModelInvocationRepository modelInvocation;
 
     public TravelRepositories(
-            com.hellotravel.domain.auth.repository.RefreshReceiptRepository refreshReceipt,
+            RefreshReceiptRepository refreshReceipt,
             UserAccountRepository userAccount,
             DeviceRepository device,
             LoginSessionRepository loginSession,

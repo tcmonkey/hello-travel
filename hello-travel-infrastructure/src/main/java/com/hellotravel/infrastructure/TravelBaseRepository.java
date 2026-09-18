@@ -27,10 +27,13 @@ public abstract class TravelBaseRepository<M extends BaseMapper<T>, T>
      * @return 当前操作的业务结果
      */
     protected QueryWrapper<T> conditions(QueryValue query, Set<String> columns) {
+        // 1. 取得本段结果并准备本层转换，随后显式核对成功状态。
         QueryWrapper<T> result = new QueryWrapper<>();
+        // 2. 只允许仓储已声明的排序字段，禁止客户端传入任意数据库列。
         if (!columns.contains(query.order())) {
             throw new IllegalArgumentException("column");
         }
+        // 3. 逐项处理当前数据窗口，并在循环中核对可用状态与停止条件。
         for (FilterValue filter : query.filters()) {
             if (!columns.contains(filter.column())) {
                 throw new IllegalArgumentException("column");
@@ -47,7 +50,9 @@ public abstract class TravelBaseRepository<M extends BaseMapper<T>, T>
                 default -> throw new IllegalArgumentException("operator");
             }
         }
+        // 4. 执行orderBy职责步骤，并把失败交给所属事务或入口处理。
         result.orderBy(true, !query.descending(), query.order());
+        // 5. 返回本段实际处理结果，保持本层输出契约。
         return result;
     }
 }

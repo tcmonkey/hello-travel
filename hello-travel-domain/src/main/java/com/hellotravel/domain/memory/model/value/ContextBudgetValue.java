@@ -13,11 +13,12 @@ public record ContextBudgetValue(
         int window, int estimatedInput, int outputReserve, int safetyReserve) {
 
     /**
-     * 校验不可变值的边界并防御性复制输入集合。
+     * 校验上下文预算边界，保守估算与实际usage分别记录。
      *
      * @author AIGenerator
      */
     public ContextBudgetValue {
+        // 1. 核验总窗口与各项预留边界，避免负数或过小窗口绕过预算判断。
         if (window < 8192 || estimatedInput < 0 || outputReserve < 1 || safetyReserve < 0) {
             throw new IllegalArgumentException("budget");
         }

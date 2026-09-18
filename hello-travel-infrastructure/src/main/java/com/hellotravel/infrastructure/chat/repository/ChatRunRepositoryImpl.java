@@ -9,6 +9,8 @@ import com.hellotravel.domain.query.model.value.QueryValue;
 import com.hellotravel.infrastructure.TravelBaseRepository;
 import com.hellotravel.infrastructure.chat.mysql.mapper.ChatRunMapper;
 import com.hellotravel.infrastructure.chat.mysql.pojo.ChatRunPO;
+import com.hellotravel.infrastructure.exception.InfrastructureErrorCode;
+import com.hellotravel.infrastructure.exception.InfrastructureException;
 
 import org.springframework.stereotype.Repository;
 
@@ -32,7 +34,9 @@ public class ChatRunRepositoryImpl extends TravelBaseRepository<ChatRunMapper, C
      * @return 当前操作的业务结果
      */
     public ChatRunAggregate findById(Long id) {
+        // 1. 转换完整聚合为本仓储PO，映射与状态决策分开。
         ChatRunPO po = getById(id);
+        // 2. 显式处理不存在的记录，并恢复聚合快照。
         return po == null ? null : restore(po);
     }
 
@@ -44,6 +48,7 @@ public class ChatRunRepositoryImpl extends TravelBaseRepository<ChatRunMapper, C
      * @return 当前操作的业务结果
      */
     public List<ChatRunAggregate> query(QueryValue queryValue) {
+        // 1. 按字段白名单组装参数绑定条件，禁止任意列或拼接SQL。
         QueryWrapper<ChatRunPO> wrapper =
                 conditions(
                         queryValue,
@@ -74,6 +79,7 @@ public class ChatRunRepositoryImpl extends TravelBaseRepository<ChatRunMapper, C
                                 "updated_at",
                                 "version"));
         Page<ChatRunPO> page = new Page<>(1, queryValue.limit(), false);
+        // 2. 读取有界PO集合并恢复完整聚合，不向上暴露ORM对象。
         return page(page, wrapper).getRecords().stream().map(this::restore).toList();
     }
 
@@ -86,37 +92,16 @@ public class ChatRunRepositoryImpl extends TravelBaseRepository<ChatRunMapper, C
      */
     public Boolean save(ChatRunAggregate aggregate) {
         try {
-            ChatRunPO po = new ChatRunPO();
-            po.setId(aggregate.entity().id());
-            po.setPublicId(aggregate.entity().publicId());
-            po.setUserId(aggregate.entity().userId());
-            po.setConversationId(aggregate.entity().conversationId());
-            po.setInitiatingSessionId(aggregate.entity().initiatingSessionId());
-            po.setRequestKey(aggregate.entity().requestKey());
-            po.setRequestDigest(aggregate.entity().requestDigest());
-            po.setUserMessageId(aggregate.entity().userMessageId());
-            po.setAssistantMessageId(aggregate.entity().assistantMessageId());
-            po.setStatus(aggregate.entity().status());
-            po.setAttemptCount(aggregate.entity().attemptCount());
-            po.setGraphNode(aggregate.entity().graphNode());
-            po.setGraphRevision(aggregate.entity().graphRevision());
-            po.setMemoryEpochAtStart(aggregate.entity().memoryEpochAtStart());
-            po.setStateJson(aggregate.entity().stateJson());
-            po.setContextSnapshotJson(aggregate.entity().contextSnapshotJson());
-            po.setLeaseOwner(aggregate.entity().leaseOwner());
-            po.setLeaseFence(aggregate.entity().leaseFence());
-            po.setLeaseUntil(aggregate.entity().leaseUntil());
-            po.setErrorCode(aggregate.entity().errorCode());
-            po.setStartedAt(aggregate.entity().startedAt());
-            po.setCompletedAt(aggregate.entity().completedAt());
-            po.setCreatedAt(aggregate.entity().createdAt());
-            po.setUpdatedAt(aggregate.entity().updatedAt());
-            po.setVersion(aggregate.entity().version());
+            // 1. 转换完整聚合为本仓储PO，映射与状态决策分开。
+            ChatRunPO po = toPersistence(aggregate);
+            // 2. 区分新快照新增与已保存快照的版本CAS更新。
             if (po.getId() == null) {
                 return super.save(po);
             }
+            // 3. 映射本段快照字段，业务状态规则不放入PO赋值。
             po.setUpdatedAt(java.time.LocalDateTime.now(java.time.ZoneOffset.UTC));
             po.setVersion(aggregate.entity().version() + 1);
+            // 4. 按内部主键及原版本执行CAS更新，零匹配由上层处理为冲突。
             return super.update(
                     po,
                     new QueryWrapper<ChatRunPO>()
@@ -124,11 +109,9 @@ public class ChatRunRepositoryImpl extends TravelBaseRepository<ChatRunMapper, C
                             .eq("version", aggregate.entity().version()));
         } catch (org.springframework.dao.TransientDataAccessException
                 | org.springframework.dao.DataIntegrityViolationException exception) {
-            throw new com.hellotravel.infrastructure.exception.InfrastructureException(
-                    com.hellotravel.infrastructure.exception.InfrastructureErrorCode.CONFLICT);
+            throw new InfrastructureException(InfrastructureErrorCode.CONFLICT);
         } catch (org.springframework.dao.DataAccessResourceFailureException exception) {
-            throw new com.hellotravel.infrastructure.exception.InfrastructureException(
-                    com.hellotravel.infrastructure.exception.InfrastructureErrorCode.UNAVAILABLE);
+            throw new InfrastructureException(InfrastructureErrorCode.UNAVAILABLE);
         }
     }
 
@@ -171,5 +154,46 @@ public class ChatRunRepositoryImpl extends TravelBaseRepository<ChatRunMapper, C
                         po.getCreatedAt(),
                         po.getUpdatedAt(),
                         po.getVersion()));
+    }
+
+    private
+    /**
+     * 将完整聚合快照转换为本仓储PO，映射不参与业务状态决策。
+     *
+     * @param aggregate 待保存聚合
+     * @return 数据库存储快照
+     * @author AIGenerator
+     */
+    ChatRunPO toPersistence(ChatRunAggregate aggregate) {
+        // 1. 转换完整聚合为本仓储PO，映射与状态决策分开。
+        ChatRunPO po = new ChatRunPO();
+        // 2. 映射本段快照字段，业务状态规则不放入PO赋值。
+        po.setId(aggregate.entity().id());
+        po.setPublicId(aggregate.entity().publicId());
+        po.setUserId(aggregate.entity().userId());
+        po.setConversationId(aggregate.entity().conversationId());
+        po.setInitiatingSessionId(aggregate.entity().initiatingSessionId());
+        po.setRequestKey(aggregate.entity().requestKey());
+        po.setRequestDigest(aggregate.entity().requestDigest());
+        po.setUserMessageId(aggregate.entity().userMessageId());
+        po.setAssistantMessageId(aggregate.entity().assistantMessageId());
+        po.setStatus(aggregate.entity().status());
+        po.setAttemptCount(aggregate.entity().attemptCount());
+        po.setGraphNode(aggregate.entity().graphNode());
+        po.setGraphRevision(aggregate.entity().graphRevision());
+        po.setMemoryEpochAtStart(aggregate.entity().memoryEpochAtStart());
+        po.setStateJson(aggregate.entity().stateJson());
+        po.setContextSnapshotJson(aggregate.entity().contextSnapshotJson());
+        po.setLeaseOwner(aggregate.entity().leaseOwner());
+        po.setLeaseFence(aggregate.entity().leaseFence());
+        po.setLeaseUntil(aggregate.entity().leaseUntil());
+        po.setErrorCode(aggregate.entity().errorCode());
+        po.setStartedAt(aggregate.entity().startedAt());
+        po.setCompletedAt(aggregate.entity().completedAt());
+        po.setCreatedAt(aggregate.entity().createdAt());
+        po.setUpdatedAt(aggregate.entity().updatedAt());
+        po.setVersion(aggregate.entity().version());
+        // 3. 返回完整存储快照，由保存步骤决定新增或版本CAS更新。
+        return po;
     }
 }

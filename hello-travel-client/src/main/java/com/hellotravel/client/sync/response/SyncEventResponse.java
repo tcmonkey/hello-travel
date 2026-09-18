@@ -13,4 +13,4 @@ package com.hellotravel.client.sync.response;
  */
 public record SyncEventResponse(
         long seq, String type, String id, long version, String targetSid, String payload) {
-        }
+}

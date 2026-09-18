@@ -10,4 +10,4 @@ package com.hellotravel.application.knowledge.result;
  */
 public record KnowledgeResult(
         java.util.List<DocumentResult> items, long nextCursor, boolean hasMore) {
-        }
+}

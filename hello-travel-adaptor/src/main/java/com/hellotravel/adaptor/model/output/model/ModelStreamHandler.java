@@ -71,8 +71,11 @@ public final class ModelStreamHandler implements StreamingChatResponseHandler {
      * @param context 受控context参数
      */
     public void onPartialResponse(PartialResponse response, PartialResponseContext context) {
+        // 1. 映射本段快照字段，业务状态规则不放入PO赋值。
         handle.set(context.streamingHandle());
+        // 2. 执行append职责步骤，并把失败交给所属事务或入口处理。
         text.append(response.text());
+        // 3. 在异常捕获或资源释放边界内完成本段处理，失败不得伪装为成功。
         try {
             if (text.length() > 262144 || (partial != null && !partial.test(text.toString()))) {
                 context.streamingHandle().cancel();

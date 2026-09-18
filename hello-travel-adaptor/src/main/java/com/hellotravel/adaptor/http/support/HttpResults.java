@@ -21,7 +21,7 @@ public final class HttpResults {
      * @author AIGenerator
      */
     private HttpResults() {
-    }
+}
 
     /**
      * 捕获异常后构建安全失败响应，同时设置对应HTTP失败状态。
@@ -44,7 +44,9 @@ public final class HttpResults {
      * @author AIGenerator
      */
     public static <T> Result<T> failure(Result<?> result) {
+        // 1. 取得当前用途的验证码，供本段后续处理使用。
         DomainErrorCode code = classification(result.code());
+        // 2. 仅在HTTP响应未提交时设置失败状态，非HTTP调用仍返回标准失败结果。
         if (RequestContextHolder.getRequestAttributes()
                 instanceof ServletRequestAttributes attributes) {
             var response = attributes.getResponse();
@@ -52,6 +54,7 @@ public final class HttpResults {
                 response.setStatus(code.status());
             }
         }
+        // 3. 返回本段实际处理结果，保持本层输出契约。
         return new Result<>(false, result.code(), result.message(), null);
     }
 
@@ -64,9 +67,11 @@ public final class HttpResults {
      * @author AIGenerator
      */
     public static <T> T required(Result<T> result) {
+        // 1. 依据下层标准结果的成功状态处理分支，避免继续使用无效数据。
         if (!result.success()) {
             throw new DomainException(classification(result.code()));
         }
+        // 2. 返回本段实际处理结果，保持本层输出契约。
         return result.data();
     }
 

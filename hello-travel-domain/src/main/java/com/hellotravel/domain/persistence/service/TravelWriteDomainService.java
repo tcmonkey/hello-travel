@@ -1,5 +1,6 @@
 package com.hellotravel.domain.persistence.service;
 
+import com.hellotravel.common.error.Failures;
 import com.hellotravel.common.result.Result;
 import com.hellotravel.domain.annotation.DomainService;
 import com.hellotravel.domain.auth.repository.DeviceRepository;
@@ -145,31 +146,29 @@ public final class TravelWriteDomainService {
      */
     public Result<WriteDO> saveUserAccount(UserAccountWriteParam param) {
         try {
-            if (param == null || param.aggregate() == null || param.aggregate().entity() == null) {
+            // 1. 核对输入或读取结果的存在性，失败中止当前处理。
+            if (param == null || param.aggregate() == null) {
                 throw new DomainException(DomainErrorCode.INVALID);
             }
-            var next = param.aggregate().entity();
-            if (next.id() != null) {
-                var stored = userAccount.findById(next.id());
-                if (stored == null) {
-                    throw new DomainException(DomainErrorCode.NOT_FOUND);
-                }
-                var prior = stored.entity();
-                if (!prior.version().equals(next.version())) {
-                    throw new DomainException(DomainErrorCode.CONFLICT);
-                }
-                if (!java.util.Objects.equals(prior.publicId(), next.publicId())) {
-                    throw new DomainException(DomainErrorCode.INVALID);
-                }
+            // 2. 准备当前变更后的不可变快照，旧版本保留给仓储CAS。
+            var next = param.aggregate();
+            // 3. 校验聚合完整性，空实体不能进入仓储。
+            next.assertComplete();
+            // 4. 更新前加载已持久化聚合，新增快照无需虚构旧记录。
+            if (next.idForPersistence() != null) {
+                var stored = userAccount.findById(next.idForPersistence());
+                next.assertWritableAgainst(stored);
             }
-            boolean saved = Boolean.TRUE.equals(userAccount.save(param.aggregate()));
+            // 5. 保存完整聚合并检查仓储CAS结果，冲突不能作为成功提交。
+            boolean saved = Boolean.TRUE.equals(userAccount.save(next));
+            // 6. 拒绝未写入的CAS结果，使所属事务回滚而非继续发布事件。
             if (!saved) {
                 throw new DomainException(DomainErrorCode.CONFLICT);
             }
+            // 7. 返回实际成功写入标记，版本或归属校验失败不会走到此处。
             return Result.success(new WriteDO(true));
         } catch (Exception exception) {
-            return com.hellotravel.common.error.Failures.capture(
-                    exception, com.hellotravel.domain.exception.DomainErrorCode.FAILED);
+            return Failures.capture(exception, DomainErrorCode.FAILED);
         }
     }
 
@@ -182,13 +181,14 @@ public final class TravelWriteDomainService {
      */
     public Result<WriteDO> removeUserAccount(UserAccountRemoveParam param) {
         try {
+            // 1. 核对输入或读取结果的存在性，失败中止当前处理。
             if (param == null || param.id() == null) {
                 throw new DomainException(DomainErrorCode.INVALID);
             }
+            // 2. 返回实际删除标记，不把空匹配伪造成已删除记录。
             return Result.success(new WriteDO(Boolean.TRUE.equals(userAccount.remove(param.id()))));
         } catch (Exception exception) {
-            return com.hellotravel.common.error.Failures.capture(
-                    exception, com.hellotravel.domain.exception.DomainErrorCode.FAILED);
+            return Failures.capture(exception, DomainErrorCode.FAILED);
         }
     }
 
@@ -201,34 +201,29 @@ public final class TravelWriteDomainService {
      */
     public Result<WriteDO> saveDevice(DeviceWriteParam param) {
         try {
-            if (param == null || param.aggregate() == null || param.aggregate().entity() == null) {
+            // 1. 核对输入或读取结果的存在性，失败中止当前处理。
+            if (param == null || param.aggregate() == null) {
                 throw new DomainException(DomainErrorCode.INVALID);
             }
-            var next = param.aggregate().entity();
-            if (next.id() != null) {
-                var stored = device.findById(next.id());
-                if (stored == null) {
-                    throw new DomainException(DomainErrorCode.NOT_FOUND);
-                }
-                var prior = stored.entity();
-                if (!prior.version().equals(next.version())) {
-                    throw new DomainException(DomainErrorCode.CONFLICT);
-                }
-                if (!java.util.Objects.equals(prior.userId(), next.userId())) {
-                    throw new DomainException(DomainErrorCode.INVALID);
-                }
-                if (!java.util.Objects.equals(prior.publicId(), next.publicId())) {
-                    throw new DomainException(DomainErrorCode.INVALID);
-                }
+            // 2. 准备当前变更后的不可变快照，旧版本保留给仓储CAS。
+            var next = param.aggregate();
+            // 3. 校验聚合完整性，空实体不能进入仓储。
+            next.assertComplete();
+            // 4. 更新前加载已持久化聚合，新增快照无需虚构旧记录。
+            if (next.idForPersistence() != null) {
+                var stored = device.findById(next.idForPersistence());
+                next.assertWritableAgainst(stored);
             }
-            boolean saved = Boolean.TRUE.equals(device.save(param.aggregate()));
+            // 5. 保存完整聚合并检查仓储CAS结果，冲突不能作为成功提交。
+            boolean saved = Boolean.TRUE.equals(device.save(next));
+            // 6. 拒绝未写入的CAS结果，使所属事务回滚而非继续发布事件。
             if (!saved) {
                 throw new DomainException(DomainErrorCode.CONFLICT);
             }
+            // 7. 返回实际成功写入标记，版本或归属校验失败不会走到此处。
             return Result.success(new WriteDO(true));
         } catch (Exception exception) {
-            return com.hellotravel.common.error.Failures.capture(
-                    exception, com.hellotravel.domain.exception.DomainErrorCode.FAILED);
+            return Failures.capture(exception, DomainErrorCode.FAILED);
         }
     }
 
@@ -241,13 +236,14 @@ public final class TravelWriteDomainService {
      */
     public Result<WriteDO> removeDevice(DeviceRemoveParam param) {
         try {
+            // 1. 核对输入或读取结果的存在性，失败中止当前处理。
             if (param == null || param.id() == null) {
                 throw new DomainException(DomainErrorCode.INVALID);
             }
+            // 2. 返回实际删除标记，不把空匹配伪造成已删除记录。
             return Result.success(new WriteDO(Boolean.TRUE.equals(device.remove(param.id()))));
         } catch (Exception exception) {
-            return com.hellotravel.common.error.Failures.capture(
-                    exception, com.hellotravel.domain.exception.DomainErrorCode.FAILED);
+            return Failures.capture(exception, DomainErrorCode.FAILED);
         }
     }
 
@@ -260,37 +256,29 @@ public final class TravelWriteDomainService {
      */
     public Result<WriteDO> saveLoginSession(LoginSessionWriteParam param) {
         try {
-            if (param == null || param.aggregate() == null || param.aggregate().entity() == null) {
+            // 1. 核对输入或读取结果的存在性，失败中止当前处理。
+            if (param == null || param.aggregate() == null) {
                 throw new DomainException(DomainErrorCode.INVALID);
             }
-            var next = param.aggregate().entity();
-            if (next.id() != null) {
-                var stored = loginSession.findById(next.id());
-                if (stored == null) {
-                    throw new DomainException(DomainErrorCode.NOT_FOUND);
-                }
-                var prior = stored.entity();
-                if (!prior.version().equals(next.version())) {
-                    throw new DomainException(DomainErrorCode.CONFLICT);
-                }
-                if (!java.util.Objects.equals(prior.userId(), next.userId())) {
-                    throw new DomainException(DomainErrorCode.INVALID);
-                }
-                if (!java.util.Objects.equals(prior.deviceId(), next.deviceId())) {
-                    throw new DomainException(DomainErrorCode.INVALID);
-                }
-                if (!java.util.Objects.equals(prior.publicId(), next.publicId())) {
-                    throw new DomainException(DomainErrorCode.INVALID);
-                }
+            // 2. 准备当前变更后的不可变快照，旧版本保留给仓储CAS。
+            var next = param.aggregate();
+            // 3. 校验聚合完整性，空实体不能进入仓储。
+            next.assertComplete();
+            // 4. 更新前加载已持久化聚合，新增快照无需虚构旧记录。
+            if (next.idForPersistence() != null) {
+                var stored = loginSession.findById(next.idForPersistence());
+                next.assertWritableAgainst(stored);
             }
-            boolean saved = Boolean.TRUE.equals(loginSession.save(param.aggregate()));
+            // 5. 保存完整聚合并检查仓储CAS结果，冲突不能作为成功提交。
+            boolean saved = Boolean.TRUE.equals(loginSession.save(next));
+            // 6. 拒绝未写入的CAS结果，使所属事务回滚而非继续发布事件。
             if (!saved) {
                 throw new DomainException(DomainErrorCode.CONFLICT);
             }
+            // 7. 返回实际成功写入标记，版本或归属校验失败不会走到此处。
             return Result.success(new WriteDO(true));
         } catch (Exception exception) {
-            return com.hellotravel.common.error.Failures.capture(
-                    exception, com.hellotravel.domain.exception.DomainErrorCode.FAILED);
+            return Failures.capture(exception, DomainErrorCode.FAILED);
         }
     }
 
@@ -303,14 +291,15 @@ public final class TravelWriteDomainService {
      */
     public Result<WriteDO> removeLoginSession(LoginSessionRemoveParam param) {
         try {
+            // 1. 核对输入或读取结果的存在性，失败中止当前处理。
             if (param == null || param.id() == null) {
                 throw new DomainException(DomainErrorCode.INVALID);
             }
+            // 2. 返回实际删除标记，不把空匹配伪造成已删除记录。
             return Result.success(
                     new WriteDO(Boolean.TRUE.equals(loginSession.remove(param.id()))));
         } catch (Exception exception) {
-            return com.hellotravel.common.error.Failures.capture(
-                    exception, com.hellotravel.domain.exception.DomainErrorCode.FAILED);
+            return Failures.capture(exception, DomainErrorCode.FAILED);
         }
     }
 
@@ -323,31 +312,29 @@ public final class TravelWriteDomainService {
      */
     public Result<WriteDO> saveEmailChallenge(EmailChallengeWriteParam param) {
         try {
-            if (param == null || param.aggregate() == null || param.aggregate().entity() == null) {
+            // 1. 核对输入或读取结果的存在性，失败中止当前处理。
+            if (param == null || param.aggregate() == null) {
                 throw new DomainException(DomainErrorCode.INVALID);
             }
-            var next = param.aggregate().entity();
-            if (next.id() != null) {
-                var stored = emailChallenge.findById(next.id());
-                if (stored == null) {
-                    throw new DomainException(DomainErrorCode.NOT_FOUND);
-                }
-                var prior = stored.entity();
-                if (!prior.version().equals(next.version())) {
-                    throw new DomainException(DomainErrorCode.CONFLICT);
-                }
-                if (!java.util.Objects.equals(prior.publicId(), next.publicId())) {
-                    throw new DomainException(DomainErrorCode.INVALID);
-                }
+            // 2. 准备当前变更后的不可变快照，旧版本保留给仓储CAS。
+            var next = param.aggregate();
+            // 3. 校验聚合完整性，空实体不能进入仓储。
+            next.assertComplete();
+            // 4. 更新前加载已持久化聚合，新增快照无需虚构旧记录。
+            if (next.idForPersistence() != null) {
+                var stored = emailChallenge.findById(next.idForPersistence());
+                next.assertWritableAgainst(stored);
             }
-            boolean saved = Boolean.TRUE.equals(emailChallenge.save(param.aggregate()));
+            // 5. 保存完整聚合并检查仓储CAS结果，冲突不能作为成功提交。
+            boolean saved = Boolean.TRUE.equals(emailChallenge.save(next));
+            // 6. 拒绝未写入的CAS结果，使所属事务回滚而非继续发布事件。
             if (!saved) {
                 throw new DomainException(DomainErrorCode.CONFLICT);
             }
+            // 7. 返回实际成功写入标记，版本或归属校验失败不会走到此处。
             return Result.success(new WriteDO(true));
         } catch (Exception exception) {
-            return com.hellotravel.common.error.Failures.capture(
-                    exception, com.hellotravel.domain.exception.DomainErrorCode.FAILED);
+            return Failures.capture(exception, DomainErrorCode.FAILED);
         }
     }
 
@@ -360,14 +347,15 @@ public final class TravelWriteDomainService {
      */
     public Result<WriteDO> removeEmailChallenge(EmailChallengeRemoveParam param) {
         try {
+            // 1. 核对输入或读取结果的存在性，失败中止当前处理。
             if (param == null || param.id() == null) {
                 throw new DomainException(DomainErrorCode.INVALID);
             }
+            // 2. 返回实际删除标记，不把空匹配伪造成已删除记录。
             return Result.success(
                     new WriteDO(Boolean.TRUE.equals(emailChallenge.remove(param.id()))));
         } catch (Exception exception) {
-            return com.hellotravel.common.error.Failures.capture(
-                    exception, com.hellotravel.domain.exception.DomainErrorCode.FAILED);
+            return Failures.capture(exception, DomainErrorCode.FAILED);
         }
     }
 
@@ -380,37 +368,29 @@ public final class TravelWriteDomainService {
      */
     public Result<WriteDO> saveConversation(ConversationWriteParam param) {
         try {
-            if (param == null || param.aggregate() == null || param.aggregate().entity() == null) {
+            // 1. 核对输入或读取结果的存在性，失败中止当前处理。
+            if (param == null || param.aggregate() == null) {
                 throw new DomainException(DomainErrorCode.INVALID);
             }
-            var next = param.aggregate().entity();
-            if (next.id() != null) {
-                var stored = conversation.findById(next.id());
-                if (stored == null) {
-                    throw new DomainException(DomainErrorCode.NOT_FOUND);
-                }
-                var prior = stored.entity();
-                if (!prior.version().equals(next.version())) {
-                    throw new DomainException(DomainErrorCode.CONFLICT);
-                }
-                if (!java.util.Objects.equals(prior.userId(), next.userId())) {
-                    throw new DomainException(DomainErrorCode.INVALID);
-                }
-                if (!java.util.Objects.equals(prior.publicId(), next.publicId())) {
-                    throw new DomainException(DomainErrorCode.INVALID);
-                }
-                if (prior.deletedAt() != null && next.deletedAt() == null) {
-                    throw new DomainException(DomainErrorCode.CONFLICT);
-                }
+            // 2. 准备当前变更后的不可变快照，旧版本保留给仓储CAS。
+            var next = param.aggregate();
+            // 3. 校验聚合完整性，空实体不能进入仓储。
+            next.assertComplete();
+            // 4. 更新前加载已持久化聚合，新增快照无需虚构旧记录。
+            if (next.idForPersistence() != null) {
+                var stored = conversation.findById(next.idForPersistence());
+                next.assertWritableAgainst(stored);
             }
-            boolean saved = Boolean.TRUE.equals(conversation.save(param.aggregate()));
+            // 5. 保存完整聚合并检查仓储CAS结果，冲突不能作为成功提交。
+            boolean saved = Boolean.TRUE.equals(conversation.save(next));
+            // 6. 拒绝未写入的CAS结果，使所属事务回滚而非继续发布事件。
             if (!saved) {
                 throw new DomainException(DomainErrorCode.CONFLICT);
             }
+            // 7. 返回实际成功写入标记，版本或归属校验失败不会走到此处。
             return Result.success(new WriteDO(true));
         } catch (Exception exception) {
-            return com.hellotravel.common.error.Failures.capture(
-                    exception, com.hellotravel.domain.exception.DomainErrorCode.FAILED);
+            return Failures.capture(exception, DomainErrorCode.FAILED);
         }
     }
 
@@ -423,14 +403,15 @@ public final class TravelWriteDomainService {
      */
     public Result<WriteDO> removeConversation(ConversationRemoveParam param) {
         try {
+            // 1. 核对输入或读取结果的存在性，失败中止当前处理。
             if (param == null || param.id() == null) {
                 throw new DomainException(DomainErrorCode.INVALID);
             }
+            // 2. 返回实际删除标记，不把空匹配伪造成已删除记录。
             return Result.success(
                     new WriteDO(Boolean.TRUE.equals(conversation.remove(param.id()))));
         } catch (Exception exception) {
-            return com.hellotravel.common.error.Failures.capture(
-                    exception, com.hellotravel.domain.exception.DomainErrorCode.FAILED);
+            return Failures.capture(exception, DomainErrorCode.FAILED);
         }
     }
 
@@ -443,40 +424,29 @@ public final class TravelWriteDomainService {
      */
     public Result<WriteDO> saveMessage(MessageWriteParam param) {
         try {
-            if (param == null || param.aggregate() == null || param.aggregate().entity() == null) {
+            // 1. 核对输入或读取结果的存在性，失败中止当前处理。
+            if (param == null || param.aggregate() == null) {
                 throw new DomainException(DomainErrorCode.INVALID);
             }
-            var next = param.aggregate().entity();
-            if (next.id() != null) {
-                var stored = message.findById(next.id());
-                if (stored == null) {
-                    throw new DomainException(DomainErrorCode.NOT_FOUND);
-                }
-                var prior = stored.entity();
-                if (!prior.version().equals(next.version())) {
-                    throw new DomainException(DomainErrorCode.CONFLICT);
-                }
-                if (!java.util.Objects.equals(prior.userId(), next.userId())) {
-                    throw new DomainException(DomainErrorCode.INVALID);
-                }
-                if (!java.util.Objects.equals(prior.conversationId(), next.conversationId())) {
-                    throw new DomainException(DomainErrorCode.INVALID);
-                }
-                if (!java.util.Objects.equals(prior.publicId(), next.publicId())) {
-                    throw new DomainException(DomainErrorCode.INVALID);
-                }
-                if (prior.deletedAt() != null && next.deletedAt() == null) {
-                    throw new DomainException(DomainErrorCode.CONFLICT);
-                }
+            // 2. 准备当前变更后的不可变快照，旧版本保留给仓储CAS。
+            var next = param.aggregate();
+            // 3. 校验聚合完整性，空实体不能进入仓储。
+            next.assertComplete();
+            // 4. 更新前加载已持久化聚合，新增快照无需虚构旧记录。
+            if (next.idForPersistence() != null) {
+                var stored = message.findById(next.idForPersistence());
+                next.assertWritableAgainst(stored);
             }
-            boolean saved = Boolean.TRUE.equals(message.save(param.aggregate()));
+            // 5. 保存完整聚合并检查仓储CAS结果，冲突不能作为成功提交。
+            boolean saved = Boolean.TRUE.equals(message.save(next));
+            // 6. 拒绝未写入的CAS结果，使所属事务回滚而非继续发布事件。
             if (!saved) {
                 throw new DomainException(DomainErrorCode.CONFLICT);
             }
+            // 7. 返回实际成功写入标记，版本或归属校验失败不会走到此处。
             return Result.success(new WriteDO(true));
         } catch (Exception exception) {
-            return com.hellotravel.common.error.Failures.capture(
-                    exception, com.hellotravel.domain.exception.DomainErrorCode.FAILED);
+            return Failures.capture(exception, DomainErrorCode.FAILED);
         }
     }
 
@@ -489,13 +459,14 @@ public final class TravelWriteDomainService {
      */
     public Result<WriteDO> removeMessage(MessageRemoveParam param) {
         try {
+            // 1. 核对输入或读取结果的存在性，失败中止当前处理。
             if (param == null || param.id() == null) {
                 throw new DomainException(DomainErrorCode.INVALID);
             }
+            // 2. 返回实际删除标记，不把空匹配伪造成已删除记录。
             return Result.success(new WriteDO(Boolean.TRUE.equals(message.remove(param.id()))));
         } catch (Exception exception) {
-            return com.hellotravel.common.error.Failures.capture(
-                    exception, com.hellotravel.domain.exception.DomainErrorCode.FAILED);
+            return Failures.capture(exception, DomainErrorCode.FAILED);
         }
     }
 
@@ -508,37 +479,29 @@ public final class TravelWriteDomainService {
      */
     public Result<WriteDO> saveChatRun(ChatRunWriteParam param) {
         try {
-            if (param == null || param.aggregate() == null || param.aggregate().entity() == null) {
+            // 1. 核对输入或读取结果的存在性，失败中止当前处理。
+            if (param == null || param.aggregate() == null) {
                 throw new DomainException(DomainErrorCode.INVALID);
             }
-            var next = param.aggregate().entity();
-            if (next.id() != null) {
-                var stored = chatRun.findById(next.id());
-                if (stored == null) {
-                    throw new DomainException(DomainErrorCode.NOT_FOUND);
-                }
-                var prior = stored.entity();
-                if (!prior.version().equals(next.version())) {
-                    throw new DomainException(DomainErrorCode.CONFLICT);
-                }
-                if (!java.util.Objects.equals(prior.userId(), next.userId())) {
-                    throw new DomainException(DomainErrorCode.INVALID);
-                }
-                if (!java.util.Objects.equals(prior.conversationId(), next.conversationId())) {
-                    throw new DomainException(DomainErrorCode.INVALID);
-                }
-                if (!java.util.Objects.equals(prior.publicId(), next.publicId())) {
-                    throw new DomainException(DomainErrorCode.INVALID);
-                }
+            // 2. 准备当前变更后的不可变快照，旧版本保留给仓储CAS。
+            var next = param.aggregate();
+            // 3. 校验聚合完整性，空实体不能进入仓储。
+            next.assertComplete();
+            // 4. 更新前加载已持久化聚合，新增快照无需虚构旧记录。
+            if (next.idForPersistence() != null) {
+                var stored = chatRun.findById(next.idForPersistence());
+                next.assertWritableAgainst(stored);
             }
-            boolean saved = Boolean.TRUE.equals(chatRun.save(param.aggregate()));
+            // 5. 保存完整聚合并检查仓储CAS结果，冲突不能作为成功提交。
+            boolean saved = Boolean.TRUE.equals(chatRun.save(next));
+            // 6. 拒绝未写入的CAS结果，使所属事务回滚而非继续发布事件。
             if (!saved) {
                 throw new DomainException(DomainErrorCode.CONFLICT);
             }
+            // 7. 返回实际成功写入标记，版本或归属校验失败不会走到此处。
             return Result.success(new WriteDO(true));
         } catch (Exception exception) {
-            return com.hellotravel.common.error.Failures.capture(
-                    exception, com.hellotravel.domain.exception.DomainErrorCode.FAILED);
+            return Failures.capture(exception, DomainErrorCode.FAILED);
         }
     }
 
@@ -551,13 +514,14 @@ public final class TravelWriteDomainService {
      */
     public Result<WriteDO> removeChatRun(ChatRunRemoveParam param) {
         try {
+            // 1. 核对输入或读取结果的存在性，失败中止当前处理。
             if (param == null || param.id() == null) {
                 throw new DomainException(DomainErrorCode.INVALID);
             }
+            // 2. 返回实际删除标记，不把空匹配伪造成已删除记录。
             return Result.success(new WriteDO(Boolean.TRUE.equals(chatRun.remove(param.id()))));
         } catch (Exception exception) {
-            return com.hellotravel.common.error.Failures.capture(
-                    exception, com.hellotravel.domain.exception.DomainErrorCode.FAILED);
+            return Failures.capture(exception, DomainErrorCode.FAILED);
         }
     }
 
@@ -570,37 +534,29 @@ public final class TravelWriteDomainService {
      */
     public Result<WriteDO> saveMemorySummary(MemorySummaryWriteParam param) {
         try {
-            if (param == null || param.aggregate() == null || param.aggregate().entity() == null) {
+            // 1. 核对输入或读取结果的存在性，失败中止当前处理。
+            if (param == null || param.aggregate() == null) {
                 throw new DomainException(DomainErrorCode.INVALID);
             }
-            var next = param.aggregate().entity();
-            if (next.id() != null) {
-                var stored = memorySummary.findById(next.id());
-                if (stored == null) {
-                    throw new DomainException(DomainErrorCode.NOT_FOUND);
-                }
-                var prior = stored.entity();
-                if (!prior.version().equals(next.version())) {
-                    throw new DomainException(DomainErrorCode.CONFLICT);
-                }
-                if (!java.util.Objects.equals(prior.userId(), next.userId())) {
-                    throw new DomainException(DomainErrorCode.INVALID);
-                }
-                if (!java.util.Objects.equals(prior.conversationId(), next.conversationId())) {
-                    throw new DomainException(DomainErrorCode.INVALID);
-                }
-                if (!java.util.Objects.equals(prior.publicId(), next.publicId())) {
-                    throw new DomainException(DomainErrorCode.INVALID);
-                }
+            // 2. 准备当前变更后的不可变快照，旧版本保留给仓储CAS。
+            var next = param.aggregate();
+            // 3. 校验聚合完整性，空实体不能进入仓储。
+            next.assertComplete();
+            // 4. 更新前加载已持久化聚合，新增快照无需虚构旧记录。
+            if (next.idForPersistence() != null) {
+                var stored = memorySummary.findById(next.idForPersistence());
+                next.assertWritableAgainst(stored);
             }
-            boolean saved = Boolean.TRUE.equals(memorySummary.save(param.aggregate()));
+            // 5. 保存完整聚合并检查仓储CAS结果，冲突不能作为成功提交。
+            boolean saved = Boolean.TRUE.equals(memorySummary.save(next));
+            // 6. 拒绝未写入的CAS结果，使所属事务回滚而非继续发布事件。
             if (!saved) {
                 throw new DomainException(DomainErrorCode.CONFLICT);
             }
+            // 7. 返回实际成功写入标记，版本或归属校验失败不会走到此处。
             return Result.success(new WriteDO(true));
         } catch (Exception exception) {
-            return com.hellotravel.common.error.Failures.capture(
-                    exception, com.hellotravel.domain.exception.DomainErrorCode.FAILED);
+            return Failures.capture(exception, DomainErrorCode.FAILED);
         }
     }
 
@@ -613,14 +569,15 @@ public final class TravelWriteDomainService {
      */
     public Result<WriteDO> removeMemorySummary(MemorySummaryRemoveParam param) {
         try {
+            // 1. 核对输入或读取结果的存在性，失败中止当前处理。
             if (param == null || param.id() == null) {
                 throw new DomainException(DomainErrorCode.INVALID);
             }
+            // 2. 返回实际删除标记，不把空匹配伪造成已删除记录。
             return Result.success(
                     new WriteDO(Boolean.TRUE.equals(memorySummary.remove(param.id()))));
         } catch (Exception exception) {
-            return com.hellotravel.common.error.Failures.capture(
-                    exception, com.hellotravel.domain.exception.DomainErrorCode.FAILED);
+            return Failures.capture(exception, DomainErrorCode.FAILED);
         }
     }
 
@@ -633,37 +590,29 @@ public final class TravelWriteDomainService {
      */
     public Result<WriteDO> saveMemoryFact(MemoryFactWriteParam param) {
         try {
-            if (param == null || param.aggregate() == null || param.aggregate().entity() == null) {
+            // 1. 核对输入或读取结果的存在性，失败中止当前处理。
+            if (param == null || param.aggregate() == null) {
                 throw new DomainException(DomainErrorCode.INVALID);
             }
-            var next = param.aggregate().entity();
-            if (next.id() != null) {
-                var stored = memoryFact.findById(next.id());
-                if (stored == null) {
-                    throw new DomainException(DomainErrorCode.NOT_FOUND);
-                }
-                var prior = stored.entity();
-                if (!prior.version().equals(next.version())) {
-                    throw new DomainException(DomainErrorCode.CONFLICT);
-                }
-                if (!java.util.Objects.equals(prior.userId(), next.userId())) {
-                    throw new DomainException(DomainErrorCode.INVALID);
-                }
-                if (!java.util.Objects.equals(prior.conversationId(), next.conversationId())) {
-                    throw new DomainException(DomainErrorCode.INVALID);
-                }
-                if (!java.util.Objects.equals(prior.publicId(), next.publicId())) {
-                    throw new DomainException(DomainErrorCode.INVALID);
-                }
+            // 2. 准备当前变更后的不可变快照，旧版本保留给仓储CAS。
+            var next = param.aggregate();
+            // 3. 校验聚合完整性，空实体不能进入仓储。
+            next.assertComplete();
+            // 4. 更新前加载已持久化聚合，新增快照无需虚构旧记录。
+            if (next.idForPersistence() != null) {
+                var stored = memoryFact.findById(next.idForPersistence());
+                next.assertWritableAgainst(stored);
             }
-            boolean saved = Boolean.TRUE.equals(memoryFact.save(param.aggregate()));
+            // 5. 保存完整聚合并检查仓储CAS结果，冲突不能作为成功提交。
+            boolean saved = Boolean.TRUE.equals(memoryFact.save(next));
+            // 6. 拒绝未写入的CAS结果，使所属事务回滚而非继续发布事件。
             if (!saved) {
                 throw new DomainException(DomainErrorCode.CONFLICT);
             }
+            // 7. 返回实际成功写入标记，版本或归属校验失败不会走到此处。
             return Result.success(new WriteDO(true));
         } catch (Exception exception) {
-            return com.hellotravel.common.error.Failures.capture(
-                    exception, com.hellotravel.domain.exception.DomainErrorCode.FAILED);
+            return Failures.capture(exception, DomainErrorCode.FAILED);
         }
     }
 
@@ -676,13 +625,14 @@ public final class TravelWriteDomainService {
      */
     public Result<WriteDO> removeMemoryFact(MemoryFactRemoveParam param) {
         try {
+            // 1. 核对输入或读取结果的存在性，失败中止当前处理。
             if (param == null || param.id() == null) {
                 throw new DomainException(DomainErrorCode.INVALID);
             }
+            // 2. 返回实际删除标记，不把空匹配伪造成已删除记录。
             return Result.success(new WriteDO(Boolean.TRUE.equals(memoryFact.remove(param.id()))));
         } catch (Exception exception) {
-            return com.hellotravel.common.error.Failures.capture(
-                    exception, com.hellotravel.domain.exception.DomainErrorCode.FAILED);
+            return Failures.capture(exception, DomainErrorCode.FAILED);
         }
     }
 
@@ -695,31 +645,29 @@ public final class TravelWriteDomainService {
      */
     public Result<WriteDO> saveMemoryFactSource(MemoryFactSourceWriteParam param) {
         try {
-            if (param == null || param.aggregate() == null || param.aggregate().entity() == null) {
+            // 1. 核对输入或读取结果的存在性，失败中止当前处理。
+            if (param == null || param.aggregate() == null) {
                 throw new DomainException(DomainErrorCode.INVALID);
             }
-            var next = param.aggregate().entity();
-            if (next.id() != null) {
-                var stored = memoryFactSource.findById(next.id());
-                if (stored == null) {
-                    throw new DomainException(DomainErrorCode.NOT_FOUND);
-                }
-                var prior = stored.entity();
-                if (!java.util.Objects.equals(prior.userId(), next.userId())) {
-                    throw new DomainException(DomainErrorCode.INVALID);
-                }
-                if (!java.util.Objects.equals(prior.conversationId(), next.conversationId())) {
-                    throw new DomainException(DomainErrorCode.INVALID);
-                }
+            // 2. 准备当前变更后的不可变快照，旧版本保留给仓储CAS。
+            var next = param.aggregate();
+            // 3. 校验聚合完整性，空实体不能进入仓储。
+            next.assertComplete();
+            // 4. 更新前加载已持久化聚合，新增快照无需虚构旧记录。
+            if (next.idForPersistence() != null) {
+                var stored = memoryFactSource.findById(next.idForPersistence());
+                next.assertWritableAgainst(stored);
             }
-            boolean saved = Boolean.TRUE.equals(memoryFactSource.save(param.aggregate()));
+            // 5. 保存完整聚合并检查仓储CAS结果，冲突不能作为成功提交。
+            boolean saved = Boolean.TRUE.equals(memoryFactSource.save(next));
+            // 6. 拒绝未写入的CAS结果，使所属事务回滚而非继续发布事件。
             if (!saved) {
                 throw new DomainException(DomainErrorCode.CONFLICT);
             }
+            // 7. 返回实际成功写入标记，版本或归属校验失败不会走到此处。
             return Result.success(new WriteDO(true));
         } catch (Exception exception) {
-            return com.hellotravel.common.error.Failures.capture(
-                    exception, com.hellotravel.domain.exception.DomainErrorCode.FAILED);
+            return Failures.capture(exception, DomainErrorCode.FAILED);
         }
     }
 
@@ -732,14 +680,15 @@ public final class TravelWriteDomainService {
      */
     public Result<WriteDO> removeMemoryFactSource(MemoryFactSourceRemoveParam param) {
         try {
+            // 1. 核对输入或读取结果的存在性，失败中止当前处理。
             if (param == null || param.id() == null) {
                 throw new DomainException(DomainErrorCode.INVALID);
             }
+            // 2. 返回实际删除标记，不把空匹配伪造成已删除记录。
             return Result.success(
                     new WriteDO(Boolean.TRUE.equals(memoryFactSource.remove(param.id()))));
         } catch (Exception exception) {
-            return com.hellotravel.common.error.Failures.capture(
-                    exception, com.hellotravel.domain.exception.DomainErrorCode.FAILED);
+            return Failures.capture(exception, DomainErrorCode.FAILED);
         }
     }
 
@@ -752,37 +701,29 @@ public final class TravelWriteDomainService {
      */
     public Result<WriteDO> saveKnowledgeDocument(KnowledgeDocumentWriteParam param) {
         try {
-            if (param == null || param.aggregate() == null || param.aggregate().entity() == null) {
+            // 1. 核对输入或读取结果的存在性，失败中止当前处理。
+            if (param == null || param.aggregate() == null) {
                 throw new DomainException(DomainErrorCode.INVALID);
             }
-            var next = param.aggregate().entity();
-            if (next.id() != null) {
-                var stored = knowledgeDocument.findById(next.id());
-                if (stored == null) {
-                    throw new DomainException(DomainErrorCode.NOT_FOUND);
-                }
-                var prior = stored.entity();
-                if (!prior.version().equals(next.version())) {
-                    throw new DomainException(DomainErrorCode.CONFLICT);
-                }
-                if (!java.util.Objects.equals(prior.userId(), next.userId())) {
-                    throw new DomainException(DomainErrorCode.INVALID);
-                }
-                if (!java.util.Objects.equals(prior.publicId(), next.publicId())) {
-                    throw new DomainException(DomainErrorCode.INVALID);
-                }
-                if (prior.deletedAt() != null && next.deletedAt() == null) {
-                    throw new DomainException(DomainErrorCode.CONFLICT);
-                }
+            // 2. 准备当前变更后的不可变快照，旧版本保留给仓储CAS。
+            var next = param.aggregate();
+            // 3. 校验聚合完整性，空实体不能进入仓储。
+            next.assertComplete();
+            // 4. 更新前加载已持久化聚合，新增快照无需虚构旧记录。
+            if (next.idForPersistence() != null) {
+                var stored = knowledgeDocument.findById(next.idForPersistence());
+                next.assertWritableAgainst(stored);
             }
-            boolean saved = Boolean.TRUE.equals(knowledgeDocument.save(param.aggregate()));
+            // 5. 保存完整聚合并检查仓储CAS结果，冲突不能作为成功提交。
+            boolean saved = Boolean.TRUE.equals(knowledgeDocument.save(next));
+            // 6. 拒绝未写入的CAS结果，使所属事务回滚而非继续发布事件。
             if (!saved) {
                 throw new DomainException(DomainErrorCode.CONFLICT);
             }
+            // 7. 返回实际成功写入标记，版本或归属校验失败不会走到此处。
             return Result.success(new WriteDO(true));
         } catch (Exception exception) {
-            return com.hellotravel.common.error.Failures.capture(
-                    exception, com.hellotravel.domain.exception.DomainErrorCode.FAILED);
+            return Failures.capture(exception, DomainErrorCode.FAILED);
         }
     }
 
@@ -795,14 +736,15 @@ public final class TravelWriteDomainService {
      */
     public Result<WriteDO> removeKnowledgeDocument(KnowledgeDocumentRemoveParam param) {
         try {
+            // 1. 核对输入或读取结果的存在性，失败中止当前处理。
             if (param == null || param.id() == null) {
                 throw new DomainException(DomainErrorCode.INVALID);
             }
+            // 2. 返回实际删除标记，不把空匹配伪造成已删除记录。
             return Result.success(
                     new WriteDO(Boolean.TRUE.equals(knowledgeDocument.remove(param.id()))));
         } catch (Exception exception) {
-            return com.hellotravel.common.error.Failures.capture(
-                    exception, com.hellotravel.domain.exception.DomainErrorCode.FAILED);
+            return Failures.capture(exception, DomainErrorCode.FAILED);
         }
     }
 
@@ -815,40 +757,29 @@ public final class TravelWriteDomainService {
      */
     public Result<WriteDO> saveKnowledgeChunk(KnowledgeChunkWriteParam param) {
         try {
-            if (param == null || param.aggregate() == null || param.aggregate().entity() == null) {
+            // 1. 核对输入或读取结果的存在性，失败中止当前处理。
+            if (param == null || param.aggregate() == null) {
                 throw new DomainException(DomainErrorCode.INVALID);
             }
-            var next = param.aggregate().entity();
-            if (next.id() != null) {
-                var stored = knowledgeChunk.findById(next.id());
-                if (stored == null) {
-                    throw new DomainException(DomainErrorCode.NOT_FOUND);
-                }
-                var prior = stored.entity();
-                if (!prior.version().equals(next.version())) {
-                    throw new DomainException(DomainErrorCode.CONFLICT);
-                }
-                if (!java.util.Objects.equals(prior.userId(), next.userId())) {
-                    throw new DomainException(DomainErrorCode.INVALID);
-                }
-                if (!java.util.Objects.equals(prior.documentId(), next.documentId())) {
-                    throw new DomainException(DomainErrorCode.INVALID);
-                }
-                if (!java.util.Objects.equals(prior.publicId(), next.publicId())) {
-                    throw new DomainException(DomainErrorCode.INVALID);
-                }
-                if (prior.deletedAt() != null && next.deletedAt() == null) {
-                    throw new DomainException(DomainErrorCode.CONFLICT);
-                }
+            // 2. 准备当前变更后的不可变快照，旧版本保留给仓储CAS。
+            var next = param.aggregate();
+            // 3. 校验聚合完整性，空实体不能进入仓储。
+            next.assertComplete();
+            // 4. 更新前加载已持久化聚合，新增快照无需虚构旧记录。
+            if (next.idForPersistence() != null) {
+                var stored = knowledgeChunk.findById(next.idForPersistence());
+                next.assertWritableAgainst(stored);
             }
-            boolean saved = Boolean.TRUE.equals(knowledgeChunk.save(param.aggregate()));
+            // 5. 保存完整聚合并检查仓储CAS结果，冲突不能作为成功提交。
+            boolean saved = Boolean.TRUE.equals(knowledgeChunk.save(next));
+            // 6. 拒绝未写入的CAS结果，使所属事务回滚而非继续发布事件。
             if (!saved) {
                 throw new DomainException(DomainErrorCode.CONFLICT);
             }
+            // 7. 返回实际成功写入标记，版本或归属校验失败不会走到此处。
             return Result.success(new WriteDO(true));
         } catch (Exception exception) {
-            return com.hellotravel.common.error.Failures.capture(
-                    exception, com.hellotravel.domain.exception.DomainErrorCode.FAILED);
+            return Failures.capture(exception, DomainErrorCode.FAILED);
         }
     }
 
@@ -861,14 +792,15 @@ public final class TravelWriteDomainService {
      */
     public Result<WriteDO> removeKnowledgeChunk(KnowledgeChunkRemoveParam param) {
         try {
+            // 1. 核对输入或读取结果的存在性，失败中止当前处理。
             if (param == null || param.id() == null) {
                 throw new DomainException(DomainErrorCode.INVALID);
             }
+            // 2. 返回实际删除标记，不把空匹配伪造成已删除记录。
             return Result.success(
                     new WriteDO(Boolean.TRUE.equals(knowledgeChunk.remove(param.id()))));
         } catch (Exception exception) {
-            return com.hellotravel.common.error.Failures.capture(
-                    exception, com.hellotravel.domain.exception.DomainErrorCode.FAILED);
+            return Failures.capture(exception, DomainErrorCode.FAILED);
         }
     }
 
@@ -881,37 +813,29 @@ public final class TravelWriteDomainService {
      */
     public Result<WriteDO> saveIndexJob(IndexJobWriteParam param) {
         try {
-            if (param == null || param.aggregate() == null || param.aggregate().entity() == null) {
+            // 1. 核对输入或读取结果的存在性，失败中止当前处理。
+            if (param == null || param.aggregate() == null) {
                 throw new DomainException(DomainErrorCode.INVALID);
             }
-            var next = param.aggregate().entity();
-            if (next.id() != null) {
-                var stored = indexJob.findById(next.id());
-                if (stored == null) {
-                    throw new DomainException(DomainErrorCode.NOT_FOUND);
-                }
-                var prior = stored.entity();
-                if (!prior.version().equals(next.version())) {
-                    throw new DomainException(DomainErrorCode.CONFLICT);
-                }
-                if (!java.util.Objects.equals(prior.userId(), next.userId())) {
-                    throw new DomainException(DomainErrorCode.INVALID);
-                }
-                if (!java.util.Objects.equals(prior.documentId(), next.documentId())) {
-                    throw new DomainException(DomainErrorCode.INVALID);
-                }
-                if (!java.util.Objects.equals(prior.publicId(), next.publicId())) {
-                    throw new DomainException(DomainErrorCode.INVALID);
-                }
+            // 2. 准备当前变更后的不可变快照，旧版本保留给仓储CAS。
+            var next = param.aggregate();
+            // 3. 校验聚合完整性，空实体不能进入仓储。
+            next.assertComplete();
+            // 4. 更新前加载已持久化聚合，新增快照无需虚构旧记录。
+            if (next.idForPersistence() != null) {
+                var stored = indexJob.findById(next.idForPersistence());
+                next.assertWritableAgainst(stored);
             }
-            boolean saved = Boolean.TRUE.equals(indexJob.save(param.aggregate()));
+            // 5. 保存完整聚合并检查仓储CAS结果，冲突不能作为成功提交。
+            boolean saved = Boolean.TRUE.equals(indexJob.save(next));
+            // 6. 拒绝未写入的CAS结果，使所属事务回滚而非继续发布事件。
             if (!saved) {
                 throw new DomainException(DomainErrorCode.CONFLICT);
             }
+            // 7. 返回实际成功写入标记，版本或归属校验失败不会走到此处。
             return Result.success(new WriteDO(true));
         } catch (Exception exception) {
-            return com.hellotravel.common.error.Failures.capture(
-                    exception, com.hellotravel.domain.exception.DomainErrorCode.FAILED);
+            return Failures.capture(exception, DomainErrorCode.FAILED);
         }
     }
 
@@ -924,13 +848,14 @@ public final class TravelWriteDomainService {
      */
     public Result<WriteDO> removeIndexJob(IndexJobRemoveParam param) {
         try {
+            // 1. 核对输入或读取结果的存在性，失败中止当前处理。
             if (param == null || param.id() == null) {
                 throw new DomainException(DomainErrorCode.INVALID);
             }
+            // 2. 返回实际删除标记，不把空匹配伪造成已删除记录。
             return Result.success(new WriteDO(Boolean.TRUE.equals(indexJob.remove(param.id()))));
         } catch (Exception exception) {
-            return com.hellotravel.common.error.Failures.capture(
-                    exception, com.hellotravel.domain.exception.DomainErrorCode.FAILED);
+            return Failures.capture(exception, DomainErrorCode.FAILED);
         }
     }
 
@@ -943,28 +868,29 @@ public final class TravelWriteDomainService {
      */
     public Result<WriteDO> saveSyncEvent(SyncEventWriteParam param) {
         try {
-            if (param == null || param.aggregate() == null || param.aggregate().entity() == null) {
+            // 1. 核对输入或读取结果的存在性，失败中止当前处理。
+            if (param == null || param.aggregate() == null) {
                 throw new DomainException(DomainErrorCode.INVALID);
             }
-            var next = param.aggregate().entity();
-            if (next.id() != null) {
-                var stored = syncEvent.findById(next.id());
-                if (stored == null) {
-                    throw new DomainException(DomainErrorCode.NOT_FOUND);
-                }
-                var prior = stored.entity();
-                if (!java.util.Objects.equals(prior.userId(), next.userId())) {
-                    throw new DomainException(DomainErrorCode.INVALID);
-                }
+            // 2. 准备当前变更后的不可变快照，旧版本保留给仓储CAS。
+            var next = param.aggregate();
+            // 3. 校验聚合完整性，空实体不能进入仓储。
+            next.assertComplete();
+            // 4. 更新前加载已持久化聚合，新增快照无需虚构旧记录。
+            if (next.idForPersistence() != null) {
+                var stored = syncEvent.findById(next.idForPersistence());
+                next.assertWritableAgainst(stored);
             }
-            boolean saved = Boolean.TRUE.equals(syncEvent.save(param.aggregate()));
+            // 5. 保存完整聚合并检查仓储CAS结果，冲突不能作为成功提交。
+            boolean saved = Boolean.TRUE.equals(syncEvent.save(next));
+            // 6. 拒绝未写入的CAS结果，使所属事务回滚而非继续发布事件。
             if (!saved) {
                 throw new DomainException(DomainErrorCode.CONFLICT);
             }
+            // 7. 返回实际成功写入标记，版本或归属校验失败不会走到此处。
             return Result.success(new WriteDO(true));
         } catch (Exception exception) {
-            return com.hellotravel.common.error.Failures.capture(
-                    exception, com.hellotravel.domain.exception.DomainErrorCode.FAILED);
+            return Failures.capture(exception, DomainErrorCode.FAILED);
         }
     }
 
@@ -977,13 +903,14 @@ public final class TravelWriteDomainService {
      */
     public Result<WriteDO> removeSyncEvent(SyncEventRemoveParam param) {
         try {
+            // 1. 核对输入或读取结果的存在性，失败中止当前处理。
             if (param == null || param.id() == null) {
                 throw new DomainException(DomainErrorCode.INVALID);
             }
+            // 2. 返回实际删除标记，不把空匹配伪造成已删除记录。
             return Result.success(new WriteDO(Boolean.TRUE.equals(syncEvent.remove(param.id()))));
         } catch (Exception exception) {
-            return com.hellotravel.common.error.Failures.capture(
-                    exception, com.hellotravel.domain.exception.DomainErrorCode.FAILED);
+            return Failures.capture(exception, DomainErrorCode.FAILED);
         }
     }
 
@@ -996,34 +923,29 @@ public final class TravelWriteDomainService {
      */
     public Result<WriteDO> saveOutboxEvent(OutboxEventWriteParam param) {
         try {
-            if (param == null || param.aggregate() == null || param.aggregate().entity() == null) {
+            // 1. 核对输入或读取结果的存在性，失败中止当前处理。
+            if (param == null || param.aggregate() == null) {
                 throw new DomainException(DomainErrorCode.INVALID);
             }
-            var next = param.aggregate().entity();
-            if (next.id() != null) {
-                var stored = outboxEvent.findById(next.id());
-                if (stored == null) {
-                    throw new DomainException(DomainErrorCode.NOT_FOUND);
-                }
-                var prior = stored.entity();
-                if (!prior.version().equals(next.version())) {
-                    throw new DomainException(DomainErrorCode.CONFLICT);
-                }
-                if (!java.util.Objects.equals(prior.userId(), next.userId())) {
-                    throw new DomainException(DomainErrorCode.INVALID);
-                }
-                if (!java.util.Objects.equals(prior.publicId(), next.publicId())) {
-                    throw new DomainException(DomainErrorCode.INVALID);
-                }
+            // 2. 准备当前变更后的不可变快照，旧版本保留给仓储CAS。
+            var next = param.aggregate();
+            // 3. 校验聚合完整性，空实体不能进入仓储。
+            next.assertComplete();
+            // 4. 更新前加载已持久化聚合，新增快照无需虚构旧记录。
+            if (next.idForPersistence() != null) {
+                var stored = outboxEvent.findById(next.idForPersistence());
+                next.assertWritableAgainst(stored);
             }
-            boolean saved = Boolean.TRUE.equals(outboxEvent.save(param.aggregate()));
+            // 5. 保存完整聚合并检查仓储CAS结果，冲突不能作为成功提交。
+            boolean saved = Boolean.TRUE.equals(outboxEvent.save(next));
+            // 6. 拒绝未写入的CAS结果，使所属事务回滚而非继续发布事件。
             if (!saved) {
                 throw new DomainException(DomainErrorCode.CONFLICT);
             }
+            // 7. 返回实际成功写入标记，版本或归属校验失败不会走到此处。
             return Result.success(new WriteDO(true));
         } catch (Exception exception) {
-            return com.hellotravel.common.error.Failures.capture(
-                    exception, com.hellotravel.domain.exception.DomainErrorCode.FAILED);
+            return Failures.capture(exception, DomainErrorCode.FAILED);
         }
     }
 
@@ -1036,13 +958,14 @@ public final class TravelWriteDomainService {
      */
     public Result<WriteDO> removeOutboxEvent(OutboxEventRemoveParam param) {
         try {
+            // 1. 核对输入或读取结果的存在性，失败中止当前处理。
             if (param == null || param.id() == null) {
                 throw new DomainException(DomainErrorCode.INVALID);
             }
+            // 2. 返回实际删除标记，不把空匹配伪造成已删除记录。
             return Result.success(new WriteDO(Boolean.TRUE.equals(outboxEvent.remove(param.id()))));
         } catch (Exception exception) {
-            return com.hellotravel.common.error.Failures.capture(
-                    exception, com.hellotravel.domain.exception.DomainErrorCode.FAILED);
+            return Failures.capture(exception, DomainErrorCode.FAILED);
         }
     }
 
@@ -1055,37 +978,29 @@ public final class TravelWriteDomainService {
      */
     public Result<WriteDO> saveModelInvocation(ModelInvocationWriteParam param) {
         try {
-            if (param == null || param.aggregate() == null || param.aggregate().entity() == null) {
+            // 1. 核对输入或读取结果的存在性，失败中止当前处理。
+            if (param == null || param.aggregate() == null) {
                 throw new DomainException(DomainErrorCode.INVALID);
             }
-            var next = param.aggregate().entity();
-            if (next.id() != null) {
-                var stored = modelInvocation.findById(next.id());
-                if (stored == null) {
-                    throw new DomainException(DomainErrorCode.NOT_FOUND);
-                }
-                var prior = stored.entity();
-                if (!prior.version().equals(next.version())) {
-                    throw new DomainException(DomainErrorCode.CONFLICT);
-                }
-                if (!java.util.Objects.equals(prior.userId(), next.userId())) {
-                    throw new DomainException(DomainErrorCode.INVALID);
-                }
-                if (!java.util.Objects.equals(prior.conversationId(), next.conversationId())) {
-                    throw new DomainException(DomainErrorCode.INVALID);
-                }
-                if (!java.util.Objects.equals(prior.publicId(), next.publicId())) {
-                    throw new DomainException(DomainErrorCode.INVALID);
-                }
+            // 2. 准备当前变更后的不可变快照，旧版本保留给仓储CAS。
+            var next = param.aggregate();
+            // 3. 校验聚合完整性，空实体不能进入仓储。
+            next.assertComplete();
+            // 4. 更新前加载已持久化聚合，新增快照无需虚构旧记录。
+            if (next.idForPersistence() != null) {
+                var stored = modelInvocation.findById(next.idForPersistence());
+                next.assertWritableAgainst(stored);
             }
-            boolean saved = Boolean.TRUE.equals(modelInvocation.save(param.aggregate()));
+            // 5. 保存完整聚合并检查仓储CAS结果，冲突不能作为成功提交。
+            boolean saved = Boolean.TRUE.equals(modelInvocation.save(next));
+            // 6. 拒绝未写入的CAS结果，使所属事务回滚而非继续发布事件。
             if (!saved) {
                 throw new DomainException(DomainErrorCode.CONFLICT);
             }
+            // 7. 返回实际成功写入标记，版本或归属校验失败不会走到此处。
             return Result.success(new WriteDO(true));
         } catch (Exception exception) {
-            return com.hellotravel.common.error.Failures.capture(
-                    exception, com.hellotravel.domain.exception.DomainErrorCode.FAILED);
+            return Failures.capture(exception, DomainErrorCode.FAILED);
         }
     }
 
@@ -1098,14 +1013,15 @@ public final class TravelWriteDomainService {
      */
     public Result<WriteDO> removeModelInvocation(ModelInvocationRemoveParam param) {
         try {
+            // 1. 核对输入或读取结果的存在性，失败中止当前处理。
             if (param == null || param.id() == null) {
                 throw new DomainException(DomainErrorCode.INVALID);
             }
+            // 2. 返回实际删除标记，不把空匹配伪造成已删除记录。
             return Result.success(
                     new WriteDO(Boolean.TRUE.equals(modelInvocation.remove(param.id()))));
         } catch (Exception exception) {
-            return com.hellotravel.common.error.Failures.capture(
-                    exception, com.hellotravel.domain.exception.DomainErrorCode.FAILED);
+            return Failures.capture(exception, DomainErrorCode.FAILED);
         }
     }
 
@@ -1118,28 +1034,29 @@ public final class TravelWriteDomainService {
      */
     public Result<WriteDO> saveRefreshReceipt(RefreshReceiptWriteParam param) {
         try {
-            if (param == null || param.aggregate() == null || param.aggregate().entity() == null) {
+            // 1. 核对输入或读取结果的存在性，失败中止当前处理。
+            if (param == null || param.aggregate() == null) {
                 throw new DomainException(DomainErrorCode.INVALID);
             }
-            var next = param.aggregate().entity();
-            if (next.id() != null) {
-                var stored = refreshReceipt.findById(next.id());
-                if (stored == null) {
-                    throw new DomainException(DomainErrorCode.NOT_FOUND);
-                }
-                var prior = stored.entity();
-                if (!java.util.Objects.equals(prior.userId(), next.userId())) {
-                    throw new DomainException(DomainErrorCode.INVALID);
-                }
+            // 2. 准备当前变更后的不可变快照，旧版本保留给仓储CAS。
+            var next = param.aggregate();
+            // 3. 校验聚合完整性，空实体不能进入仓储。
+            next.assertComplete();
+            // 4. 更新前加载已持久化聚合，新增快照无需虚构旧记录。
+            if (next.idForPersistence() != null) {
+                var stored = refreshReceipt.findById(next.idForPersistence());
+                next.assertWritableAgainst(stored);
             }
-            boolean saved = Boolean.TRUE.equals(refreshReceipt.save(param.aggregate()));
+            // 5. 保存完整聚合并检查仓储CAS结果，冲突不能作为成功提交。
+            boolean saved = Boolean.TRUE.equals(refreshReceipt.save(next));
+            // 6. 拒绝未写入的CAS结果，使所属事务回滚而非继续发布事件。
             if (!saved) {
                 throw new DomainException(DomainErrorCode.CONFLICT);
             }
+            // 7. 返回实际成功写入标记，版本或归属校验失败不会走到此处。
             return Result.success(new WriteDO(true));
         } catch (Exception exception) {
-            return com.hellotravel.common.error.Failures.capture(
-                    exception, com.hellotravel.domain.exception.DomainErrorCode.FAILED);
+            return Failures.capture(exception, DomainErrorCode.FAILED);
         }
     }
 
@@ -1152,14 +1069,15 @@ public final class TravelWriteDomainService {
      */
     public Result<WriteDO> removeRefreshReceipt(RefreshReceiptRemoveParam param) {
         try {
+            // 1. 核对输入或读取结果的存在性，失败中止当前处理。
             if (param == null || param.id() == null) {
                 throw new DomainException(DomainErrorCode.INVALID);
             }
+            // 2. 返回实际删除标记，不把空匹配伪造成已删除记录。
             return Result.success(
                     new WriteDO(Boolean.TRUE.equals(refreshReceipt.remove(param.id()))));
         } catch (Exception exception) {
-            return com.hellotravel.common.error.Failures.capture(
-                    exception, com.hellotravel.domain.exception.DomainErrorCode.FAILED);
+            return Failures.capture(exception, DomainErrorCode.FAILED);
         }
     }
 }

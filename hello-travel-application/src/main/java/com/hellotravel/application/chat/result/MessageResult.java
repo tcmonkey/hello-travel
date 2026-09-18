@@ -20,4 +20,4 @@ public record MessageResult(
         String content,
         String citations,
         long version) {
-        }
+}

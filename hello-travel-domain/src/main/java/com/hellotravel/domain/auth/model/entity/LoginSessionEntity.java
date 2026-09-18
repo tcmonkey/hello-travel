@@ -1,5 +1,9 @@
 package com.hellotravel.domain.auth.model.entity;
 
+import com.hellotravel.domain.auth.model.value.SessionCredentialsValue;
+import com.hellotravel.domain.exception.DomainErrorCode;
+import com.hellotravel.domain.exception.DomainException;
+
 /**
  * 持久化归属与状态快照；变更须经过语义方法和版本检查。
  *
@@ -42,11 +46,12 @@ public record LoginSessionEntity(
         Long version) {
 
     /**
-     * 校验不可变值的边界并防御性复制输入集合。
+     * 防御性复制敏感字节字段，外部数组修改不能影响实体快照。
      *
      * @author AIGenerator
      */
     public LoginSessionEntity {
+        // 1. 复制输入摘要或加密载荷，外部数组修改不能改变实体快照。
         accessTokenHash = accessTokenHash == null ? null : accessTokenHash.clone();
         refreshTokenHash = refreshTokenHash == null ? null : refreshTokenHash.clone();
         csrfTokenHash = csrfTokenHash == null ? null : csrfTokenHash.clone();
@@ -60,6 +65,7 @@ public record LoginSessionEntity(
      * @return 当前操作的业务结果
      */
     public LoginSessionEntity revoke(String reason) {
+        // 1. 撤销活动会话并清除访问、刷新与CSRF摘要，返回不可变快照。
         return new LoginSessionEntity(
                 this.id(),
                 this.publicId(),
@@ -92,9 +98,11 @@ public record LoginSessionEntity(
      */
     public LoginSessionEntity rotate(
             byte[] access, byte[] refresh, byte[] csrf, java.time.LocalDateTime until) {
+        // 1. 依据实体当前状态与允许的操作处理分支，避免继续使用无效数据。
         if (!"ACTIVE".equals(status)) {
             throw new IllegalStateException("revoked");
         }
+        // 2. 轮换活动会话的随机凭据，保留原刷新有效期，返回不可变快照。
         return new LoginSessionEntity(
                 this.id(),
                 this.publicId(),
@@ -154,5 +162,78 @@ public record LoginSessionEntity(
      */
     public byte[] csrfTokenHash() {
         return csrfTokenHash == null ? null : csrfTokenHash.clone();
+    }
+
+    /**
+     * 签发设备会话，由实体封装完整凭据摘要与初始有效期。
+     *
+     * @param user 已验证账号
+     * @param device 属于当前账号的设备
+     * @param publicId 业务公开标识
+     * @param accessHash accessHash业务参数
+     * @param refreshHash refreshHash业务参数
+     * @param csrfHash csrfHash业务参数
+     * @param time time业务参数
+     * @return 保持归属与版本的业务快照
+     * @author AIGenerator
+     */
+    public static LoginSessionEntity issue(
+            UserAccountEntity user,
+            DeviceEntity device,
+            String publicId,
+            byte[] accessHash,
+            byte[] refreshHash,
+            byte[] csrfHash,
+            java.time.LocalDateTime time) {
+        // 1. 通过领域聚合语义准备业务快照，固定状态由实体封装。
+        var credentials = new SessionCredentialsValue(publicId, accessHash, refreshHash, csrfHash);
+        // 2. 核对关联对象归属与角色，拒绝跨账号或跨会话关联。
+        if (!user.id().equals(device.userId())) {
+            throw new IllegalArgumentException("device ownership");
+        }
+        // 3. 签发浏览器设备的新会话并固定认证代次及有效期，返回不可变快照。
+        return new LoginSessionEntity(
+                null,
+                credentials.publicId(),
+                user.id(),
+                device.id(),
+                credentials.accessHash(),
+                credentials.refreshHash(),
+                credentials.csrfHash(),
+                user.authEpoch(),
+                "ACTIVE",
+                null,
+                time.plusMinutes(15),
+                time.plusDays(7),
+                time,
+                null,
+                time,
+                time,
+                0L);
+    }
+
+    /**
+     * 核对快照更新的不变量，保持版本、归属与删除状态一致。
+     *
+     * @param prior 已持久化的实体快照
+     * @author AIGenerator
+     */
+    public void assertUpdateAgainst(LoginSessionEntity prior) {
+        // 1. 核对数据库版本未发生并发变化，不满足时拒绝本次更新。
+        if (!prior.version().equals(this.version())) {
+            throw new DomainException(DomainErrorCode.CONFLICT);
+        }
+        // 2. 核对账号归属不变，不满足时拒绝本次更新。
+        if (!java.util.Objects.equals(prior.userId(), this.userId())) {
+            throw new DomainException(DomainErrorCode.INVALID);
+        }
+        // 3. 核对设备归属不变，不满足时拒绝本次更新。
+        if (!java.util.Objects.equals(prior.deviceId(), this.deviceId())) {
+            throw new DomainException(DomainErrorCode.INVALID);
+        }
+        // 4. 核对公开标识不被改写，不满足时拒绝本次更新。
+        if (!java.util.Objects.equals(prior.publicId(), this.publicId())) {
+            throw new DomainException(DomainErrorCode.INVALID);
+        }
     }
 }

@@ -7,6 +7,7 @@ import com.hellotravel.application.knowledge.command.VectorCommand;
 import com.hellotravel.application.knowledge.command.VectorItemCommand;
 import com.hellotravel.application.model.adaptor.ModelOutAdaptor;
 import com.hellotravel.application.model.command.ModelCommand;
+import com.hellotravel.application.persistence.DomainWrites;
 import com.hellotravel.application.persistence.TravelRepositories;
 import com.hellotravel.application.support.Json;
 import com.hellotravel.application.sync.workflow.SyncEvents;
@@ -18,7 +19,7 @@ import com.hellotravel.domain.knowledge.model.aggregate.IndexJobAggregate;
 import com.hellotravel.domain.knowledge.model.aggregate.KnowledgeChunkAggregate;
 import com.hellotravel.domain.knowledge.model.aggregate.KnowledgeDocumentAggregate;
 import com.hellotravel.domain.knowledge.model.entity.IndexJobEntity;
-import com.hellotravel.domain.knowledge.model.entity.KnowledgeChunkEntity;
+import com.hellotravel.domain.knowledge.model.entity.KnowledgeDocumentEntity;
 import com.hellotravel.domain.memory.model.value.ContextBudgetValue;
 import com.hellotravel.domain.query.model.value.QueryValue;
 
@@ -38,7 +39,7 @@ public final class KnowledgeIndexer {
 
     private final TravelRepositories repositories;
 
-    private final com.hellotravel.application.persistence.DomainWrites writes;
+    private final DomainWrites writes;
 
     private final Transactions transactions;
 
@@ -67,7 +68,7 @@ public final class KnowledgeIndexer {
             new java.util.concurrent.atomic.AtomicLong();
 
     public KnowledgeIndexer(
-            com.hellotravel.application.persistence.DomainWrites writes,
+            DomainWrites writes,
             TravelRepositories repositories,
             Transactions transactions,
             SyncEvents events,
@@ -90,187 +91,41 @@ public final class KnowledgeIndexer {
      * @param jobId 可信内部主键
      */
     public void execute(Long jobId) {
-        IndexJobEntity job =
-                transactions.plain(
-                        () -> {
-                            var stored = repositories.indexJob.findById(jobId);
-                            if (stored == null || !"PENDING".equals(stored.entity().status())) {
-                                return null;
-                            }
-                            var old = stored.entity();
-                            var next =
-                                    new IndexJobEntity(
-                                            old.id(),
-                                            old.publicId(),
-                                            old.userId(),
-                                            old.documentId(),
-                                            old.indexGeneration(),
-                                            old.jobType(),
-                                            "RUNNING",
-                                            old.attemptCount() + 1,
-                                            old.maxAttempts(),
-                                            old.nextAttemptAt(),
-                                            Ids.next(),
-                                            old.leaseFence() + 1,
-                                            now().plusMinutes(15),
-                                            old.errorCode(),
-                                            old.createdAt(),
-                                            old.updatedAt(),
-                                            old.version());
-                            Transactions.require(writes.saveIndexJob(new IndexJobAggregate(next)));
-                            return repositories.indexJob.findById(jobId).entity();
-                        });
+        // 1. 取得当前索引任务快照，供本段后续处理使用。
+        IndexJobEntity job = claim(jobId);
+        // 2. 未领取到当前任务则立即结束，避免无租约索引。
         if (job == null) {
             return;
         }
+        // 3. 按可信内部标识读取知识文档当前快照。
         var document = repositories.knowledgeDocument.findById(job.documentId()).entity();
+        // 4. 在异常捕获或资源释放边界内完成本段处理，失败不得伪装为成功。
         try {
+            // 1. 按删除补偿场景进入对应职责分支。
             if ("DELETE".equals(job.jobType())) {
-                String owner = repositories.userAccount.findById(job.userId()).entity().publicId();
-                require(
-                        vectors.index(
-                                        new VectorCommand(
-                                                "DELETE",
-                                                owner,
-                                                document.publicId(),
-                                                document.indexGeneration(),
-                                                List.of(),
-                                                null))
-                                .success());
-                require(
-                        files.store(new FileCommand("DELETE", null, null, document.storageKey()))
-                                .success());
-                finish(job, true, null);
+                deleteArtifacts(job, document);
                 return;
             }
+            // 2. 重新核对任务代次、租约与删除状态，阻止旧执行者写回。
             current(job);
+            // 3. 执行state职责步骤，并把失败交给所属事务或入口处理。
             state(job, "INDEXING", null);
+            // 4. 准备当前操作的正文或受限拼接容器。
             var text = document.extractedText();
+            // 5. 核对输入或读取结果的存在性，失败中止当前处理。
             if (text == null || text.isBlank()) {
                 throw new DomainException(DomainErrorCode.INVALID);
             }
+            // 6. 按Unicode码点切块，防止拆断字符及无上限分块。
             List<String> pieces = split(text);
             String owner = repositories.userAccount.findById(job.userId()).entity().publicId();
+            // 7. 逐项处理当前数据窗口，并在循环中核对可用状态与停止条件。
             for (int offset = 0; offset < pieces.size(); offset += 16) {
-                current(job);
-                List<String> batch = pieces.subList(offset, Math.min(pieces.size(), offset + 16));
-                var embedded =
-                        model.generate(new ModelCommand("EMBED", null, List.of(), batch, null));
-                require(embedded.success());
-                if (embedded.data().vectors() == null
-                        || embedded.data().vectors().size() != batch.size()) {
-                    throw new DomainException(DomainErrorCode.FAILED);
-                }
-                List<VectorItemCommand> items = new java.util.ArrayList<>();
-                for (int i = 0; i < batch.size(); i++) {
-                    int number = offset + i;
-                    String body = batch.get(i);
-                    byte[] hash = Ids.hash(body);
-                    var chunk =
-                            transactions.plain(
-                                    () -> {
-                                        current(job);
-                                        var entity =
-                                                new KnowledgeChunkEntity(
-                                                        null,
-                                                        Ids.next(),
-                                                        job.userId(),
-                                                        job.documentId(),
-                                                        job.indexGeneration(),
-                                                        number,
-                                                        body,
-                                                        hash,
-                                                        ContextBudgetValue.estimate(body),
-                                                        "",
-                                                        "PENDING",
-                                                        null,
-                                                        java.time.LocalDateTime.now(
-                                                                java.time.ZoneOffset.UTC),
-                                                        java.time.LocalDateTime.now(
-                                                                java.time.ZoneOffset.UTC),
-                                                        0L);
-                                        entity =
-                                                new KnowledgeChunkEntity(
-                                                        entity.id(),
-                                                        entity.publicId(),
-                                                        entity.userId(),
-                                                        entity.documentId(),
-                                                        entity.indexGeneration(),
-                                                        entity.chunkNo(),
-                                                        entity.content(),
-                                                        entity.contentSha256(),
-                                                        entity.estimatedTokens(),
-                                                        entity.publicId(),
-                                                        entity.status(),
-                                                        entity.deletedAt(),
-                                                        entity.createdAt(),
-                                                        entity.updatedAt(),
-                                                        entity.version());
-                                        Transactions.require(
-                                                writes.saveKnowledgeChunk(
-                                                        new KnowledgeChunkAggregate(entity)));
-                                        return entity;
-                                    });
-                    items.add(
-                            new VectorItemCommand(
-                                    chunk.vectorKey(),
-                                    document.publicId(),
-                                    job.indexGeneration(),
-                                    number,
-                                    java.util.HexFormat.of().formatHex(hash),
-                                    embedded.data().vectors().get(i)));
-                }
-                current(job);
-                require(
-                        vectors.index(
-                                        new VectorCommand(
-                                                "UPSERT",
-                                                owner,
-                                                document.publicId(),
-                                                job.indexGeneration(),
-                                                items,
-                                                null))
-                                .success());
-                transactions.plain(
-                        () -> {
-                            current(job);
-                            for (var item : items) {
-                                var old =
-                                        repositories
-                                                .knowledgeChunk
-                                                .query(
-                                                        QueryValue.all("id", 1)
-                                                                .where(
-                                                                        "vector_key",
-                                                                        "EQ",
-                                                                        item.key()))
-                                                .get(0)
-                                                .entity();
-                                var ready =
-                                        new KnowledgeChunkEntity(
-                                                old.id(),
-                                                old.publicId(),
-                                                old.userId(),
-                                                old.documentId(),
-                                                old.indexGeneration(),
-                                                old.chunkNo(),
-                                                old.content(),
-                                                old.contentSha256(),
-                                                old.estimatedTokens(),
-                                                old.vectorKey(),
-                                                "READY",
-                                                old.deletedAt(),
-                                                old.createdAt(),
-                                                old.updatedAt(),
-                                                old.version());
-                                Transactions.require(
-                                        writes.saveKnowledgeChunk(
-                                                new KnowledgeChunkAggregate(ready)));
-                            }
-                            return null;
-                        });
+                indexBatch(job, document, owner, pieces, offset);
             }
+            // 8. 重新核对任务代次、租约与删除状态，阻止旧执行者写回。
             current(job);
+            // 9. 执行require职责步骤，并把失败交给所属事务或入口处理。
             require(
                     vectors.index(
                                     new VectorCommand(
@@ -281,6 +136,7 @@ public final class KnowledgeIndexer {
                                             List.of(),
                                             null))
                             .success());
+            // 10. 以当前租约栅栏完成任务并记录稳定终态。
             finish(job, true, null);
         } catch (RuntimeException exception) {
             finish(job, false, "INDEX_FAILED");
@@ -288,20 +144,25 @@ public final class KnowledgeIndexer {
     }
 
     private static List<String> split(String text) {
+        // 1. 读取正文的Unicode码点，切块不会拆断补充字符。
         int[] points = text.codePoints().toArray();
         List<String> pieces = new java.util.ArrayList<>();
+        // 2. 逐项处理当前数据窗口，并在循环中核对可用状态与停止条件。
         for (int offset = 0; offset < points.length; offset += 448) {
             if (pieces.size() >= 256) {
                 throw new DomainException(DomainErrorCode.INVALID);
             }
             pieces.add(new String(points, offset, Math.min(512, points.length - offset)));
         }
+        // 3. 返回Unicode安全的有界分块清单，下一步骤按批次嵌入。
         return pieces;
     }
 
     private void current(IndexJobEntity expected) {
+        // 1. 按可信内部标识读取索引任务当前快照。
         var job = repositories.indexJob.findById(expected.id()).entity();
         var doc = repositories.knowledgeDocument.findById(job.documentId()).entity();
+        // 2. 核对租约持有者、栅栏和到期时间，旧执行者不能提交。
         if (!"RUNNING".equals(job.status())
                 || !job.leaseFence().equals(expected.leaseFence())
                 || job.leaseUntil().isBefore(now())
@@ -315,12 +176,16 @@ public final class KnowledgeIndexer {
         transactions.mutate(
                 job.userId(),
                 account -> {
+                    // 1. 重新核对任务代次、租约与删除状态，阻止旧执行者写回。
                     current(job);
+                    // 2. 按可信内部标识读取知识文档当前快照。
                     var doc = repositories.knowledgeDocument.findById(job.documentId()).entity();
+                    // 3. 持久化当前完整聚合，失败必须中断事务而非继续提交。
                     Transactions.require(
                             writes.saveKnowledgeDocument(
-                                    new KnowledgeDocumentAggregate(
-                                            doc.transition(next, doc.extractedText(), error))));
+                                    new KnowledgeDocumentAggregate(doc)
+                                            .transition(next, doc.extractedText(), error)));
+                    // 4. 同事务记录用户提交序号与同步事件，推送不能代替持久化。
                     events.append(
                             account,
                             "knowledge.changed",
@@ -328,6 +193,7 @@ public final class KnowledgeIndexer {
                             doc.version() + 1,
                             null,
                             "{}");
+                    // 5. 提供本事务或回调的处理结果，完成责任由所属外层流程承接。
                     return null;
                 });
     }
@@ -336,30 +202,14 @@ public final class KnowledgeIndexer {
         transactions.mutate(
                 expected.userId(),
                 account -> {
+                    // 1. 按可信内部标识读取索引任务当前快照。
                     var old = repositories.indexJob.findById(expected.id()).entity();
                     var doc = repositories.knowledgeDocument.findById(old.documentId()).entity();
+                    // 2. 核对租约持有者、栅栏和到期时间，旧执行者不能提交。
                     if ("RUNNING".equals(old.status())
                             && old.leaseFence().equals(expected.leaseFence())) {
                         boolean same = doc.indexGeneration().equals(old.indexGeneration());
-                        var done =
-                                new IndexJobEntity(
-                                        old.id(),
-                                        old.publicId(),
-                                        old.userId(),
-                                        old.documentId(),
-                                        old.indexGeneration(),
-                                        old.jobType(),
-                                        success ? "SUCCEEDED" : "FAILED",
-                                        old.attemptCount(),
-                                        old.maxAttempts(),
-                                        old.nextAttemptAt(),
-                                        old.leaseOwner(),
-                                        old.leaseFence(),
-                                        null,
-                                        error,
-                                        old.createdAt(),
-                                        old.updatedAt(),
-                                        old.version());
+                        var done = new IndexJobAggregate(old).complete(success, error).entity();
                         Transactions.require(writes.saveIndexJob(new IndexJobAggregate(done)));
                         if (same
                                 && (("DELETE".equals(old.jobType()) && doc.deletedAt() != null)
@@ -370,15 +220,16 @@ public final class KnowledgeIndexer {
                                             : (success ? "READY" : "FAILED");
                             Transactions.require(
                                     writes.saveKnowledgeDocument(
-                                            new KnowledgeDocumentAggregate(
-                                                    doc.transition(
+                                            new KnowledgeDocumentAggregate(doc)
+                                                    .transition(
                                                             next,
                                                             "DELETED".equals(next)
                                                                     ? null
                                                                     : doc.extractedText(),
-                                                            error))));
+                                                            error)));
                         }
                     }
+                    // 3. 同事务记录用户提交序号与同步事件，推送不能代替持久化。
                     events.append(
                             account,
                             "knowledge.changed",
@@ -386,6 +237,7 @@ public final class KnowledgeIndexer {
                             doc.version() + 1,
                             null,
                             "{}");
+                    // 4. 提供本事务或回调的处理结果，完成责任由所属外层流程承接。
                     return null;
                 });
     }
@@ -396,7 +248,9 @@ public final class KnowledgeIndexer {
      * @author AIGenerator
      */
     public void reconcile() {
+        // 1. 执行sweepOrphans职责步骤，并把失败交给所属事务或入口处理。
         sweepOrphans();
+        // 2. 逐项处理当前数据窗口，并在循环中核对可用状态与停止条件。
         for (var row :
                 repositories.indexJob.query(
                         QueryValue.all("id", 50)
@@ -404,12 +258,15 @@ public final class KnowledgeIndexer {
                                 .where("lease_until", "LT", now()))) {
             finish(row.entity(), false, "INDEX_INTERRUPTED");
         }
+        // 3. 读取知识文档，按当前用例条件限定查询窗口。
         var documents =
                 repositories.knowledgeDocument.query(
                         QueryValue.all("id", 5).where("id", "GT", reconcileCursor.get()));
+        // 4. 本查询窗口无文档时停止清理或修复扫描。
         if (documents.isEmpty()) {
             reconcileCursor.set(0);
         }
+        // 5. 逐项处理当前数据窗口，并在循环中核对可用状态与停止条件。
         for (var row : documents) {
             reconcileCursor.set(row.entity().id());
             var doc = row.entity();
@@ -434,44 +291,31 @@ public final class KnowledgeIndexer {
                 transactions.mutate(
                         doc.userId(),
                         account -> {
+                            // 1. 按可信内部标识读取知识文档当前快照。
                             var current =
                                     repositories.knowledgeDocument.findById(doc.id()).entity();
+                            // 2. 依据删除状态与当前记忆代次处理分支，避免继续使用无效数据。
                             if (current.deletedAt() != null
                                     && (!"DELETED".equals(current.status())
                                             || current.extractedText() != null)) {
                                 Transactions.require(
                                         writes.saveKnowledgeDocument(
-                                                new KnowledgeDocumentAggregate(
-                                                        current.transition(
-                                                                "DELETED", null, null))));
+                                                new KnowledgeDocumentAggregate(current)
+                                                        .transition("DELETED", null, null)));
                             }
+                            // 3. 逐项处理当前数据窗口，并在循环中核对可用状态与停止条件。
                             for (var chunk :
                                     repositories.knowledgeChunk.query(
                                             QueryValue.all("id", 200)
                                                     .where("document_id", "EQ", doc.id())
                                                     .where("deleted_at", "NULL", null))) {
                                 var old = chunk.entity();
-                                var gone =
-                                        new KnowledgeChunkEntity(
-                                                old.id(),
-                                                old.publicId(),
-                                                old.userId(),
-                                                old.documentId(),
-                                                old.indexGeneration(),
-                                                old.chunkNo(),
-                                                "",
-                                                old.contentSha256(),
-                                                old.estimatedTokens(),
-                                                old.vectorKey(),
-                                                "DELETED",
-                                                now(),
-                                                old.createdAt(),
-                                                old.updatedAt(),
-                                                old.version());
+                                var gone = new KnowledgeChunkAggregate(old).deleted(now()).entity();
                                 Transactions.require(
                                         writes.saveKnowledgeChunk(
                                                 new KnowledgeChunkAggregate(gone)));
                             }
+                            // 4. 同事务记录用户提交序号与同步事件，推送不能代替持久化。
                             events.append(
                                     account,
                                     "knowledge.cleaned",
@@ -479,6 +323,7 @@ public final class KnowledgeIndexer {
                                     current.version() + 1,
                                     null,
                                     "{}");
+                            // 5. 提供本事务或回调的处理结果，完成责任由所属外层流程承接。
                             return null;
                         });
             } else {
@@ -499,14 +344,19 @@ public final class KnowledgeIndexer {
     }
 
     private void sweepOrphans() {
+        // 1. 取得本段结果并准备本层转换，随后显式核对成功状态。
         var result = files.store(new FileCommand("SCAN", null, null, fileCursor.get()));
+        // 2. 依据下层标准结果的成功状态处理分支，避免继续使用无效数据。
         if (!result.success()) {
             return;
         }
+        // 3. 取得本次外部数据返回的候选条目，供本段后续处理使用。
         var entries = Json.read(result.data().text());
+        // 4. 没有私有文件时复位扫描游标，下次从首个文件重新检查。
         if (entries.isEmpty()) {
             fileCursor.set("");
         }
+        // 5. 逐项处理当前数据窗口，并在循环中核对可用状态与停止条件。
         for (var entry : entries) {
             String key = entry.path("key").asText();
             fileCursor.set(key);
@@ -523,6 +373,7 @@ public final class KnowledgeIndexer {
     }
 
     private static void require(boolean success) {
+        // 1. 索引下层失败必须中止当前任务，不以正常状态提交半成品。
         if (!success) {
             throw new DomainException(DomainErrorCode.UNAVAILABLE);
         }
@@ -530,5 +381,144 @@ public final class KnowledgeIndexer {
 
     private static LocalDateTime now() {
         return LocalDateTime.now(ZoneOffset.UTC);
+    }
+
+    private IndexJobEntity claim(Long jobId) {
+        // 1. 按可信内部标识读取索引任务当前快照。
+        IndexJobEntity job =
+                transactions.plain(
+                        () -> {
+                            // 1. 按可信内部标识读取索引任务当前快照。
+                            var stored = repositories.indexJob.findById(jobId);
+                            // 2. 只领取仍为PENDING的持久化任务，重复执行者不能同时占用租约。
+                            if (stored == null || !"PENDING".equals(stored.entity().status())) {
+                                return null;
+                            }
+                            // 3. 保留当前来源或状态快照，后续核对并发变更与重复执行。
+                            var old = stored.entity();
+                            var next = new IndexJobAggregate(old).claim(Ids.next(), now()).entity();
+                            // 4. 持久化当前完整聚合，失败必须中断事务而非继续提交。
+                            Transactions.require(writes.saveIndexJob(new IndexJobAggregate(next)));
+                            // 5. 提供本事务或回调的处理结果，完成责任由所属外层流程承接。
+                            return repositories.indexJob.findById(jobId).entity();
+                        });
+        // 2. 返回本段实际处理结果，保持本层输出契约。
+        return job;
+    }
+
+    private void deleteArtifacts(IndexJobEntity job, KnowledgeDocumentEntity document) {
+        // 1. 按可信内部标识读取账号当前快照。
+        String owner = repositories.userAccount.findById(job.userId()).entity().publicId();
+        // 2. 执行require职责步骤，并把失败交给所属事务或入口处理。
+        require(
+                vectors.index(
+                                new VectorCommand(
+                                        "DELETE",
+                                        owner,
+                                        document.publicId(),
+                                        document.indexGeneration(),
+                                        List.of(),
+                                        null))
+                        .success());
+        // 3. 执行require职责步骤，并把失败交给所属事务或入口处理。
+        require(
+                files.store(new FileCommand("DELETE", null, null, document.storageKey()))
+                        .success());
+        // 4. 以当前租约栅栏完成任务并记录稳定终态。
+        finish(job, true, null);
+        // 5. 返回本段实际处理结果，保持本层输出契约。
+        return;
+    }
+
+    private void indexBatch(
+            IndexJobEntity job,
+            KnowledgeDocumentEntity document,
+            String owner,
+            List<String> pieces,
+            int offset) {
+        // 1. 重新核对任务代次、租约与删除状态，阻止旧执行者写回。
+        current(job);
+        // 2. 截取当前有界批次，外部调用保持在数据库事务之外。
+        List<String> batch = pieces.subList(offset, Math.min(pieces.size(), offset + 16));
+        var embedded = model.generate(new ModelCommand("EMBED", null, List.of(), batch, null));
+        // 3. 执行require职责步骤，并把失败交给所属事务或入口处理。
+        require(embedded.success());
+        // 4. 核对嵌入结果数量与输入批次一致，缺失结果不得继续写索引。
+        if (embedded.data().vectors() == null || embedded.data().vectors().size() != batch.size()) {
+            throw new DomainException(DomainErrorCode.FAILED);
+        }
+        // 5. 准备当前批次的向量条目，SQL正文与向量键保持一致。
+        List<VectorItemCommand> items = new java.util.ArrayList<>();
+        // 6. 逐项处理当前数据窗口，并在循环中核对可用状态与停止条件。
+        for (int i = 0; i < batch.size(); i++) {
+            int number = offset + i;
+            String body = batch.get(i);
+            byte[] hash = Ids.hash(body);
+            var chunk =
+                    transactions.plain(
+                            () -> {
+                                // 1. 重新核对任务代次、租约与删除状态，阻止旧执行者写回。
+                                current(job);
+                                // 2. 通过领域聚合语义准备业务快照，固定状态由实体封装。
+                                var entity =
+                                        KnowledgeChunkAggregate.pending(
+                                                        job,
+                                                        number,
+                                                        body,
+                                                        hash,
+                                                        ContextBudgetValue.estimate(body),
+                                                        now())
+                                                .entity();
+                                // 3. 持久化当前完整聚合，失败必须中断事务而非继续提交。
+                                Transactions.require(
+                                        writes.saveKnowledgeChunk(
+                                                new KnowledgeChunkAggregate(entity)));
+                                // 4. 提供本事务或回调的处理结果，完成责任由所属外层流程承接。
+                                return entity;
+                            });
+            items.add(
+                    new VectorItemCommand(
+                            chunk.vectorKey(),
+                            document.publicId(),
+                            job.indexGeneration(),
+                            number,
+                            java.util.HexFormat.of().formatHex(hash),
+                            embedded.data().vectors().get(i)));
+        }
+        // 7. 重新核对任务代次、租约与删除状态，阻止旧执行者写回。
+        current(job);
+        // 8. 执行require职责步骤，并把失败交给所属事务或入口处理。
+        require(
+                vectors.index(
+                                new VectorCommand(
+                                        "UPSERT",
+                                        owner,
+                                        document.publicId(),
+                                        job.indexGeneration(),
+                                        items,
+                                        null))
+                        .success());
+        // 9. 进入受控事务处理，结果与回滚责任保持清晰。
+        transactions.plain(
+                () -> {
+                    // 1. 重新核对任务代次、租约与删除状态，阻止旧执行者写回。
+                    current(job);
+                    // 2. 逐项处理当前数据窗口，并在循环中核对可用状态与停止条件。
+                    for (var item : items) {
+                        var old =
+                                repositories
+                                        .knowledgeChunk
+                                        .query(
+                                                QueryValue.all("id", 1)
+                                                        .where("vector_key", "EQ", item.key()))
+                                        .get(0)
+                                        .entity();
+                        var ready = new KnowledgeChunkAggregate(old).ready().entity();
+                        Transactions.require(
+                                writes.saveKnowledgeChunk(new KnowledgeChunkAggregate(ready)));
+                    }
+                    // 3. 提供本事务或回调的处理结果，完成责任由所属外层流程承接。
+                    return null;
+                });
     }
 }

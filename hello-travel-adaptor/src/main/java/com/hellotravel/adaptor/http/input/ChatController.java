@@ -2,6 +2,7 @@ package com.hellotravel.adaptor.http.input;
 
 import com.hellotravel.adaptor.http.support.ApiViews;
 import com.hellotravel.adaptor.http.support.HttpIdentity;
+import com.hellotravel.adaptor.http.support.HttpResults;
 import com.hellotravel.application.chat.command.ChatCommand;
 import com.hellotravel.application.chat.service.ChatApplication;
 import com.hellotravel.client.chat.request.ChatRequest;
@@ -52,6 +53,7 @@ public final class ChatController {
             @Valid @RequestBody ChatRequest chatRequest,
             HttpServletRequest httpServletRequest) {
         try {
+            // 1. 取得候选任务快照，领取时再次核验，供本段后续处理使用。
             String selected =
                     switch (action) {
                         case "bootstrap" -> "BOOTSTRAP";
@@ -85,9 +87,10 @@ public final class ChatController {
                                     chatRequest.maxSeq(),
                                     chatRequest.historyEpoch(),
                                     chatRequest.limit() == null ? 100 : chatRequest.limit()));
+            // 2. 返回本段实际处理结果，保持本层输出契约。
             return views.respond(result, ChatResponse.class);
         } catch (Exception exception) {
-            return com.hellotravel.adaptor.http.support.HttpResults.capture(exception);
+            return HttpResults.capture(exception);
         }
     }
 }

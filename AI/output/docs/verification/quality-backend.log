@@ -1,0 +1,396 @@
+[INFO] Scanning for projects...
+[INFO] ------------------------------------------------------------------------
+[INFO] Reactor Build Order:
+[INFO] 
+[INFO] hello-travel                                                       [pom]
+[INFO] hello-travel-common                                                [jar]
+[INFO] hello-travel-client                                                [jar]
+[INFO] hello-travel-model                                                 [jar]
+[INFO] hello-travel-domain                                                [jar]
+[INFO] hello-travel-application                                           [jar]
+[INFO] hello-travel-infrastructure                                        [jar]
+[INFO] hello-travel-adaptor                                               [jar]
+[INFO] hello-travel-start                                                 [jar]
+[INFO] 
+[INFO] --------------------< com.hellotravel:hello-travel >--------------------
+[INFO] Building hello-travel 0.0.1-SNAPSHOT                               [1/9]
+[INFO]   from pom.xml
+[INFO] --------------------------------[ pom ]---------------------------------
+[INFO] 
+[INFO] --- exec:3.6.3:exec (java-business-quality) @ hello-travel ---
+Java business quality: classes=248, methods=652, flow_blocks=345, violations=0
+[INFO] 
+[INFO] --- checkstyle:3.6.0:check (java-ddd-conventions) @ hello-travel ---
+[INFO] Starting audit...
+Audit done.
+[INFO] You have 0 Checkstyle violations.
+[INFO] 
+[INFO] --- flatten:1.8.0:flatten (flatten) @ hello-travel ---
+[INFO] Generating flattened POM of project com.hellotravel:hello-travel:pom:0.0.1-SNAPSHOT...
+[INFO] 
+[INFO] --- install:3.1.4:install (default-install) @ hello-travel ---
+[INFO] Installing /Users/monkey/Documents/kit/workspace/hello-travel/.flattened-pom.xml to /Users/monkey/.m2/repository/com/hellotravel/hello-travel/0.0.1-SNAPSHOT/hello-travel-0.0.1-SNAPSHOT.pom
+[INFO] 
+[INFO] ----------------< com.hellotravel:hello-travel-common >-----------------
+[INFO] Building hello-travel-common 0.0.1-SNAPSHOT                        [2/9]
+[INFO]   from hello-travel-common/pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- checkstyle:3.6.0:check (java-ddd-conventions) @ hello-travel-common ---
+[INFO] Starting audit...
+Audit done.
+[INFO] You have 0 Checkstyle violations.
+[INFO] 
+[INFO] --- resources:3.3.1:resources (default-resources) @ hello-travel-common ---
+[INFO] skip non existing resourceDirectory /Users/monkey/Documents/kit/workspace/hello-travel/hello-travel-common/src/main/resources
+[INFO] skip non existing resourceDirectory /Users/monkey/Documents/kit/workspace/hello-travel/hello-travel-common/src/main/resources
+[INFO] 
+[INFO] --- flatten:1.8.0:flatten (flatten) @ hello-travel-common ---
+[INFO] Generating flattened POM of project com.hellotravel:hello-travel-common:jar:0.0.1-SNAPSHOT...
+[INFO] 
+[INFO] --- compiler:3.13.0:compile (default-compile) @ hello-travel-common ---
+[INFO] Recompiling the module because of changed source code.
+[INFO] Compiling 5 source files with javac [debug parameters release 17] to target/classes
+[INFO] 
+[INFO] --- resources:3.3.1:testResources (default-testResources) @ hello-travel-common ---
+[INFO] skip non existing resourceDirectory /Users/monkey/Documents/kit/workspace/hello-travel/hello-travel-common/src/test/resources
+[INFO] 
+[INFO] --- compiler:3.13.0:testCompile (default-testCompile) @ hello-travel-common ---
+[INFO] No sources to compile
+[INFO] 
+[INFO] --- surefire:3.2.5:test (default-test) @ hello-travel-common ---
+[INFO] No tests to run.
+[INFO] 
+[INFO] --- jar:3.4.2:jar (default-jar) @ hello-travel-common ---
+[INFO] Building jar: /Users/monkey/Documents/kit/workspace/hello-travel/hello-travel-common/target/hello-travel-common-0.0.1-SNAPSHOT.jar
+[INFO] 
+[INFO] --- install:3.1.4:install (default-install) @ hello-travel-common ---
+[INFO] Installing /Users/monkey/Documents/kit/workspace/hello-travel/hello-travel-common/.flattened-pom.xml to /Users/monkey/.m2/repository/com/hellotravel/hello-travel-common/0.0.1-SNAPSHOT/hello-travel-common-0.0.1-SNAPSHOT.pom
+[INFO] Installing /Users/monkey/Documents/kit/workspace/hello-travel/hello-travel-common/target/hello-travel-common-0.0.1-SNAPSHOT.jar to /Users/monkey/.m2/repository/com/hellotravel/hello-travel-common/0.0.1-SNAPSHOT/hello-travel-common-0.0.1-SNAPSHOT.jar
+[INFO] 
+[INFO] ----------------< com.hellotravel:hello-travel-client >-----------------
+[INFO] Building hello-travel-client 0.0.1-SNAPSHOT                        [3/9]
+[INFO]   from hello-travel-client/pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- checkstyle:3.6.0:check (java-ddd-conventions) @ hello-travel-client ---
+[INFO] Starting audit...
+Audit done.
+[INFO] You have 0 Checkstyle violations.
+[INFO] 
+[INFO] --- resources:3.3.1:resources (default-resources) @ hello-travel-client ---
+[INFO] skip non existing resourceDirectory /Users/monkey/Documents/kit/workspace/hello-travel/hello-travel-client/src/main/resources
+[INFO] skip non existing resourceDirectory /Users/monkey/Documents/kit/workspace/hello-travel/hello-travel-client/src/main/resources
+[INFO] 
+[INFO] --- flatten:1.8.0:flatten (flatten) @ hello-travel-client ---
+[INFO] Generating flattened POM of project com.hellotravel:hello-travel-client:jar:0.0.1-SNAPSHOT...
+[INFO] 
+[INFO] --- compiler:3.13.0:compile (default-compile) @ hello-travel-client ---
+[INFO] Recompiling the module because of changed dependency.
+[INFO] Compiling 12 source files with javac [debug parameters release 17] to target/classes
+[INFO] 
+[INFO] --- resources:3.3.1:testResources (default-testResources) @ hello-travel-client ---
+[INFO] skip non existing resourceDirectory /Users/monkey/Documents/kit/workspace/hello-travel/hello-travel-client/src/test/resources
+[INFO] 
+[INFO] --- compiler:3.13.0:testCompile (default-testCompile) @ hello-travel-client ---
+[INFO] No sources to compile
+[INFO] 
+[INFO] --- surefire:3.2.5:test (default-test) @ hello-travel-client ---
+[INFO] No tests to run.
+[INFO] 
+[INFO] --- jar:3.4.2:jar (default-jar) @ hello-travel-client ---
+[INFO] Building jar: /Users/monkey/Documents/kit/workspace/hello-travel/hello-travel-client/target/hello-travel-client-0.0.1-SNAPSHOT.jar
+[INFO] 
+[INFO] --- install:3.1.4:install (default-install) @ hello-travel-client ---
+[INFO] Installing /Users/monkey/Documents/kit/workspace/hello-travel/hello-travel-client/.flattened-pom.xml to /Users/monkey/.m2/repository/com/hellotravel/hello-travel-client/0.0.1-SNAPSHOT/hello-travel-client-0.0.1-SNAPSHOT.pom
+[INFO] Installing /Users/monkey/Documents/kit/workspace/hello-travel/hello-travel-client/target/hello-travel-client-0.0.1-SNAPSHOT.jar to /Users/monkey/.m2/repository/com/hellotravel/hello-travel-client/0.0.1-SNAPSHOT/hello-travel-client-0.0.1-SNAPSHOT.jar
+[INFO] 
+[INFO] -----------------< com.hellotravel:hello-travel-model >-----------------
+[INFO] Building hello-travel-model 0.0.1-SNAPSHOT                         [4/9]
+[INFO]   from hello-travel-model/pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- checkstyle:3.6.0:check (java-ddd-conventions) @ hello-travel-model ---
+[INFO] Starting audit...
+Audit done.
+[INFO] You have 0 Checkstyle violations.
+[INFO] 
+[INFO] --- resources:3.3.1:resources (default-resources) @ hello-travel-model ---
+[INFO] skip non existing resourceDirectory /Users/monkey/Documents/kit/workspace/hello-travel/hello-travel-model/src/main/resources
+[INFO] skip non existing resourceDirectory /Users/monkey/Documents/kit/workspace/hello-travel/hello-travel-model/src/main/resources
+[INFO] 
+[INFO] --- flatten:1.8.0:flatten (flatten) @ hello-travel-model ---
+[INFO] Generating flattened POM of project com.hellotravel:hello-travel-model:jar:0.0.1-SNAPSHOT...
+[INFO] 
+[INFO] --- compiler:3.13.0:compile (default-compile) @ hello-travel-model ---
+[INFO] Recompiling the module because of changed source code.
+[INFO] Compiling 8 source files with javac [debug parameters release 17] to target/classes
+[INFO] 
+[INFO] --- resources:3.3.1:testResources (default-testResources) @ hello-travel-model ---
+[INFO] skip non existing resourceDirectory /Users/monkey/Documents/kit/workspace/hello-travel/hello-travel-model/src/test/resources
+[INFO] 
+[INFO] --- compiler:3.13.0:testCompile (default-testCompile) @ hello-travel-model ---
+[INFO] No sources to compile
+[INFO] 
+[INFO] --- surefire:3.2.5:test (default-test) @ hello-travel-model ---
+[INFO] No tests to run.
+[INFO] 
+[INFO] --- jar:3.4.2:jar (default-jar) @ hello-travel-model ---
+[INFO] Building jar: /Users/monkey/Documents/kit/workspace/hello-travel/hello-travel-model/target/hello-travel-model-0.0.1-SNAPSHOT.jar
+[INFO] 
+[INFO] --- install:3.1.4:install (default-install) @ hello-travel-model ---
+[INFO] Installing /Users/monkey/Documents/kit/workspace/hello-travel/hello-travel-model/.flattened-pom.xml to /Users/monkey/.m2/repository/com/hellotravel/hello-travel-model/0.0.1-SNAPSHOT/hello-travel-model-0.0.1-SNAPSHOT.pom
+[INFO] Installing /Users/monkey/Documents/kit/workspace/hello-travel/hello-travel-model/target/hello-travel-model-0.0.1-SNAPSHOT.jar to /Users/monkey/.m2/repository/com/hellotravel/hello-travel-model/0.0.1-SNAPSHOT/hello-travel-model-0.0.1-SNAPSHOT.jar
+[INFO] 
+[INFO] ----------------< com.hellotravel:hello-travel-domain >-----------------
+[INFO] Building hello-travel-domain 0.0.1-SNAPSHOT                        [5/9]
+[INFO]   from hello-travel-domain/pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- checkstyle:3.6.0:check (java-ddd-conventions) @ hello-travel-domain ---
+[INFO] Starting audit...
+Audit done.
+[INFO] You have 0 Checkstyle violations.
+[INFO] 
+[INFO] --- resources:3.3.1:resources (default-resources) @ hello-travel-domain ---
+[INFO] skip non existing resourceDirectory /Users/monkey/Documents/kit/workspace/hello-travel/hello-travel-domain/src/main/resources
+[INFO] skip non existing resourceDirectory /Users/monkey/Documents/kit/workspace/hello-travel/hello-travel-domain/src/main/resources
+[INFO] 
+[INFO] --- flatten:1.8.0:flatten (flatten) @ hello-travel-domain ---
+[INFO] Generating flattened POM of project com.hellotravel:hello-travel-domain:jar:0.0.1-SNAPSHOT...
+[INFO] 
+[INFO] --- compiler:3.13.0:compile (default-compile) @ hello-travel-domain ---
+[INFO] Recompiling the module because of changed dependency.
+[INFO] Compiling 94 source files with javac [debug parameters release 17] to target/classes
+[INFO] 
+[INFO] --- resources:3.3.1:testResources (default-testResources) @ hello-travel-domain ---
+[INFO] skip non existing resourceDirectory /Users/monkey/Documents/kit/workspace/hello-travel/hello-travel-domain/src/test/resources
+[INFO] 
+[INFO] --- compiler:3.13.0:testCompile (default-testCompile) @ hello-travel-domain ---
+[INFO] No sources to compile
+[INFO] 
+[INFO] --- surefire:3.2.5:test (default-test) @ hello-travel-domain ---
+[INFO] No tests to run.
+[INFO] 
+[INFO] --- jar:3.4.2:jar (default-jar) @ hello-travel-domain ---
+[INFO] Building jar: /Users/monkey/Documents/kit/workspace/hello-travel/hello-travel-domain/target/hello-travel-domain-0.0.1-SNAPSHOT.jar
+[INFO] 
+[INFO] --- install:3.1.4:install (default-install) @ hello-travel-domain ---
+[INFO] Installing /Users/monkey/Documents/kit/workspace/hello-travel/hello-travel-domain/.flattened-pom.xml to /Users/monkey/.m2/repository/com/hellotravel/hello-travel-domain/0.0.1-SNAPSHOT/hello-travel-domain-0.0.1-SNAPSHOT.pom
+[INFO] Installing /Users/monkey/Documents/kit/workspace/hello-travel/hello-travel-domain/target/hello-travel-domain-0.0.1-SNAPSHOT.jar to /Users/monkey/.m2/repository/com/hellotravel/hello-travel-domain/0.0.1-SNAPSHOT/hello-travel-domain-0.0.1-SNAPSHOT.jar
+[INFO] 
+[INFO] --------------< com.hellotravel:hello-travel-application >--------------
+[INFO] Building hello-travel-application 0.0.1-SNAPSHOT                   [6/9]
+[INFO]   from hello-travel-application/pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- checkstyle:3.6.0:check (java-ddd-conventions) @ hello-travel-application ---
+[INFO] Starting audit...
+Audit done.
+[INFO] You have 0 Checkstyle violations.
+[INFO] 
+[INFO] --- resources:3.3.1:resources (default-resources) @ hello-travel-application ---
+[INFO] skip non existing resourceDirectory /Users/monkey/Documents/kit/workspace/hello-travel/hello-travel-application/src/main/resources
+[INFO] skip non existing resourceDirectory /Users/monkey/Documents/kit/workspace/hello-travel/hello-travel-application/src/main/resources
+[INFO] 
+[INFO] --- flatten:1.8.0:flatten (flatten) @ hello-travel-application ---
+[INFO] Generating flattened POM of project com.hellotravel:hello-travel-application:jar:0.0.1-SNAPSHOT...
+[INFO] 
+[INFO] --- compiler:3.13.0:compile (default-compile) @ hello-travel-application ---
+[INFO] Recompiling the module because of changed dependency.
+[INFO] Compiling 49 source files with javac [debug parameters release 17] to target/classes
+[INFO] 
+[INFO] --- resources:3.3.1:testResources (default-testResources) @ hello-travel-application ---
+[INFO] skip non existing resourceDirectory /Users/monkey/Documents/kit/workspace/hello-travel/hello-travel-application/src/test/resources
+[INFO] 
+[INFO] --- compiler:3.13.0:testCompile (default-testCompile) @ hello-travel-application ---
+[INFO] No sources to compile
+[INFO] 
+[INFO] --- surefire:3.2.5:test (default-test) @ hello-travel-application ---
+[INFO] No tests to run.
+[INFO] 
+[INFO] --- jar:3.4.2:jar (default-jar) @ hello-travel-application ---
+[INFO] Building jar: /Users/monkey/Documents/kit/workspace/hello-travel/hello-travel-application/target/hello-travel-application-0.0.1-SNAPSHOT.jar
+[INFO] 
+[INFO] --- install:3.1.4:install (default-install) @ hello-travel-application ---
+[INFO] Installing /Users/monkey/Documents/kit/workspace/hello-travel/hello-travel-application/.flattened-pom.xml to /Users/monkey/.m2/repository/com/hellotravel/hello-travel-application/0.0.1-SNAPSHOT/hello-travel-application-0.0.1-SNAPSHOT.pom
+[INFO] Installing /Users/monkey/Documents/kit/workspace/hello-travel/hello-travel-application/target/hello-travel-application-0.0.1-SNAPSHOT.jar to /Users/monkey/.m2/repository/com/hellotravel/hello-travel-application/0.0.1-SNAPSHOT/hello-travel-application-0.0.1-SNAPSHOT.jar
+[INFO] 
+[INFO] ------------< com.hellotravel:hello-travel-infrastructure >-------------
+[INFO] Building hello-travel-infrastructure 0.0.1-SNAPSHOT                [7/9]
+[INFO]   from hello-travel-infrastructure/pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- checkstyle:3.6.0:check (java-ddd-conventions) @ hello-travel-infrastructure ---
+[INFO] Starting audit...
+Audit done.
+[INFO] You have 0 Checkstyle violations.
+[INFO] 
+[INFO] --- resources:3.3.1:resources (default-resources) @ hello-travel-infrastructure ---
+[INFO] skip non existing resourceDirectory /Users/monkey/Documents/kit/workspace/hello-travel/hello-travel-infrastructure/src/main/resources
+[INFO] skip non existing resourceDirectory /Users/monkey/Documents/kit/workspace/hello-travel/hello-travel-infrastructure/src/main/resources
+[INFO] 
+[INFO] --- flatten:1.8.0:flatten (flatten) @ hello-travel-infrastructure ---
+[INFO] Generating flattened POM of project com.hellotravel:hello-travel-infrastructure:jar:0.0.1-SNAPSHOT...
+[INFO] 
+[INFO] --- compiler:3.13.0:compile (default-compile) @ hello-travel-infrastructure ---
+[INFO] Recompiling the module because of changed dependency.
+[INFO] Compiling 54 source files with javac [debug parameters release 17] to target/classes
+[INFO] 
+[INFO] --- resources:3.3.1:testResources (default-testResources) @ hello-travel-infrastructure ---
+[INFO] skip non existing resourceDirectory /Users/monkey/Documents/kit/workspace/hello-travel/hello-travel-infrastructure/src/test/resources
+[INFO] 
+[INFO] --- compiler:3.13.0:testCompile (default-testCompile) @ hello-travel-infrastructure ---
+[INFO] No sources to compile
+[INFO] 
+[INFO] --- surefire:3.2.5:test (default-test) @ hello-travel-infrastructure ---
+[INFO] No tests to run.
+[INFO] 
+[INFO] --- jar:3.4.2:jar (default-jar) @ hello-travel-infrastructure ---
+[INFO] Building jar: /Users/monkey/Documents/kit/workspace/hello-travel/hello-travel-infrastructure/target/hello-travel-infrastructure-0.0.1-SNAPSHOT.jar
+[INFO] 
+[INFO] --- install:3.1.4:install (default-install) @ hello-travel-infrastructure ---
+[INFO] Installing /Users/monkey/Documents/kit/workspace/hello-travel/hello-travel-infrastructure/.flattened-pom.xml to /Users/monkey/.m2/repository/com/hellotravel/hello-travel-infrastructure/0.0.1-SNAPSHOT/hello-travel-infrastructure-0.0.1-SNAPSHOT.pom
+[INFO] Installing /Users/monkey/Documents/kit/workspace/hello-travel/hello-travel-infrastructure/target/hello-travel-infrastructure-0.0.1-SNAPSHOT.jar to /Users/monkey/.m2/repository/com/hellotravel/hello-travel-infrastructure/0.0.1-SNAPSHOT/hello-travel-infrastructure-0.0.1-SNAPSHOT.jar
+[INFO] 
+[INFO] ----------------< com.hellotravel:hello-travel-adaptor >----------------
+[INFO] Building hello-travel-adaptor 0.0.1-SNAPSHOT                       [8/9]
+[INFO]   from hello-travel-adaptor/pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- checkstyle:3.6.0:check (java-ddd-conventions) @ hello-travel-adaptor ---
+[INFO] Starting audit...
+Audit done.
+[INFO] You have 0 Checkstyle violations.
+[INFO] 
+[INFO] --- resources:3.3.1:resources (default-resources) @ hello-travel-adaptor ---
+[INFO] skip non existing resourceDirectory /Users/monkey/Documents/kit/workspace/hello-travel/hello-travel-adaptor/src/main/resources
+[INFO] skip non existing resourceDirectory /Users/monkey/Documents/kit/workspace/hello-travel/hello-travel-adaptor/src/main/resources
+[INFO] 
+[INFO] --- flatten:1.8.0:flatten (flatten) @ hello-travel-adaptor ---
+[INFO] Generating flattened POM of project com.hellotravel:hello-travel-adaptor:jar:0.0.1-SNAPSHOT...
+[INFO] 
+[INFO] --- compiler:3.13.0:compile (default-compile) @ hello-travel-adaptor ---
+[INFO] Recompiling the module because of changed dependency.
+[INFO] Compiling 21 source files with javac [debug parameters release 17] to target/classes
+[INFO] /Users/monkey/Documents/kit/workspace/hello-travel/hello-travel-adaptor/src/main/java/com/hellotravel/adaptor/knowledge/output/VectorOutAdaptorImpl.java: /Users/monkey/Documents/kit/workspace/hello-travel/hello-travel-adaptor/src/main/java/com/hellotravel/adaptor/knowledge/output/VectorOutAdaptorImpl.java使用或覆盖了已过时的 API。
+[INFO] /Users/monkey/Documents/kit/workspace/hello-travel/hello-travel-adaptor/src/main/java/com/hellotravel/adaptor/knowledge/output/VectorOutAdaptorImpl.java: 有关详细信息, 请使用 -Xlint:deprecation 重新编译。
+[INFO] 
+[INFO] --- resources:3.3.1:testResources (default-testResources) @ hello-travel-adaptor ---
+[INFO] skip non existing resourceDirectory /Users/monkey/Documents/kit/workspace/hello-travel/hello-travel-adaptor/src/test/resources
+[INFO] 
+[INFO] --- compiler:3.13.0:testCompile (default-testCompile) @ hello-travel-adaptor ---
+[INFO] No sources to compile
+[INFO] 
+[INFO] --- surefire:3.2.5:test (default-test) @ hello-travel-adaptor ---
+[INFO] No tests to run.
+[INFO] 
+[INFO] --- jar:3.4.2:jar (default-jar) @ hello-travel-adaptor ---
+[INFO] Building jar: /Users/monkey/Documents/kit/workspace/hello-travel/hello-travel-adaptor/target/hello-travel-adaptor-0.0.1-SNAPSHOT.jar
+[INFO] 
+[INFO] --- install:3.1.4:install (default-install) @ hello-travel-adaptor ---
+[INFO] Installing /Users/monkey/Documents/kit/workspace/hello-travel/hello-travel-adaptor/.flattened-pom.xml to /Users/monkey/.m2/repository/com/hellotravel/hello-travel-adaptor/0.0.1-SNAPSHOT/hello-travel-adaptor-0.0.1-SNAPSHOT.pom
+[INFO] Installing /Users/monkey/Documents/kit/workspace/hello-travel/hello-travel-adaptor/target/hello-travel-adaptor-0.0.1-SNAPSHOT.jar to /Users/monkey/.m2/repository/com/hellotravel/hello-travel-adaptor/0.0.1-SNAPSHOT/hello-travel-adaptor-0.0.1-SNAPSHOT.jar
+[INFO] 
+[INFO] -----------------< com.hellotravel:hello-travel-start >-----------------
+[INFO] Building hello-travel-start 0.0.1-SNAPSHOT                         [9/9]
+[INFO]   from hello-travel-start/pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- checkstyle:3.6.0:check (java-ddd-conventions) @ hello-travel-start ---
+[INFO] Starting audit...
+Audit done.
+[INFO] You have 0 Checkstyle violations.
+[INFO] 
+[INFO] --- resources:3.3.1:resources (default-resources) @ hello-travel-start ---
+[INFO] Copying 2 resources from src/main/resources to target/classes
+[INFO] Copying 1 resource from src/main/resources to target/classes
+[INFO] 
+[INFO] --- flatten:1.8.0:flatten (flatten) @ hello-travel-start ---
+[INFO] Generating flattened POM of project com.hellotravel:hello-travel-start:jar:0.0.1-SNAPSHOT...
+[INFO] 
+[INFO] --- compiler:3.13.0:compile (default-compile) @ hello-travel-start ---
+[INFO] Recompiling the module because of changed dependency.
+[INFO] Compiling 5 source files with javac [debug parameters release 17] to target/classes
+[INFO] 
+[INFO] --- resources:3.3.1:testResources (default-testResources) @ hello-travel-start ---
+[INFO] skip non existing resourceDirectory /Users/monkey/Documents/kit/workspace/hello-travel/hello-travel-start/src/test/resources
+[INFO] 
+[INFO] --- compiler:3.13.0:testCompile (default-testCompile) @ hello-travel-start ---
+[INFO] Recompiling the module because of changed dependency.
+[INFO] Compiling 5 source files with javac [debug parameters release 17] to target/test-classes
+[INFO] 
+[INFO] --- surefire:3.2.5:test (default-test) @ hello-travel-start ---
+[INFO] Using auto detected provider org.apache.maven.surefire.junitplatform.JUnitPlatformProvider
+[INFO] 
+[INFO] -------------------------------------------------------
+[INFO]  T E S T S
+[INFO] -------------------------------------------------------
+[INFO] Running com.hellotravel.start.OfflineAssemblyTest
+11:11:45.153 [main] INFO org.springframework.test.context.support.AnnotationConfigContextLoaderUtils -- Could not detect default configuration classes for test class [com.hellotravel.start.OfflineAssemblyTest]: OfflineAssemblyTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+11:11:45.260 [main] INFO org.springframework.boot.test.context.SpringBootTestContextBootstrapper -- Found @SpringBootConfiguration com.hellotravel.start.Application for test class com.hellotravel.start.OfflineAssemblyTest
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::               (v3.5.16)
+
+2026-09-18T11:11:45.591+08:00  INFO 90952 --- [hello-travel] [           main] c.hellotravel.start.OfflineAssemblyTest  : Starting OfflineAssemblyTest using Java 17.0.19 with PID 90952 (started by monkey in /Users/monkey/Documents/kit/workspace/hello-travel/hello-travel-start)
+2026-09-18T11:11:45.592+08:00  INFO 90952 --- [hello-travel] [           main] c.hellotravel.start.OfflineAssemblyTest  : No active profile set, falling back to 1 default profile: "default"
+2026-09-18T11:11:46.288+08:00  INFO 90952 --- [hello-travel] [           main] .s.d.r.c.RepositoryConfigurationDelegate : Multiple Spring Data modules found, entering strict repository configuration mode
+2026-09-18T11:11:46.290+08:00  INFO 90952 --- [hello-travel] [           main] .s.d.r.c.RepositoryConfigurationDelegate : Bootstrapping Spring Data Redis repositories in DEFAULT mode.
+2026-09-18T11:11:46.310+08:00  INFO 90952 --- [hello-travel] [           main] .s.d.r.c.RepositoryConfigurationDelegate : Finished Spring Data repository scanning in 8 ms. Found 0 Redis repository interfaces.
+ _ _   |_  _ _|_. ___ _ |    _ 
+| | |\/|_)(_| | |_\  |_)||_|_\ 
+     /               |         
+                        null 
+2026-09-18T11:11:48.674+08:00  INFO 90952 --- [hello-travel] [           main] b.m.s.MybatisPlusApplicationContextAware : Register ApplicationContext instances org.springframework.context.annotation.AnnotationConfigApplicationContext@187eb9a8
+2026-09-18T11:11:48.908+08:00  INFO 90952 --- [hello-travel] [           main] c.hellotravel.start.OfflineAssemblyTest  : Started OfflineAssemblyTest in 3.553 seconds (process running for 4.265)
+Java HotSpot(TM) 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 4.326 s -- in com.hellotravel.start.OfflineAssemblyTest
+[INFO] Running com.hellotravel.start.DomainModelQualityTest
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.022 s -- in com.hellotravel.start.DomainModelQualityTest
+[INFO] Running com.hellotravel.start.BoundaryFailureTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.738 s -- in com.hellotravel.start.BoundaryFailureTest
+[INFO] Running com.hellotravel.start.PageSessionIsolationTest
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.118 s -- in com.hellotravel.start.PageSessionIsolationTest
+[INFO] Running com.hellotravel.start.DomainInvariantsTest
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.011 s -- in com.hellotravel.start.DomainInvariantsTest
+[INFO] 
+[INFO] Results:
+[INFO] 
+[INFO] Tests run: 16, Failures: 0, Errors: 0, Skipped: 0
+[INFO] 
+[INFO] 
+[INFO] --- jar:3.4.2:jar (default-jar) @ hello-travel-start ---
+[INFO] Building jar: /Users/monkey/Documents/kit/workspace/hello-travel/hello-travel-start/target/hello-travel-start-0.0.1-SNAPSHOT.jar
+[INFO] 
+[INFO] --- spring-boot:3.5.16:repackage (repackage) @ hello-travel-start ---
+[INFO] Replacing main artifact /Users/monkey/Documents/kit/workspace/hello-travel/hello-travel-start/target/hello-travel-start-0.0.1-SNAPSHOT.jar with repackaged archive, adding nested dependencies in BOOT-INF/.
+[INFO] The original artifact has been renamed to /Users/monkey/Documents/kit/workspace/hello-travel/hello-travel-start/target/hello-travel-start-0.0.1-SNAPSHOT.jar.original
+[INFO] 
+[INFO] --- install:3.1.4:install (default-install) @ hello-travel-start ---
+[INFO] Installing /Users/monkey/Documents/kit/workspace/hello-travel/hello-travel-start/.flattened-pom.xml to /Users/monkey/.m2/repository/com/hellotravel/hello-travel-start/0.0.1-SNAPSHOT/hello-travel-start-0.0.1-SNAPSHOT.pom
+[INFO] Installing /Users/monkey/Documents/kit/workspace/hello-travel/hello-travel-start/target/hello-travel-start-0.0.1-SNAPSHOT.jar to /Users/monkey/.m2/repository/com/hellotravel/hello-travel-start/0.0.1-SNAPSHOT/hello-travel-start-0.0.1-SNAPSHOT.jar
+[INFO] ------------------------------------------------------------------------
+[INFO] Reactor Summary for hello-travel 0.0.1-SNAPSHOT:
+[INFO] 
+[INFO] hello-travel ....................................... SUCCESS [  4.050 s]
+[INFO] hello-travel-common ................................ SUCCESS [  1.927 s]
+[INFO] hello-travel-client ................................ SUCCESS [  0.587 s]
+[INFO] hello-travel-model ................................. SUCCESS [  0.607 s]
+[INFO] hello-travel-domain ................................ SUCCESS [  1.613 s]
+[INFO] hello-travel-application ........................... SUCCESS [  1.977 s]
+[INFO] hello-travel-infrastructure ........................ SUCCESS [  2.038 s]
+[INFO] hello-travel-adaptor ............................... SUCCESS [  1.016 s]
+[INFO] hello-travel-start ................................. SUCCESS [  7.159 s]
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD SUCCESS
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  21.297 s
+[INFO] Finished at: 2026-09-18T11:11:50+08:00
+[INFO] ------------------------------------------------------------------------

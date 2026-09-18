@@ -18,4 +18,4 @@ public record RunResult(
         String error,
         int attempt,
         String context) {
-        }
+}

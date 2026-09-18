@@ -47,3 +47,14 @@ npm run build
 ## 入口异常约束
 
 Controller、Application、DomainService、OutAdaptor主入口分别try-catch并返回安全失败；HTTP失败保留相应状态。应用捕获位于事务完成/回滚外侧，内部失败不能提交部分数据。默认Checkstyle检查完整try-catch、throws及catch重抛，具体语义与回归证据见[开发交付记录](<AI/output/05 开发交付记录.md>)。AI接口/数据说明与证据统一AI/output；正式Flyway迁移仍是start模块运行资源。
+
+## 当前业务代码质量约束（2026-09-18）
+
+Java规范1.8：业务方法含私有辅助、回调按真实职责写中文编号步骤，实体持有初始化/校验/变化规则、聚合提供语义协作；迭代前后检查完整链路，复用职责并清理失效或重复代码。根validate默认执行Checkstyle及scripts/JavaBusinessQuality.java，后者扫描编号、45语句节点阈值与有限领域结构，不能证明注释含义或完整面向对象。独立CR和生产适配仍按流程执行。
+
+```sh
+mvn validate
+java scripts/JavaBusinessQuality.java . --report AI/output/docs/verification/quality-method-inventory.csv
+```
+
+实际范围与证据见[当前开发交付记录](<AI/output/05 开发交付记录.md>)和AI/output/docs/verification/quality-summary.json；旧日志/哈希保留原日期。

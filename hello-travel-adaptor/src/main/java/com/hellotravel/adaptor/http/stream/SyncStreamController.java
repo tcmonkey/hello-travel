@@ -1,6 +1,7 @@
 package com.hellotravel.adaptor.http.stream;
 
 import com.hellotravel.adaptor.http.support.HttpIdentity;
+import com.hellotravel.adaptor.http.support.HttpResults;
 import com.hellotravel.application.auth.command.AuthCommand;
 import com.hellotravel.application.auth.service.AuthApplication;
 import com.hellotravel.application.sync.command.SyncCommand;
@@ -43,8 +44,11 @@ public final class SyncStreamController {
                     java.util.concurrent.TimeUnit.SECONDS,
                     new java.util.concurrent.ArrayBlockingQueue<>(100),
                     task -> {
+                        // 1. 为受限发送池建立独立线程，避免阻塞后台调度。
                         Thread thread = new Thread(task, "ht-sse");
+                        // 2. 标记为守护线程，进程退出不被空闲后台线程阻塞。
                         thread.setDaemon(true);
+                        // 3. 返回已配置线程，由有界执行器管理任务并发。
                         return thread;
                     },
                     new java.util.concurrent.ThreadPoolExecutor.AbortPolicy());
@@ -74,13 +78,16 @@ public final class SyncStreamController {
     @ResponseBody
     public synchronized SseEmitter subscribe(@RequestParam long after, HttpServletRequest request) {
         try {
+            // 1. 取得新账号的持久化快照，供本段后续处理使用。
             Long user = HttpIdentity.user(request);
+            // 2. 核对分页游标与快照上界，防止越界或无法推进的恢复。
             if (after < 0
                     || subscriptions.size() >= 100
                     || subscriptions.values().stream().filter(x -> x.user.equals(user)).count()
                             >= 4) {
                 throw new DomainException(DomainErrorCode.RATE_LIMITED);
             }
+            // 3. 生成本次业务的公开标识，内部数据库主键保持由仓储分配。
             String id = Ids.next();
             SseEmitter emitter = new SseEmitter(60000L);
             var subscription =
@@ -90,14 +97,21 @@ public final class SyncStreamController {
                             HttpIdentity.access(request),
                             after,
                             emitter);
+            // 4. 执行put职责步骤，并把失败交给所属事务或入口处理。
             subscriptions.put(id, subscription);
+            // 5. 执行onCompletion职责步骤，并把失败交给所属事务或入口处理。
             emitter.onCompletion(() -> subscriptions.remove(id));
+            // 6. 执行onTimeout职责步骤，并把失败交给所属事务或入口处理。
             emitter.onTimeout(
                     () -> {
+                        // 1. 持久化当前完整聚合，失败必须中断事务而非继续提交。
                         subscriptions.remove(id);
+                        // 2. 执行complete职责步骤，并把失败交给所属事务或入口处理。
                         emitter.complete();
                     });
+            // 7. 执行onError职责步骤，并把失败交给所属事务或入口处理。
             emitter.onError(error -> subscriptions.remove(id));
+            // 8. 返回本段实际处理结果，保持本层输出契约。
             return emitter;
         } catch (Exception exception) {
             return failedSubscription(exception);
@@ -111,6 +125,7 @@ public final class SyncStreamController {
      */
     @Scheduled(fixedDelay = 1000)
     public void poll() {
+        // 1. 按订阅逐个申请发送槽，异步拉取持久事件；忙碌或断开的订阅不重复调度。
         for (var entry : subscriptions.entrySet()) {
             var sub = entry.getValue();
             if (!sub.busy.compareAndSet(false, true)) {
@@ -128,7 +143,8 @@ public final class SyncStreamController {
 
     private void emit(String id, Subscription sub) {
         try {
-            com.hellotravel.adaptor.http.support.HttpResults.required(
+            // 1. 执行required职责步骤，并把失败交给所属事务或入口处理。
+            HttpResults.required(
                     auth.authenticate(
                             new AuthCommand(
                                     "CHECK",
@@ -143,14 +159,17 @@ public final class SyncStreamController {
                                     null,
                                     null,
                                     "stream")));
+            // 2. 取得本段结果并准备本层转换，随后显式核对成功状态。
             var result =
-                    com.hellotravel.adaptor.http.support.HttpResults.required(
+                    HttpResults.required(
                             sync.synchronize(new SyncCommand(sub.user, sub.after, 100)));
+            // 3. 逐项处理当前数据窗口，并在循环中核对可用状态与停止条件。
             for (var event : result.items()) {
                 sub.emitter.send(
                         SseEmitter.event().id(Long.toString(event.seq())).name("sync").data(event));
                 sub.after = event.seq();
             }
+            // 4. 无待发送事件时发送心跳，保持连接而不推进事件游标。
             if (result.items().isEmpty()) {
                 sub.emitter.send(SseEmitter.event().comment("keepalive"));
             }
@@ -242,14 +261,19 @@ public final class SyncStreamController {
     }
 
     private SseEmitter failedSubscription(Exception exception) {
-        var failure = com.hellotravel.adaptor.http.support.HttpResults.capture(exception);
+        // 1. 取得待分类的失败原因，供本段后续处理使用。
+        var failure = HttpResults.capture(exception);
         var emitter = new SseEmitter(1000L);
+        // 2. 在异常捕获或资源释放边界内完成本段处理，失败不得伪装为成功。
         try {
+            // 1. 执行send职责步骤，并把失败交给所属事务或入口处理。
             emitter.send(SseEmitter.event().name("error").data(failure));
+            // 2. 执行complete职责步骤，并把失败交给所属事务或入口处理。
             emitter.complete();
         } catch (Exception sendFailure) {
             emitter.complete();
         }
+        // 3. 返回本段实际处理结果，保持本层输出契约。
         return emitter;
     }
 }

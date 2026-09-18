@@ -55,10 +55,13 @@ public final class JsonBodyLimit extends RequestBodyAdviceAdapter {
             Type targetType,
             Class<? extends HttpMessageConverter<?>> converterType)
             throws IOException {
+        // 1. 取得当前请求或响应正文，供本段后续处理使用。
         byte[] body = inputMessage.getBody().readNBytes(32769);
+        // 2. 核对格式、长度或数量边界，失败中止当前处理。
         if (body.length > 32768) {
             throw new DomainException(DomainErrorCode.INVALID);
         }
+        // 3. 返回本段实际处理结果，保持本层输出契约。
         return new HttpInputMessage() {
 
             /**

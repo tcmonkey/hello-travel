@@ -23,9 +23,11 @@ public final class BoundedTextWriter extends java.io.Writer {
      * @param count 受控count参数
      */
     public void write(char[] value, int offset, int count) throws java.io.IOException {
+        // 1. 依据格式、长度或数量边界处理分支，避免继续使用无效数据。
         if (content.length() + count > 524288) {
             throw new java.io.IOException("extraction limit");
         }
+        // 2. 执行append职责步骤，并把失败交给所属事务或入口处理。
         content.append(value, offset, count);
     }
 
@@ -35,7 +37,7 @@ public final class BoundedTextWriter extends java.io.Writer {
      * @author AIGenerator
      */
     public void flush() {
-    }
+}
 
     /**
      * 释放写入契约，内存内容不访问外部资源。
@@ -43,7 +45,7 @@ public final class BoundedTextWriter extends java.io.Writer {
      * @author AIGenerator
      */
     public void close() {
-    }
+}
 
     /**
      * 返回已提取的有界明文。

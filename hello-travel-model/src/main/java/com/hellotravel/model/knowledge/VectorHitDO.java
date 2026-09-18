@@ -12,4 +12,4 @@ package com.hellotravel.model.knowledge;
  */
 public record VectorHitDO(
         String key, String documentId, long generation, String hash, float score) {
-        }
+}

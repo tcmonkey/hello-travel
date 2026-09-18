@@ -36,8 +36,11 @@ public class Application {
      */
     @Bean
     public MybatisPlusInterceptor mybatisPlusInterceptor() {
+        // 1. 取得请求认证拦截器，供本段后续处理使用。
         MybatisPlusInterceptor interceptor = new MybatisPlusInterceptor();
+        // 2. 执行addInnerInterceptor职责步骤，并把失败交给所属事务或入口处理。
         interceptor.addInnerInterceptor(new PaginationInnerInterceptor(DbType.MYSQL));
+        // 3. 返回本段实际处理结果，保持本层输出契约。
         return interceptor;
     }
 }

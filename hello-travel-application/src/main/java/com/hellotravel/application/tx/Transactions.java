@@ -1,5 +1,6 @@
 package com.hellotravel.application.tx;
 
+import com.hellotravel.application.persistence.DomainWrites;
 import com.hellotravel.application.persistence.TravelRepositories;
 import com.hellotravel.domain.auth.model.aggregate.UserAccountAggregate;
 import com.hellotravel.domain.auth.model.entity.UserAccountEntity;
@@ -26,10 +27,10 @@ public final class Transactions {
 
     private final TravelRepositories repositories;
 
-    private final com.hellotravel.application.persistence.DomainWrites writes;
+    private final DomainWrites writes;
 
     public Transactions(
-            com.hellotravel.application.persistence.DomainWrites writes,
+            DomainWrites writes,
             PlatformTransactionManager manager,
             TravelRepositories repositories) {
         this.manager = manager;
@@ -46,8 +47,11 @@ public final class Transactions {
      * @return 当前操作的业务结果
      */
     public <T> T plain(Supplier<T> operation) {
+        // 1. 取得已装配的事务模板，供本段后续处理使用。
         TransactionTemplate template = new TransactionTemplate(manager);
+        // 2. 映射本段快照字段，业务状态规则不放入PO赋值。
         template.setTimeout(10);
+        // 3. 返回本段实际处理结果，保持本层输出契约。
         return template.execute(status -> operation.get());
     }
 
@@ -60,11 +64,14 @@ public final class Transactions {
      * @return 当前操作的业务结果
      */
     public <T> T snapshot(Supplier<T> operation) {
+        // 1. 取得已装配的事务模板，供本段后续处理使用。
         TransactionTemplate template = new TransactionTemplate(manager);
+        // 2. 映射本段快照字段，业务状态规则不放入PO赋值。
         template.setReadOnly(true);
         template.setTimeout(5);
         template.setIsolationLevel(
                 org.springframework.transaction.TransactionDefinition.ISOLATION_REPEATABLE_READ);
+        // 3. 返回本段实际处理结果，保持本层输出契约。
         return template.execute(status -> operation.get());
     }
 
@@ -78,16 +85,25 @@ public final class Transactions {
      * @return 当前操作的业务结果
      */
     public <T> T mutate(Long userId, Function<UserAccountEntity, T> operation) {
+        // 1. 逐项处理当前数据窗口，并在循环中核对可用状态与停止条件。
         for (int attempt = 0; attempt < 3; attempt++) {
             try {
                 return plain(
                         () -> {
+                            // 1. 按可信内部标识读取账号当前快照。
                             UserAccountAggregate stored = repositories.userAccount.findById(userId);
+                            // 2. 账号不存在或不活动时拒绝进入写事务，防止停用后的请求继续提交。
                             if (stored == null || !"ACTIVE".equals(stored.entity().status())) {
                                 throw new DomainException(DomainErrorCode.UNAUTHORIZED);
                             }
-                            UserAccountEntity next = stored.entity().advanceSync();
+                            // 3. 通过领域聚合语义准备业务快照，固定状态由实体封装。
+                            UserAccountEntity next =
+                                    new UserAccountAggregate(stored.entity())
+                                            .advanceSync()
+                                            .entity();
+                            // 4. 持久化当前完整聚合，失败必须中断事务而非继续提交。
                             require(writes.saveUserAccount(new UserAccountAggregate(next)));
+                            // 5. 提供本事务或回调的处理结果，完成责任由所属外层流程承接。
                             return operation.apply(next);
                         });
             } catch (DomainException exception) {
@@ -100,6 +116,7 @@ public final class Transactions {
                 }
             }
         }
+        // 2. 以稳定异常中断当前内部处理，由所属入口转换安全失败。
         throw new DomainException(DomainErrorCode.CONFLICT);
     }
 
@@ -110,6 +127,7 @@ public final class Transactions {
      * @param saved 受控saved参数
      */
     public static void require(Boolean saved) {
+        // 1. 未实际写入视为并发冲突，抛给所属事务以回滚整组状态变更。
         if (!Boolean.TRUE.equals(saved)) {
             throw new DomainException(DomainErrorCode.CONFLICT);
         }

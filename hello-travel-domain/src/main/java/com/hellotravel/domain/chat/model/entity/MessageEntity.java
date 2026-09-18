@@ -1,5 +1,9 @@
 package com.hellotravel.domain.chat.model.entity;
 
+import com.hellotravel.common.identity.Ids;
+import com.hellotravel.domain.exception.DomainErrorCode;
+import com.hellotravel.domain.exception.DomainException;
+
 /**
  * 持久化归属与状态快照；变更须经过语义方法和版本检查。
  *
@@ -43,11 +47,13 @@ public record MessageEntity(
      * @return 当前操作的业务结果
      */
     public MessageEntity progress(String text, String nextStatus, String citations) {
+        // 1. 依据删除状态与当前记忆代次处理分支，避免继续使用无效数据。
         if (deletedAt != null
                 || text == null
                 || text.getBytes(java.nio.charset.StandardCharsets.UTF_8).length > 1048576) {
             throw new IllegalArgumentException("message");
         }
+        // 2. 更新未删除助手消息的正文、状态及已核验引用，返回不可变快照。
         return new MessageEntity(
                 this.id(),
                 this.publicId(),
@@ -71,6 +77,7 @@ public record MessageEntity(
      * @return 当前操作的业务结果
      */
     public MessageEntity erase() {
+        // 1. 清空消息正文与引用并记录删除时间，返回不可变快照。
         return new MessageEntity(
                 this.id(),
                 this.publicId(),
@@ -96,5 +103,99 @@ public record MessageEntity(
     @Override
     public String toString() {
         return "MessageEntity{redacted}";
+    }
+
+    /**
+     * 创建绑定会话归属与稳定序号的用户输入。
+     *
+     * @param conversation 已校验的会话
+     * @param text 用户原文
+     * @param time 当前UTC时间
+     * @return 新提交的用户消息
+     * @author AIGenerator
+     */
+    public static MessageEntity userInput(
+            ConversationEntity conversation, String text, java.time.LocalDateTime time) {
+        // 1. 生成本次业务的公开标识，内部数据库主键保持由仓储分配。
+        if (conversation.deletedAt() != null) {
+            throw new IllegalStateException("deleted conversation");
+        }
+        String publicId = Ids.next();
+        // 2. 创建绑定会话归属及本轮顺序的用户输入，返回不可变快照。
+        return new MessageEntity(
+                null,
+                publicId,
+                conversation.userId(),
+                conversation.id(),
+                conversation.lastMessageSeq() + 1,
+                "USER",
+                "COMPLETED",
+                text,
+                null,
+                null,
+                time,
+                time,
+                0L);
+    }
+
+    /**
+     * 为本轮助手回复预留稳定顺序，不复制用户正文。
+     *
+     * @param conversation 已校验的会话
+     * @param time 当前UTC时间
+     * @return 等待生成的助手消息
+     * @author AIGenerator
+     */
+    public static MessageEntity assistantPlaceholder(
+            ConversationEntity conversation, java.time.LocalDateTime time) {
+        // 1. 生成本次业务的公开标识，内部数据库主键保持由仓储分配。
+        if (conversation.deletedAt() != null) {
+            throw new IllegalStateException("deleted conversation");
+        }
+        String publicId = Ids.next();
+        // 2. 为本轮回复预留稳定序号与空正文，返回不可变快照。
+        return new MessageEntity(
+                null,
+                publicId,
+                conversation.userId(),
+                conversation.id(),
+                conversation.lastMessageSeq() + 2,
+                "ASSISTANT",
+                null,
+                "",
+                null,
+                null,
+                time,
+                time,
+                0L);
+    }
+
+    /**
+     * 核对快照更新的不变量，保持版本、归属与删除状态一致。
+     *
+     * @param prior 已持久化的实体快照
+     * @author AIGenerator
+     */
+    public void assertUpdateAgainst(MessageEntity prior) {
+        // 1. 核对数据库版本未发生并发变化，不满足时拒绝本次更新。
+        if (!prior.version().equals(this.version())) {
+            throw new DomainException(DomainErrorCode.CONFLICT);
+        }
+        // 2. 核对账号归属不变，不满足时拒绝本次更新。
+        if (!java.util.Objects.equals(prior.userId(), this.userId())) {
+            throw new DomainException(DomainErrorCode.INVALID);
+        }
+        // 3. 核对会话归属不变，不满足时拒绝本次更新。
+        if (!java.util.Objects.equals(prior.conversationId(), this.conversationId())) {
+            throw new DomainException(DomainErrorCode.INVALID);
+        }
+        // 4. 核对公开标识不被改写，不满足时拒绝本次更新。
+        if (!java.util.Objects.equals(prior.publicId(), this.publicId())) {
+            throw new DomainException(DomainErrorCode.INVALID);
+        }
+        // 5. 核对已删除快照不能恢复为未删除，不满足时拒绝本次更新。
+        if (prior.deletedAt() != null && this.deletedAt() == null) {
+            throw new DomainException(DomainErrorCode.CONFLICT);
+        }
     }
 }

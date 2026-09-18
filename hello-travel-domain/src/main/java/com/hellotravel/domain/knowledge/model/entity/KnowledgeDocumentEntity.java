@@ -1,5 +1,9 @@
 package com.hellotravel.domain.knowledge.model.entity;
 
+import com.hellotravel.common.identity.Ids;
+import com.hellotravel.domain.exception.DomainErrorCode;
+import com.hellotravel.domain.exception.DomainException;
+
 /**
  * 持久化归属与状态快照；变更须经过语义方法和版本检查。
  *
@@ -54,11 +58,12 @@ public record KnowledgeDocumentEntity(
         Long version) {
 
     /**
-     * 校验不可变值的边界并防御性复制输入集合。
+     * 防御性复制敏感字节字段，外部数组修改不能影响实体快照。
      *
      * @author AIGenerator
      */
     public KnowledgeDocumentEntity {
+        // 1. 复制输入摘要或加密载荷，外部数组修改不能改变实体快照。
         contentSha256 = contentSha256 == null ? null : contentSha256.clone();
     }
 
@@ -72,9 +77,11 @@ public record KnowledgeDocumentEntity(
      * @return 当前操作的业务结果
      */
     public KnowledgeDocumentEntity transition(String next, String text, String error) {
+        // 1. 依据删除状态与当前记忆代次处理分支，避免继续使用无效数据。
         if (deletedAt != null && !java.util.Set.of("DELETING", "DELETED").contains(next)) {
             throw new IllegalStateException("deleted document");
         }
+        // 2. 更新知识文档状态并保留当前代次及归属，返回不可变快照。
         return new KnowledgeDocumentEntity(
                 this.id(),
                 this.publicId(),
@@ -108,9 +115,11 @@ public record KnowledgeDocumentEntity(
      * @return 当前操作的业务结果
      */
     public KnowledgeDocumentEntity reindex() {
+        // 1. 依据删除状态与当前记忆代次处理分支，避免继续使用无效数据。
         if (!"FAILED".equals(status) || deletedAt != null) {
             throw new IllegalStateException("not retryable");
         }
+        // 2. 提高知识索引代次，旧向量不得继续参与检索，返回不可变快照。
         return new KnowledgeDocumentEntity(
                 this.id(),
                 this.publicId(),
@@ -144,6 +153,7 @@ public record KnowledgeDocumentEntity(
      * @return 当前操作的业务结果
      */
     public KnowledgeDocumentEntity erase() {
+        // 1. 清空消息正文与引用并记录删除时间，返回不可变快照。
         return new KnowledgeDocumentEntity(
                 this.id(),
                 this.publicId(),
@@ -188,6 +198,88 @@ public record KnowledgeDocumentEntity(
      * @return 当前操作的业务结果
      */
     public byte[] contentSha256() {
+        // 1. 交付摘要的独立副本，调用者修改返回数组不会改变实体快照。
         return contentSha256 == null ? null : contentSha256.clone();
+    }
+
+    /**
+     * 核对快照更新的不变量，保持版本、归属与删除状态一致。
+     *
+     * @param prior 已持久化的实体快照
+     * @author AIGenerator
+     */
+    public void assertUpdateAgainst(KnowledgeDocumentEntity prior) {
+        // 1. 核对数据库版本未发生并发变化，不满足时拒绝本次更新。
+        if (!prior.version().equals(this.version())) {
+            throw new DomainException(DomainErrorCode.CONFLICT);
+        }
+        // 2. 核对账号归属不变，不满足时拒绝本次更新。
+        if (!java.util.Objects.equals(prior.userId(), this.userId())) {
+            throw new DomainException(DomainErrorCode.INVALID);
+        }
+        // 3. 核对公开标识不被改写，不满足时拒绝本次更新。
+        if (!java.util.Objects.equals(prior.publicId(), this.publicId())) {
+            throw new DomainException(DomainErrorCode.INVALID);
+        }
+        // 4. 核对已删除快照不能恢复为未删除，不满足时拒绝本次更新。
+        if (prior.deletedAt() != null && this.deletedAt() == null) {
+            throw new DomainException(DomainErrorCode.CONFLICT);
+        }
+    }
+
+    /**
+     * 创建已解析的知识文档，索引就绪需后续任务确认，固定状态由实体封装。
+     *
+     * @param userId 账号归属
+     * @param title 对话标题，作为纯文本展示
+     * @param originalFilename 原文件名仅用于展示，不作磁盘路径
+     * @param mimeType 服务端检测的内容类型
+     * @param storageKey 服务端生成的相对存储键，禁止任意路径
+     * @param byteSize 原文件大小，应用配置上限
+     * @param contentSha256 原始文件SHA256校验及重复导入识别
+     * @param extractedText 提取的明文，页面分段加载；应用有提取上限
+     * @param sourceUrl 官方来源链接或用户提供的来源，仅作引用
+     * @param createdAt 创建时间
+     * @param updatedAt 当前变更时间
+     * @return 保持归属与版本的业务快照
+     * @author AIGenerator
+     */
+    public static KnowledgeDocumentEntity received(
+            Long userId,
+            String title,
+            String originalFilename,
+            String mimeType,
+            String storageKey,
+            Long byteSize,
+            byte[] contentSha256,
+            String extractedText,
+            String sourceUrl,
+            java.time.LocalDateTime createdAt,
+            java.time.LocalDateTime updatedAt) {
+        // 1. 创建已解析的知识文档，索引就绪需后续任务确认，返回不可变快照。
+        return new KnowledgeDocumentEntity(
+                null,
+                Ids.next(),
+                userId,
+                title,
+                originalFilename,
+                mimeType,
+                storageKey,
+                byteSize,
+                contentSha256,
+                extractedText,
+                sourceUrl,
+                null,
+                null,
+                "RECEIVED",
+                1L,
+                "text-embedding-v4",
+                1024,
+                "hello_travel_kb_v1_d1024",
+                null,
+                null,
+                createdAt,
+                updatedAt,
+                0L);
     }
 }

@@ -24,4 +24,4 @@ public record ChatResult(
         long historyEpoch,
         long syncSeq,
         String context) {
-        }
+}

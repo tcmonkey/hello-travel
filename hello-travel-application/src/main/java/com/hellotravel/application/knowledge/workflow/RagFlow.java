@@ -45,6 +45,7 @@ public final class RagFlow {
      */
     public List<Map<String, String>> retrieve(Long userId, String query) {
         // 没有就绪的私有资料时不调用收费嵌入接口。
+        // 1. 依据删除状态与当前记忆代次处理分支，避免继续使用无效数据。
         if (repositories
                 .knowledgeDocument
                 .query(
@@ -55,11 +56,14 @@ public final class RagFlow {
                 .isEmpty()) {
             return List.of();
         }
+        // 2. 取得本次请求的嵌入结果，供本段后续处理使用。
         var embedding =
                 model.generate(new ModelCommand("EMBED", null, List.of(), List.of(query), null));
+        // 3. 核对嵌入结果数量与输入批次一致，缺失结果不得继续写索引。
         if (!embedding.success() || embedding.data().vectors().isEmpty()) {
             throw new DomainException(DomainErrorCode.UNAVAILABLE);
         }
+        // 4. 按可信内部标识读取账号当前快照。
         String owner = repositories.userAccount.findById(userId).entity().publicId();
         var result =
                 vectors.index(
@@ -70,10 +74,13 @@ public final class RagFlow {
                                 0L,
                                 List.of(),
                                 embedding.data().vectors().get(0)));
+        // 5. 核对下层标准结果的成功状态，失败中止当前处理。
         if (!result.success()) {
             throw new DomainException(DomainErrorCode.UNAVAILABLE);
         }
+        // 6. 取得本次知识检索的候选集合，供本段后续处理使用。
         List<Map<String, String>> matches = new java.util.ArrayList<>();
+        // 7. 逐项处理当前数据窗口，并在循环中核对可用状态与停止条件。
         for (var hit : result.data().hits()) {
             if (!Float.isFinite(hit.score()) || hit.score() < 0.55F) {
                 continue;
@@ -121,6 +128,7 @@ public final class RagFlow {
                 break;
             }
         }
+        // 8. 返回本段实际处理结果，保持本层输出契约。
         return List.copyOf(matches);
     }
 }

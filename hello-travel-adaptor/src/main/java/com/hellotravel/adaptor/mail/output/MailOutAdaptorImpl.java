@@ -3,6 +3,7 @@ package com.hellotravel.adaptor.mail.output;
 import com.hellotravel.adaptor.exception.AdaptorErrorCode;
 import com.hellotravel.application.mail.adaptor.MailOutAdaptor;
 import com.hellotravel.application.mail.command.MailCommand;
+import com.hellotravel.common.error.Failures;
 import com.hellotravel.common.result.Result;
 import com.hellotravel.model.auth.MailDO;
 
@@ -34,17 +35,23 @@ public final class MailOutAdaptorImpl implements MailOutAdaptor {
      */
     public Result<MailDO> deliver(MailCommand mailCommand) {
         try {
+            // 1. SMTP配置不完整时明确返回未配置结果，避免伪报投递成功。
             if (environment.getProperty("SMTP_HOST") == null
                     || environment.getProperty("SMTP_FROM") == null) {
                 return Result.failure(AdaptorErrorCode.UNAVAILABLE);
             }
+            // 2. 在异常捕获或资源释放边界内完成本段处理，失败不得伪装为成功。
             try {
+                // 1. 取得配置的邮件发件地址，供本段后续处理使用。
                 var sender = new JavaMailSenderImpl();
+                // 2. 映射本段快照字段，业务状态规则不放入PO赋值。
                 sender.setHost(environment.getRequiredProperty("SMTP_HOST"));
                 sender.setPort(environment.getProperty("SMTP_PORT", Integer.class, 587));
                 sender.setUsername(environment.getProperty("SMTP_USERNAME"));
                 sender.setPassword(environment.getProperty("SMTP_PASSWORD"));
+                // 3. 取得本服务的运行配置，供本段后续处理使用。
                 var properties = sender.getJavaMailProperties();
+                // 4. 映射本段快照字段，业务状态规则不放入PO赋值。
                 properties.setProperty(
                         "mail.smtp.auth", Boolean.toString(sender.getUsername() != null));
                 properties.setProperty(
@@ -57,7 +64,9 @@ public final class MailOutAdaptorImpl implements MailOutAdaptor {
                 properties.setProperty("mail.smtp.timeout", "10000");
                 properties.setProperty("mail.smtp.writetimeout", "10000");
                 properties.setProperty("mail.debug", "false");
+                // 5. 取得本轮消息快照，供本段后续处理使用。
                 SimpleMailMessage message = new SimpleMailMessage();
+                // 6. 映射本段快照字段，业务状态规则不放入PO赋值。
                 message.setFrom(environment.getRequiredProperty("SMTP_FROM"));
                 message.setTo(mailCommand.email());
                 message.setSubject("Hello Travel 邮箱验证码");
@@ -66,14 +75,15 @@ public final class MailOutAdaptorImpl implements MailOutAdaptor {
                                 + mailCommand.code()
                                 + "，有效期5分钟。请勿向他人提供。如非本人操作，请忽略。\n请求编号："
                                 + mailCommand.challengeId());
+                // 7. 执行send职责步骤，并把失败交给所属事务或入口处理。
                 sender.send(message);
+                // 8. 将本层成功数据封装为标准结果，保持对外模型隔离。
                 return Result.success(new MailDO(true));
             } catch (Exception exception) {
                 return Result.failure(AdaptorErrorCode.UNAVAILABLE);
             }
         } catch (Exception exception) {
-            return com.hellotravel.common.error.Failures.capture(
-                    exception, com.hellotravel.adaptor.exception.AdaptorErrorCode.FAILED);
+            return Failures.capture(exception, AdaptorErrorCode.FAILED);
         }
     }
 }

@@ -24,4 +24,4 @@ public record AuthResult(
         String refreshToken,
         String csrf,
         String challengeId) {
-        }
+}

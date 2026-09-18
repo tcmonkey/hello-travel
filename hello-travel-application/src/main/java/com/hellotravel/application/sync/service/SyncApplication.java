@@ -1,6 +1,7 @@
 package com.hellotravel.application.sync.service;
 
 import com.hellotravel.application.persistence.TravelRepositories;
+import com.hellotravel.application.support.ApplicationFailures;
 import com.hellotravel.application.sync.command.SyncCommand;
 import com.hellotravel.application.sync.result.SyncEventResult;
 import com.hellotravel.application.sync.result.SyncResult;
@@ -36,15 +37,19 @@ public final class SyncApplication {
      */
     public Result<SyncResult> synchronize(SyncCommand syncCommand) {
         try {
+            // 1. 核对分页游标与快照上界，防止越界或无法推进的恢复。
             if (syncCommand.limit() < 1
                     || syncCommand.limit() > 200
                     || syncCommand.afterSeq() < 0) {
                 throw new DomainException(DomainErrorCode.INVALID);
             }
+            // 2. 按可信内部标识读取账号当前快照。
             long high = repositories.userAccount.findById(syncCommand.userId()).entity().syncSeq();
+            // 3. 核对分页游标与快照上界，防止越界或无法推进的恢复。
             if (syncCommand.afterSeq() > high) {
                 throw new DomainException(DomainErrorCode.SYNC_RESET_REQUIRED);
             }
+            // 4. 读取同步事件，限定当前用户及查询窗口。
             var rows =
                     repositories.syncEvent.query(
                             QueryValue.all("event_seq", syncCommand.limit())
@@ -55,11 +60,13 @@ public final class SyncApplication {
                                             "expires_at",
                                             "GT",
                                             java.time.LocalDateTime.now(java.time.ZoneOffset.UTC)));
+            // 5. 持久事件出现保留窗口缺口时要求客户端全量恢复，不能跳过丢失事件。
             if (high > syncCommand.afterSeq()
                     && (rows.isEmpty()
                             || rows.get(0).entity().eventSeq() != syncCommand.afterSeq() + 1)) {
                 throw new DomainException(DomainErrorCode.SYNC_RESET_REQUIRED);
             }
+            // 6. 取得本段结果并准备本层转换，随后显式核对成功状态。
             List<SyncEventResult> result =
                     rows.stream()
                             .map(
@@ -72,13 +79,14 @@ public final class SyncApplication {
                                                     x.entity().targetSessionPublicId(),
                                                     x.entity().payloadJson()))
                             .toList();
+            // 7. 将本层成功数据封装为标准结果，保持对外模型隔离。
             return Result.success(
                     new SyncResult(
                             result,
                             high,
                             !result.isEmpty() && result.get(result.size() - 1).seq() < high));
         } catch (Exception exception) {
-            return com.hellotravel.application.support.ApplicationFailures.capture(exception);
+            return ApplicationFailures.capture(exception);
         }
     }
 }

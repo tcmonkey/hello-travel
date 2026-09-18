@@ -9,6 +9,8 @@ import com.hellotravel.domain.query.model.value.QueryValue;
 import com.hellotravel.infrastructure.TravelBaseRepository;
 import com.hellotravel.infrastructure.auth.mysql.mapper.RefreshReceiptMapper;
 import com.hellotravel.infrastructure.auth.mysql.pojo.RefreshReceiptPO;
+import com.hellotravel.infrastructure.exception.InfrastructureErrorCode;
+import com.hellotravel.infrastructure.exception.InfrastructureException;
 
 import org.springframework.stereotype.Repository;
 
@@ -33,7 +35,9 @@ public class RefreshReceiptRepositoryImpl
      * @return 当前操作的业务结果
      */
     public RefreshReceiptAggregate findById(Long id) {
+        // 1. 转换完整聚合为本仓储PO，映射与状态决策分开。
         RefreshReceiptPO po = getById(id);
+        // 2. 显式处理不存在的记录，并恢复聚合快照。
         return po == null ? null : restore(po);
     }
 
@@ -45,6 +49,7 @@ public class RefreshReceiptRepositoryImpl
      * @return 当前操作的业务结果
      */
     public List<RefreshReceiptAggregate> query(QueryValue queryValue) {
+        // 1. 按字段白名单组装参数绑定条件，禁止任意列或拼接SQL。
         QueryWrapper<RefreshReceiptPO> wrapper =
                 conditions(
                         queryValue,
@@ -56,6 +61,7 @@ public class RefreshReceiptRepositoryImpl
                                 "created_at",
                                 "expires_at"));
         Page<RefreshReceiptPO> page = new Page<>(1, queryValue.limit(), false);
+        // 2. 读取有界PO集合并恢复完整聚合，不向上暴露ORM对象。
         return page(page, wrapper).getRecords().stream().map(this::restore).toList();
     }
 
@@ -68,24 +74,19 @@ public class RefreshReceiptRepositoryImpl
      */
     public Boolean save(RefreshReceiptAggregate aggregate) {
         try {
-            RefreshReceiptPO po = new RefreshReceiptPO();
-            po.setId(aggregate.entity().id());
-            po.setUserId(aggregate.entity().userId());
-            po.setSessionId(aggregate.entity().sessionId());
-            po.setTokenHash(aggregate.entity().tokenHash());
-            po.setCreatedAt(aggregate.entity().createdAt());
-            po.setExpiresAt(aggregate.entity().expiresAt());
+            // 1. 转换完整聚合为本仓储PO，映射与状态决策分开。
+            RefreshReceiptPO po = toPersistence(aggregate);
+            // 2. 区分新快照新增与已保存快照的版本CAS更新。
             if (po.getId() == null) {
                 return super.save(po);
             }
+            // 3. 按内部主键及原版本执行CAS更新，零匹配由上层处理为冲突。
             return super.update(po, new QueryWrapper<RefreshReceiptPO>().eq("id", po.getId()));
         } catch (org.springframework.dao.TransientDataAccessException
                 | org.springframework.dao.DataIntegrityViolationException exception) {
-            throw new com.hellotravel.infrastructure.exception.InfrastructureException(
-                    com.hellotravel.infrastructure.exception.InfrastructureErrorCode.CONFLICT);
+            throw new InfrastructureException(InfrastructureErrorCode.CONFLICT);
         } catch (org.springframework.dao.DataAccessResourceFailureException exception) {
-            throw new com.hellotravel.infrastructure.exception.InfrastructureException(
-                    com.hellotravel.infrastructure.exception.InfrastructureErrorCode.UNAVAILABLE);
+            throw new InfrastructureException(InfrastructureErrorCode.UNAVAILABLE);
         }
     }
 
@@ -109,5 +110,27 @@ public class RefreshReceiptRepositoryImpl
                         po.getTokenHash(),
                         po.getCreatedAt(),
                         po.getExpiresAt()));
+    }
+
+    private
+    /**
+     * 将完整聚合快照转换为本仓储PO，映射不参与业务状态决策。
+     *
+     * @param aggregate 待保存聚合
+     * @return 数据库存储快照
+     * @author AIGenerator
+     */
+    RefreshReceiptPO toPersistence(RefreshReceiptAggregate aggregate) {
+        // 1. 转换完整聚合为本仓储PO，映射与状态决策分开。
+        RefreshReceiptPO po = new RefreshReceiptPO();
+        // 2. 映射本段快照字段，业务状态规则不放入PO赋值。
+        po.setId(aggregate.entity().id());
+        po.setUserId(aggregate.entity().userId());
+        po.setSessionId(aggregate.entity().sessionId());
+        po.setTokenHash(aggregate.entity().tokenHash());
+        po.setCreatedAt(aggregate.entity().createdAt());
+        po.setExpiresAt(aggregate.entity().expiresAt());
+        // 3. 返回完整存储快照，由保存步骤决定新增或版本CAS更新。
+        return po;
     }
 }

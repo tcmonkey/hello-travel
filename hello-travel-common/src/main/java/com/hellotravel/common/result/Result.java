@@ -45,9 +45,11 @@ public record Result<T>(boolean success, String code, String message, T data) {
      * @return 当前操作的业务结果
      */
     public T require() {
+        // 1. 依据下层标准结果的成功状态处理分支，避免继续使用无效数据。
         if (!success) {
             throw new IllegalStateException(code);
         }
+        // 2. 返回本段实际处理结果，保持本层输出契约。
         return data;
     }
 }

@@ -13,4 +13,4 @@ package com.hellotravel.application.chat.result;
  */
 public record ConversationResult(
         String id, String title, long version, long historyEpoch, long lastSeq, String updatedAt) {
-        }
+}

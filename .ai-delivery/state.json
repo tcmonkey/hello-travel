@@ -7,7 +7,7 @@
   "delivery_mode": "full",
   "execution_goal": "auto",
   "interaction_mode": "guided",
-  "revision": 5,
+  "revision": 6,
   "current_phase": "development",
   "phases": {
     "intake": {
@@ -50,7 +50,7 @@
       "status": "complete",
       "required": true,
       "approved_at": null,
-      "note": "当前四层入口与工程目录整改完成；实际构建/回归及限制见AI/output/05和docs/verification/boundary-summary.json"
+      "note": "SRC-023全业务方法质量整改完成，规范1.8、652方法/构造器清单、345流程块、实体/聚合职责与长流程重构；16后端/2前端回归通过，终点05，完整自测与独立CR未开始"
     },
     "developer_self_test": {
       "status": "not_started",
@@ -135,13 +135,13 @@
   "last_actor": {
     "platform": "codex",
     "model": "unknown",
-    "updated_at": "2026-09-17T23:53:04+08:00"
+    "updated_at": "2026-09-18T11:17:49+08:00"
   },
   "handoff": {
-    "summary": "SRC-021/022三项工程边界整改完成：50主入口完整try-catch，无throws/捕获重抛，保留HTTP错误与事务失败分类；前端迁同级hello-travel-app，AI设计/证据/资料迁AI/output，正式V1冻结。根install及10条离线检查、前端类型格式构建、独立消费者和401/400/503路径通过；17业务表/账号0/Flyway校验和不变，临时Java已停。公共规范1.7/快照1.5、三宿主及portable已同步，93源文件及134核心资源SHA一致；技术0.4/开发0.2更新，06至14仍未开始。",
-    "next_action": "用户审阅当前04第7章、05第7章和代码；本次按05代码生成终点暂停，真实模型/Milvus/SMTP、多设备全链路、独立CR和发布需后续实际执行。"
+    "summary": "SRC-023全源码业务质量整改完成：652方法含构造器、345流程块、对象职责与长流程修订；16后端/2前端回归通过，规范1.8/快照1.6及发行同步",
+    "next_action": "本轮05编码终点已完成，审阅当前04技术0.5、05开发0.3及业务方法复核记录；完整06/独立CR尚未开始"
   },
-  "last_updated": "2026-09-17T23:53:04+08:00",
+  "last_updated": "2026-09-18T11:17:49+08:00",
   "execution_goal_detail": {
     "type": "custom",
     "original_request": "本次仅做到代码生成完，审阅方案文档和代码质量",
@@ -170,6 +170,13 @@
       "actor": "user",
       "scope": "三个工程边界约束沉淀solo及ddd；全面检查并修改hello-travel与ddd四层主入口，执行相关开发回归与目录迁移",
       "executed": "完整捕获/失败回滚/错误分类、同级前端、AI/output已完成；保留历史审批、未开始CR/发布"
+    },
+    {
+      "id": "AUTH-QUALITY-001",
+      "source": "SRC-023",
+      "actor": "user",
+      "scope": "全面检查hello-travel业务方法注释/面向对象/迭代整体质量，反省并落实既有规范；依据既有同步授权修订相关solo/ddd和快照，执行合理针对性开发回归",
+      "executed": "已完成；当前终点仍05，不执行完整06/独立CR/部署/外部消息/计费调用"
     }
   ]
 }

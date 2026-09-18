@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.hellotravel.common.identity.Ids;
 import com.hellotravel.domain.auth.model.entity.LoginSessionEntity;
 import com.hellotravel.domain.chat.model.entity.ChatRunEntity;
 import com.hellotravel.domain.chat.model.entity.ConversationEntity;
@@ -43,7 +44,7 @@ class DomainInvariantsTest {
         var original =
                 new ConversationEntity(
                         1L,
-                        com.hellotravel.common.identity.Ids.next(),
+                        Ids.next(),
                         2L,
                         "测试",
                         0L,
@@ -65,7 +66,7 @@ class DomainInvariantsTest {
         var original =
                 new ChatRunEntity(
                         1L,
-                        com.hellotravel.common.identity.Ids.next(),
+                        Ids.next(),
                         2L,
                         3L,
                         4L,
@@ -104,7 +105,7 @@ class DomainInvariantsTest {
         var original =
                 new LoginSessionEntity(
                         1L,
-                        com.hellotravel.common.identity.Ids.next(),
+                        Ids.next(),
                         2L,
                         3L,
                         new byte[32],

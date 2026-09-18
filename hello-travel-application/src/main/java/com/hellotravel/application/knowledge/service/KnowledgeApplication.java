@@ -3,6 +3,7 @@ package com.hellotravel.application.knowledge.service;
 import com.hellotravel.application.knowledge.command.KnowledgeCommand;
 import com.hellotravel.application.knowledge.result.KnowledgeResult;
 import com.hellotravel.application.knowledge.workflow.KnowledgeFlow;
+import com.hellotravel.application.support.ApplicationFailures;
 import com.hellotravel.common.result.Result;
 
 import org.springframework.stereotype.Service;
@@ -32,7 +33,7 @@ public final class KnowledgeApplication {
         try {
             return Result.success(flow.perform(knowledgeCommand));
         } catch (Exception exception) {
-            return com.hellotravel.application.support.ApplicationFailures.capture(exception);
+            return ApplicationFailures.capture(exception);
         }
     }
 }

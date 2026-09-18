@@ -57,14 +57,19 @@ public final class SessionFilter extends OncePerRequestFilter {
     protected void doFilterInternal(
             HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException {
+        // 1. 取得关联当前请求的追踪标识，供本段后续处理使用。
         String trace = Ids.next();
         long started = System.nanoTime();
+        // 2. 执行put职责步骤，并把失败交给所属事务或入口处理。
         MDC.put("traceId", trace);
+        // 3. 映射本段快照字段，业务状态规则不放入PO赋值。
         response.setHeader("X-Trace-ID", trace);
         response.setHeader("X-Content-Type-Options", "nosniff");
         response.setHeader("Referrer-Policy", "same-origin");
         response.setHeader("Cache-Control", "no-store");
+        // 4. 在异常捕获或资源释放边界内完成本段处理，失败不得伪装为成功。
         try {
+            // 1. 仅保护本服务API路径，请求身份校验不干扰静态资源。
             if (request.getRequestURI().startsWith("/api/v1/")) {
                 if (!"GET".equals(request.getMethod()) && !"HEAD".equals(request.getMethod())) {
                     String origin = request.getHeader("Origin");
@@ -74,7 +79,7 @@ public final class SessionFilter extends OncePerRequestFilter {
                                             .getProperty(
                                                     "ALLOWED_ORIGINS",
                                                     "http://localhost:5173,http://127.0.0.1:5173,http://loca"
-                                                            + "lhost:8080,http://127.0.0.1:8080")
+                                                        + "lhost:8080,http://127.0.0.1:8080")
                                             .split(","));
                     if (origin == null || !allowed.contains(origin)) {
                         throw new DomainException(DomainErrorCode.UNAUTHORIZED);
@@ -86,7 +91,7 @@ public final class SessionFilter extends OncePerRequestFilter {
                                 .anyMatch(action -> path.equals("/api/v1/auth/" + action));
                 if (!open) {
                     var data =
-                            com.hellotravel.adaptor.http.support.HttpResults.required(
+                            HttpResults.required(
                                     application.authenticate(
                                             new AuthCommand(
                                                     "CHECK",
@@ -105,6 +110,7 @@ public final class SessionFilter extends OncePerRequestFilter {
                     request.setAttribute("ht.session", data.sessionId());
                 }
             }
+            // 2. 执行doFilter职责步骤，并把失败交给所属事务或入口处理。
             chain.doFilter(request, response);
         } catch (BaseException exception) {
             if (!response.isCommitted()) {

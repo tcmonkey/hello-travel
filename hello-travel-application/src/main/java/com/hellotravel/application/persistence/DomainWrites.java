@@ -1,6 +1,61 @@
 package com.hellotravel.application.persistence;
 
+import com.hellotravel.common.result.Result;
+import com.hellotravel.domain.auth.model.aggregate.DeviceAggregate;
+import com.hellotravel.domain.auth.model.aggregate.EmailChallengeAggregate;
+import com.hellotravel.domain.auth.model.aggregate.LoginSessionAggregate;
+import com.hellotravel.domain.auth.model.aggregate.RefreshReceiptAggregate;
+import com.hellotravel.domain.auth.model.aggregate.UserAccountAggregate;
+import com.hellotravel.domain.chat.model.aggregate.ChatRunAggregate;
+import com.hellotravel.domain.chat.model.aggregate.ConversationAggregate;
+import com.hellotravel.domain.chat.model.aggregate.MessageAggregate;
+import com.hellotravel.domain.chat.model.aggregate.ModelInvocationAggregate;
+import com.hellotravel.domain.exception.DomainErrorCode;
+import com.hellotravel.domain.exception.DomainException;
+import com.hellotravel.domain.knowledge.model.aggregate.IndexJobAggregate;
+import com.hellotravel.domain.knowledge.model.aggregate.KnowledgeChunkAggregate;
+import com.hellotravel.domain.knowledge.model.aggregate.KnowledgeDocumentAggregate;
+import com.hellotravel.domain.memory.model.aggregate.MemoryFactAggregate;
+import com.hellotravel.domain.memory.model.aggregate.MemoryFactSourceAggregate;
+import com.hellotravel.domain.memory.model.aggregate.MemorySummaryAggregate;
+import com.hellotravel.domain.persistence.model.param.ChatRunRemoveParam;
+import com.hellotravel.domain.persistence.model.param.ChatRunWriteParam;
+import com.hellotravel.domain.persistence.model.param.ConversationRemoveParam;
+import com.hellotravel.domain.persistence.model.param.ConversationWriteParam;
+import com.hellotravel.domain.persistence.model.param.DeviceRemoveParam;
+import com.hellotravel.domain.persistence.model.param.DeviceWriteParam;
+import com.hellotravel.domain.persistence.model.param.EmailChallengeRemoveParam;
+import com.hellotravel.domain.persistence.model.param.EmailChallengeWriteParam;
+import com.hellotravel.domain.persistence.model.param.IndexJobRemoveParam;
+import com.hellotravel.domain.persistence.model.param.IndexJobWriteParam;
+import com.hellotravel.domain.persistence.model.param.KnowledgeChunkRemoveParam;
+import com.hellotravel.domain.persistence.model.param.KnowledgeChunkWriteParam;
+import com.hellotravel.domain.persistence.model.param.KnowledgeDocumentRemoveParam;
+import com.hellotravel.domain.persistence.model.param.KnowledgeDocumentWriteParam;
+import com.hellotravel.domain.persistence.model.param.LoginSessionRemoveParam;
+import com.hellotravel.domain.persistence.model.param.LoginSessionWriteParam;
+import com.hellotravel.domain.persistence.model.param.MemoryFactRemoveParam;
+import com.hellotravel.domain.persistence.model.param.MemoryFactSourceRemoveParam;
+import com.hellotravel.domain.persistence.model.param.MemoryFactSourceWriteParam;
+import com.hellotravel.domain.persistence.model.param.MemoryFactWriteParam;
+import com.hellotravel.domain.persistence.model.param.MemorySummaryRemoveParam;
+import com.hellotravel.domain.persistence.model.param.MemorySummaryWriteParam;
+import com.hellotravel.domain.persistence.model.param.MessageRemoveParam;
+import com.hellotravel.domain.persistence.model.param.MessageWriteParam;
+import com.hellotravel.domain.persistence.model.param.ModelInvocationRemoveParam;
+import com.hellotravel.domain.persistence.model.param.ModelInvocationWriteParam;
+import com.hellotravel.domain.persistence.model.param.OutboxEventRemoveParam;
+import com.hellotravel.domain.persistence.model.param.OutboxEventWriteParam;
+import com.hellotravel.domain.persistence.model.param.RefreshReceiptRemoveParam;
+import com.hellotravel.domain.persistence.model.param.RefreshReceiptWriteParam;
+import com.hellotravel.domain.persistence.model.param.SyncEventRemoveParam;
+import com.hellotravel.domain.persistence.model.param.SyncEventWriteParam;
+import com.hellotravel.domain.persistence.model.param.UserAccountRemoveParam;
+import com.hellotravel.domain.persistence.model.param.UserAccountWriteParam;
 import com.hellotravel.domain.persistence.service.TravelWriteDomainService;
+import com.hellotravel.domain.sync.model.aggregate.OutboxEventAggregate;
+import com.hellotravel.domain.sync.model.aggregate.SyncEventAggregate;
+import com.hellotravel.model.persistence.WriteDO;
 
 import org.springframework.stereotype.Component;
 
@@ -25,13 +80,8 @@ public final class DomainWrites {
      * @param aggregate 待写入的完整聚合
      * @return 当前操作的业务结果
      */
-    public Boolean saveUserAccount(
-            com.hellotravel.domain.auth.model.aggregate.UserAccountAggregate aggregate) {
-        return required(
-                        service.saveUserAccount(
-                                new com.hellotravel.domain.persistence.model.param
-                                        .UserAccountWriteParam(aggregate)))
-                .saved();
+    public Boolean saveUserAccount(UserAccountAggregate aggregate) {
+        return required(service.saveUserAccount(new UserAccountWriteParam(aggregate))).saved();
     }
 
     /**
@@ -42,11 +92,7 @@ public final class DomainWrites {
      * @return 当前操作的业务结果
      */
     public Boolean removeUserAccount(Long id) {
-        return required(
-                        service.removeUserAccount(
-                                new com.hellotravel.domain.persistence.model.param
-                                        .UserAccountRemoveParam(id)))
-                .saved();
+        return required(service.removeUserAccount(new UserAccountRemoveParam(id))).saved();
     }
 
     /**
@@ -56,13 +102,8 @@ public final class DomainWrites {
      * @param aggregate 待写入的完整聚合
      * @return 当前操作的业务结果
      */
-    public Boolean saveDevice(
-            com.hellotravel.domain.auth.model.aggregate.DeviceAggregate aggregate) {
-        return required(
-                        service.saveDevice(
-                                new com.hellotravel.domain.persistence.model.param.DeviceWriteParam(
-                                        aggregate)))
-                .saved();
+    public Boolean saveDevice(DeviceAggregate aggregate) {
+        return required(service.saveDevice(new DeviceWriteParam(aggregate))).saved();
     }
 
     /**
@@ -73,11 +114,7 @@ public final class DomainWrites {
      * @return 当前操作的业务结果
      */
     public Boolean removeDevice(Long id) {
-        return required(
-                        service.removeDevice(
-                                new com.hellotravel.domain.persistence.model.param
-                                        .DeviceRemoveParam(id)))
-                .saved();
+        return required(service.removeDevice(new DeviceRemoveParam(id))).saved();
     }
 
     /**
@@ -87,13 +124,8 @@ public final class DomainWrites {
      * @param aggregate 待写入的完整聚合
      * @return 当前操作的业务结果
      */
-    public Boolean saveLoginSession(
-            com.hellotravel.domain.auth.model.aggregate.LoginSessionAggregate aggregate) {
-        return required(
-                        service.saveLoginSession(
-                                new com.hellotravel.domain.persistence.model.param
-                                        .LoginSessionWriteParam(aggregate)))
-                .saved();
+    public Boolean saveLoginSession(LoginSessionAggregate aggregate) {
+        return required(service.saveLoginSession(new LoginSessionWriteParam(aggregate))).saved();
     }
 
     /**
@@ -104,11 +136,7 @@ public final class DomainWrites {
      * @return 当前操作的业务结果
      */
     public Boolean removeLoginSession(Long id) {
-        return required(
-                        service.removeLoginSession(
-                                new com.hellotravel.domain.persistence.model.param
-                                        .LoginSessionRemoveParam(id)))
-                .saved();
+        return required(service.removeLoginSession(new LoginSessionRemoveParam(id))).saved();
     }
 
     /**
@@ -118,12 +146,8 @@ public final class DomainWrites {
      * @param aggregate 待写入的完整聚合
      * @return 当前操作的业务结果
      */
-    public Boolean saveEmailChallenge(
-            com.hellotravel.domain.auth.model.aggregate.EmailChallengeAggregate aggregate) {
-        return required(
-                        service.saveEmailChallenge(
-                                new com.hellotravel.domain.persistence.model.param
-                                        .EmailChallengeWriteParam(aggregate)))
+    public Boolean saveEmailChallenge(EmailChallengeAggregate aggregate) {
+        return required(service.saveEmailChallenge(new EmailChallengeWriteParam(aggregate)))
                 .saved();
     }
 
@@ -135,11 +159,7 @@ public final class DomainWrites {
      * @return 当前操作的业务结果
      */
     public Boolean removeEmailChallenge(Long id) {
-        return required(
-                        service.removeEmailChallenge(
-                                new com.hellotravel.domain.persistence.model.param
-                                        .EmailChallengeRemoveParam(id)))
-                .saved();
+        return required(service.removeEmailChallenge(new EmailChallengeRemoveParam(id))).saved();
     }
 
     /**
@@ -149,13 +169,8 @@ public final class DomainWrites {
      * @param aggregate 待写入的完整聚合
      * @return 当前操作的业务结果
      */
-    public Boolean saveConversation(
-            com.hellotravel.domain.chat.model.aggregate.ConversationAggregate aggregate) {
-        return required(
-                        service.saveConversation(
-                                new com.hellotravel.domain.persistence.model.param
-                                        .ConversationWriteParam(aggregate)))
-                .saved();
+    public Boolean saveConversation(ConversationAggregate aggregate) {
+        return required(service.saveConversation(new ConversationWriteParam(aggregate))).saved();
     }
 
     /**
@@ -166,11 +181,7 @@ public final class DomainWrites {
      * @return 当前操作的业务结果
      */
     public Boolean removeConversation(Long id) {
-        return required(
-                        service.removeConversation(
-                                new com.hellotravel.domain.persistence.model.param
-                                        .ConversationRemoveParam(id)))
-                .saved();
+        return required(service.removeConversation(new ConversationRemoveParam(id))).saved();
     }
 
     /**
@@ -180,13 +191,8 @@ public final class DomainWrites {
      * @param aggregate 待写入的完整聚合
      * @return 当前操作的业务结果
      */
-    public Boolean saveMessage(
-            com.hellotravel.domain.chat.model.aggregate.MessageAggregate aggregate) {
-        return required(
-                        service.saveMessage(
-                                new com.hellotravel.domain.persistence.model.param
-                                        .MessageWriteParam(aggregate)))
-                .saved();
+    public Boolean saveMessage(MessageAggregate aggregate) {
+        return required(service.saveMessage(new MessageWriteParam(aggregate))).saved();
     }
 
     /**
@@ -197,11 +203,7 @@ public final class DomainWrites {
      * @return 当前操作的业务结果
      */
     public Boolean removeMessage(Long id) {
-        return required(
-                        service.removeMessage(
-                                new com.hellotravel.domain.persistence.model.param
-                                        .MessageRemoveParam(id)))
-                .saved();
+        return required(service.removeMessage(new MessageRemoveParam(id))).saved();
     }
 
     /**
@@ -211,13 +213,8 @@ public final class DomainWrites {
      * @param aggregate 待写入的完整聚合
      * @return 当前操作的业务结果
      */
-    public Boolean saveChatRun(
-            com.hellotravel.domain.chat.model.aggregate.ChatRunAggregate aggregate) {
-        return required(
-                        service.saveChatRun(
-                                new com.hellotravel.domain.persistence.model.param
-                                        .ChatRunWriteParam(aggregate)))
-                .saved();
+    public Boolean saveChatRun(ChatRunAggregate aggregate) {
+        return required(service.saveChatRun(new ChatRunWriteParam(aggregate))).saved();
     }
 
     /**
@@ -228,11 +225,7 @@ public final class DomainWrites {
      * @return 当前操作的业务结果
      */
     public Boolean removeChatRun(Long id) {
-        return required(
-                        service.removeChatRun(
-                                new com.hellotravel.domain.persistence.model.param
-                                        .ChatRunRemoveParam(id)))
-                .saved();
+        return required(service.removeChatRun(new ChatRunRemoveParam(id))).saved();
     }
 
     /**
@@ -242,13 +235,8 @@ public final class DomainWrites {
      * @param aggregate 待写入的完整聚合
      * @return 当前操作的业务结果
      */
-    public Boolean saveMemorySummary(
-            com.hellotravel.domain.memory.model.aggregate.MemorySummaryAggregate aggregate) {
-        return required(
-                        service.saveMemorySummary(
-                                new com.hellotravel.domain.persistence.model.param
-                                        .MemorySummaryWriteParam(aggregate)))
-                .saved();
+    public Boolean saveMemorySummary(MemorySummaryAggregate aggregate) {
+        return required(service.saveMemorySummary(new MemorySummaryWriteParam(aggregate))).saved();
     }
 
     /**
@@ -259,11 +247,7 @@ public final class DomainWrites {
      * @return 当前操作的业务结果
      */
     public Boolean removeMemorySummary(Long id) {
-        return required(
-                        service.removeMemorySummary(
-                                new com.hellotravel.domain.persistence.model.param
-                                        .MemorySummaryRemoveParam(id)))
-                .saved();
+        return required(service.removeMemorySummary(new MemorySummaryRemoveParam(id))).saved();
     }
 
     /**
@@ -273,13 +257,8 @@ public final class DomainWrites {
      * @param aggregate 待写入的完整聚合
      * @return 当前操作的业务结果
      */
-    public Boolean saveMemoryFact(
-            com.hellotravel.domain.memory.model.aggregate.MemoryFactAggregate aggregate) {
-        return required(
-                        service.saveMemoryFact(
-                                new com.hellotravel.domain.persistence.model.param
-                                        .MemoryFactWriteParam(aggregate)))
-                .saved();
+    public Boolean saveMemoryFact(MemoryFactAggregate aggregate) {
+        return required(service.saveMemoryFact(new MemoryFactWriteParam(aggregate))).saved();
     }
 
     /**
@@ -290,11 +269,7 @@ public final class DomainWrites {
      * @return 当前操作的业务结果
      */
     public Boolean removeMemoryFact(Long id) {
-        return required(
-                        service.removeMemoryFact(
-                                new com.hellotravel.domain.persistence.model.param
-                                        .MemoryFactRemoveParam(id)))
-                .saved();
+        return required(service.removeMemoryFact(new MemoryFactRemoveParam(id))).saved();
     }
 
     /**
@@ -304,12 +279,8 @@ public final class DomainWrites {
      * @param aggregate 待写入的完整聚合
      * @return 当前操作的业务结果
      */
-    public Boolean saveMemoryFactSource(
-            com.hellotravel.domain.memory.model.aggregate.MemoryFactSourceAggregate aggregate) {
-        return required(
-                        service.saveMemoryFactSource(
-                                new com.hellotravel.domain.persistence.model.param
-                                        .MemoryFactSourceWriteParam(aggregate)))
+    public Boolean saveMemoryFactSource(MemoryFactSourceAggregate aggregate) {
+        return required(service.saveMemoryFactSource(new MemoryFactSourceWriteParam(aggregate)))
                 .saved();
     }
 
@@ -321,10 +292,7 @@ public final class DomainWrites {
      * @return 当前操作的业务结果
      */
     public Boolean removeMemoryFactSource(Long id) {
-        return required(
-                        service.removeMemoryFactSource(
-                                new com.hellotravel.domain.persistence.model.param
-                                        .MemoryFactSourceRemoveParam(id)))
+        return required(service.removeMemoryFactSource(new MemoryFactSourceRemoveParam(id)))
                 .saved();
     }
 
@@ -335,12 +303,8 @@ public final class DomainWrites {
      * @param aggregate 待写入的完整聚合
      * @return 当前操作的业务结果
      */
-    public Boolean saveKnowledgeDocument(
-            com.hellotravel.domain.knowledge.model.aggregate.KnowledgeDocumentAggregate aggregate) {
-        return required(
-                        service.saveKnowledgeDocument(
-                                new com.hellotravel.domain.persistence.model.param
-                                        .KnowledgeDocumentWriteParam(aggregate)))
+    public Boolean saveKnowledgeDocument(KnowledgeDocumentAggregate aggregate) {
+        return required(service.saveKnowledgeDocument(new KnowledgeDocumentWriteParam(aggregate)))
                 .saved();
     }
 
@@ -352,10 +316,7 @@ public final class DomainWrites {
      * @return 当前操作的业务结果
      */
     public Boolean removeKnowledgeDocument(Long id) {
-        return required(
-                        service.removeKnowledgeDocument(
-                                new com.hellotravel.domain.persistence.model.param
-                                        .KnowledgeDocumentRemoveParam(id)))
+        return required(service.removeKnowledgeDocument(new KnowledgeDocumentRemoveParam(id)))
                 .saved();
     }
 
@@ -366,12 +327,8 @@ public final class DomainWrites {
      * @param aggregate 待写入的完整聚合
      * @return 当前操作的业务结果
      */
-    public Boolean saveKnowledgeChunk(
-            com.hellotravel.domain.knowledge.model.aggregate.KnowledgeChunkAggregate aggregate) {
-        return required(
-                        service.saveKnowledgeChunk(
-                                new com.hellotravel.domain.persistence.model.param
-                                        .KnowledgeChunkWriteParam(aggregate)))
+    public Boolean saveKnowledgeChunk(KnowledgeChunkAggregate aggregate) {
+        return required(service.saveKnowledgeChunk(new KnowledgeChunkWriteParam(aggregate)))
                 .saved();
     }
 
@@ -383,11 +340,7 @@ public final class DomainWrites {
      * @return 当前操作的业务结果
      */
     public Boolean removeKnowledgeChunk(Long id) {
-        return required(
-                        service.removeKnowledgeChunk(
-                                new com.hellotravel.domain.persistence.model.param
-                                        .KnowledgeChunkRemoveParam(id)))
-                .saved();
+        return required(service.removeKnowledgeChunk(new KnowledgeChunkRemoveParam(id))).saved();
     }
 
     /**
@@ -397,13 +350,8 @@ public final class DomainWrites {
      * @param aggregate 待写入的完整聚合
      * @return 当前操作的业务结果
      */
-    public Boolean saveIndexJob(
-            com.hellotravel.domain.knowledge.model.aggregate.IndexJobAggregate aggregate) {
-        return required(
-                        service.saveIndexJob(
-                                new com.hellotravel.domain.persistence.model.param
-                                        .IndexJobWriteParam(aggregate)))
-                .saved();
+    public Boolean saveIndexJob(IndexJobAggregate aggregate) {
+        return required(service.saveIndexJob(new IndexJobWriteParam(aggregate))).saved();
     }
 
     /**
@@ -414,11 +362,7 @@ public final class DomainWrites {
      * @return 当前操作的业务结果
      */
     public Boolean removeIndexJob(Long id) {
-        return required(
-                        service.removeIndexJob(
-                                new com.hellotravel.domain.persistence.model.param
-                                        .IndexJobRemoveParam(id)))
-                .saved();
+        return required(service.removeIndexJob(new IndexJobRemoveParam(id))).saved();
     }
 
     /**
@@ -428,13 +372,8 @@ public final class DomainWrites {
      * @param aggregate 待写入的完整聚合
      * @return 当前操作的业务结果
      */
-    public Boolean saveSyncEvent(
-            com.hellotravel.domain.sync.model.aggregate.SyncEventAggregate aggregate) {
-        return required(
-                        service.saveSyncEvent(
-                                new com.hellotravel.domain.persistence.model.param
-                                        .SyncEventWriteParam(aggregate)))
-                .saved();
+    public Boolean saveSyncEvent(SyncEventAggregate aggregate) {
+        return required(service.saveSyncEvent(new SyncEventWriteParam(aggregate))).saved();
     }
 
     /**
@@ -445,11 +384,7 @@ public final class DomainWrites {
      * @return 当前操作的业务结果
      */
     public Boolean removeSyncEvent(Long id) {
-        return required(
-                        service.removeSyncEvent(
-                                new com.hellotravel.domain.persistence.model.param
-                                        .SyncEventRemoveParam(id)))
-                .saved();
+        return required(service.removeSyncEvent(new SyncEventRemoveParam(id))).saved();
     }
 
     /**
@@ -459,13 +394,8 @@ public final class DomainWrites {
      * @param aggregate 待写入的完整聚合
      * @return 当前操作的业务结果
      */
-    public Boolean saveOutboxEvent(
-            com.hellotravel.domain.sync.model.aggregate.OutboxEventAggregate aggregate) {
-        return required(
-                        service.saveOutboxEvent(
-                                new com.hellotravel.domain.persistence.model.param
-                                        .OutboxEventWriteParam(aggregate)))
-                .saved();
+    public Boolean saveOutboxEvent(OutboxEventAggregate aggregate) {
+        return required(service.saveOutboxEvent(new OutboxEventWriteParam(aggregate))).saved();
     }
 
     /**
@@ -476,11 +406,7 @@ public final class DomainWrites {
      * @return 当前操作的业务结果
      */
     public Boolean removeOutboxEvent(Long id) {
-        return required(
-                        service.removeOutboxEvent(
-                                new com.hellotravel.domain.persistence.model.param
-                                        .OutboxEventRemoveParam(id)))
-                .saved();
+        return required(service.removeOutboxEvent(new OutboxEventRemoveParam(id))).saved();
     }
 
     /**
@@ -490,12 +416,8 @@ public final class DomainWrites {
      * @param aggregate 待写入的完整聚合
      * @return 当前操作的业务结果
      */
-    public Boolean saveModelInvocation(
-            com.hellotravel.domain.chat.model.aggregate.ModelInvocationAggregate aggregate) {
-        return required(
-                        service.saveModelInvocation(
-                                new com.hellotravel.domain.persistence.model.param
-                                        .ModelInvocationWriteParam(aggregate)))
+    public Boolean saveModelInvocation(ModelInvocationAggregate aggregate) {
+        return required(service.saveModelInvocation(new ModelInvocationWriteParam(aggregate)))
                 .saved();
     }
 
@@ -507,11 +429,7 @@ public final class DomainWrites {
      * @return 当前操作的业务结果
      */
     public Boolean removeModelInvocation(Long id) {
-        return required(
-                        service.removeModelInvocation(
-                                new com.hellotravel.domain.persistence.model.param
-                                        .ModelInvocationRemoveParam(id)))
-                .saved();
+        return required(service.removeModelInvocation(new ModelInvocationRemoveParam(id))).saved();
     }
 
     /**
@@ -521,12 +439,8 @@ public final class DomainWrites {
      * @param aggregate 待写入的完整聚合
      * @return 当前操作的业务结果
      */
-    public Boolean saveRefreshReceipt(
-            com.hellotravel.domain.auth.model.aggregate.RefreshReceiptAggregate aggregate) {
-        return required(
-                        service.saveRefreshReceipt(
-                                new com.hellotravel.domain.persistence.model.param
-                                        .RefreshReceiptWriteParam(aggregate)))
+    public Boolean saveRefreshReceipt(RefreshReceiptAggregate aggregate) {
+        return required(service.saveRefreshReceipt(new RefreshReceiptWriteParam(aggregate)))
                 .saved();
     }
 
@@ -538,20 +452,15 @@ public final class DomainWrites {
      * @return 当前操作的业务结果
      */
     public Boolean removeRefreshReceipt(Long id) {
-        return required(
-                        service.removeRefreshReceipt(
-                                new com.hellotravel.domain.persistence.model.param
-                                        .RefreshReceiptRemoveParam(id)))
-                .saved();
+        return required(service.removeRefreshReceipt(new RefreshReceiptRemoveParam(id))).saved();
     }
 
-    private static com.hellotravel.model.persistence.WriteDO required(
-            com.hellotravel.common.result.Result<com.hellotravel.model.persistence.WriteDO>
-                    result) {
+    private static WriteDO required(Result<WriteDO> result) {
+        // 1. 核对下层标准结果的成功状态，失败中止当前处理。
         if (!result.success()) {
-            throw new com.hellotravel.domain.exception.DomainException(
-                    com.hellotravel.domain.exception.DomainErrorCode.valueOf(result.code()));
+            throw new DomainException(DomainErrorCode.valueOf(result.code()));
         }
+        // 2. 返回由领域服务成功结果转换的写标记，调用者据此确认持久化。
         return result.data();
     }
 }

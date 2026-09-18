@@ -23,7 +23,7 @@ public final class Json {
      * @author AIGenerator
      */
     private Json() {
-    }
+}
 
     /**
      * 处理encode对应的受控业务操作。

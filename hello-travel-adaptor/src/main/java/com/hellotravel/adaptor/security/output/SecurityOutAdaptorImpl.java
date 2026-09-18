@@ -50,6 +50,7 @@ public final class SecurityOutAdaptorImpl implements SecurityOutAdaptor {
      */
     public Result<SecurityDO> process(SecurityCommand securityCommand) {
         try {
+            // 1. 按已限定的安全动作分发校验、加密和限流；本入口统一捕获失败。
             return Result.success(
                     switch (securityCommand.action()) {
                         case "HASH_PASSWORD" ->
@@ -116,33 +117,48 @@ public final class SecurityOutAdaptorImpl implements SecurityOutAdaptor {
     }
 
     private byte[] key(String name) {
+        // 1. 取得本次预算或解析后的业务值，供本段后续处理使用。
         String value = environment.getProperty(name);
+        // 2. 缺少安全操作输入时拒绝计算，不将空值作为有效凭据。
         if (value == null) {
             throw new IllegalStateException("missing security key");
         }
+        // 3. 准备当前操作的存储或签名标识。
         byte[] key = Base64.getDecoder().decode(value);
+        // 4. 依据格式、长度或数量边界处理分支，避免继续使用无效数据。
         if (key.length != 32) {
             throw new IllegalStateException("key size");
         }
+        // 5. 返回本段实际处理结果，保持本层输出契约。
         return key;
     }
 
     private byte[] hmac(String value, String scope, String keyName) throws Exception {
+        // 1. 取得用于生成不可逆证明的认证码实例，供本段后续处理使用。
         Mac mac = Mac.getInstance("HmacSHA256");
+        // 2. 执行init职责步骤，并把失败交给所属事务或入口处理。
         mac.init(new SecretKeySpec(key(keyName), "HmacSHA256"));
+        // 3. 返回本段实际处理结果，保持本层输出契约。
         return mac.doFinal((scope + "|" + value).getBytes(StandardCharsets.UTF_8));
     }
 
     private String encrypt(String value, String scope) throws Exception {
+        // 1. 取得本次加密的随机数，供本段后续处理使用。
         byte[] nonce = new byte[12];
+        // 2. 执行nextBytes职责步骤，并把失败交给所属事务或入口处理。
         new SecureRandom().nextBytes(nonce);
+        // 3. 取得用于保护私有载荷的加密实例，供本段后续处理使用。
         Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
+        // 4. 执行init职责步骤，并把失败交给所属事务或入口处理。
         cipher.init(
                 Cipher.ENCRYPT_MODE,
                 new SecretKeySpec(key("OTP_DELIVERY_KEY"), "AES"),
                 new GCMParameterSpec(128, nonce));
+        // 5. 执行updateAAD职责步骤，并把失败交给所属事务或入口处理。
         cipher.updateAAD(scope.getBytes(StandardCharsets.UTF_8));
+        // 6. 准备可投递的加密验证码，原始码不进入数据库。
         byte[] encrypted = cipher.doFinal(value.getBytes(StandardCharsets.UTF_8));
+        // 7. 返回本段实际处理结果，保持本层输出契约。
         return Base64.getEncoder()
                 .encodeToString(
                         ByteBuffer.allocate(12 + encrypted.length)
@@ -152,17 +168,22 @@ public final class SecurityOutAdaptorImpl implements SecurityOutAdaptor {
     }
 
     private String decrypt(String value, String scope) throws Exception {
+        // 1. 取得待校验的上传文件字节，供本段后续处理使用。
         byte[] bytes = Base64.getDecoder().decode(value);
         Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
+        // 2. 执行init职责步骤，并把失败交给所属事务或入口处理。
         cipher.init(
                 Cipher.DECRYPT_MODE,
                 new SecretKeySpec(key("OTP_DELIVERY_KEY"), "AES"),
                 new GCMParameterSpec(128, bytes, 0, 12));
+        // 3. 执行updateAAD职责步骤，并把失败交给所属事务或入口处理。
         cipher.updateAAD(scope.getBytes(StandardCharsets.UTF_8));
+        // 4. 返回本段实际处理结果，保持本层输出契约。
         return new String(cipher.doFinal(bytes, 12, bytes.length - 12), StandardCharsets.UTF_8);
     }
 
     private boolean limit(String ip, String scope) {
+        // 1. 取得服务商返回的失败字段，供本段后续处理使用。
         boolean issue = scope.startsWith("issue:");
         String key =
                 "hello-travel:rate:"
@@ -176,9 +197,11 @@ public final class SecurityOutAdaptorImpl implements SecurityOutAdaptor {
                         new DefaultRedisScript<>(script, Long.class),
                         List.of(key),
                         issue ? "60" : "300");
+        // 2. 仅在Redis返回有效计数时设置首次请求的限流过期时间。
         if (n == null) {
             throw new IllegalStateException("limiter unavailable");
         }
+        // 3. 返回本段实际处理结果，保持本层输出契约。
         return n <= (issue ? 1 : 10);
     }
 }

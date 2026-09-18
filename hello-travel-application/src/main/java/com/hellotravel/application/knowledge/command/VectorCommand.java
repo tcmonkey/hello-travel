@@ -18,4 +18,4 @@ public record VectorCommand(
         Long generation,
         java.util.List<VectorItemCommand> items,
         java.util.List<Float> query) {
-        }
+}

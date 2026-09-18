@@ -34,4 +34,4 @@ public record ChatCommand(
         Long maxSeq,
         Long historyEpoch,
         int limit) {
-        }
+}

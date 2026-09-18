@@ -2,6 +2,7 @@ package com.hellotravel.adaptor.http.input;
 
 import com.hellotravel.adaptor.http.support.ApiViews;
 import com.hellotravel.adaptor.http.support.HttpIdentity;
+import com.hellotravel.adaptor.http.support.HttpResults;
 import com.hellotravel.application.knowledge.command.KnowledgeCommand;
 import com.hellotravel.application.knowledge.service.KnowledgeApplication;
 import com.hellotravel.client.knowledge.request.KnowledgeRequest;
@@ -54,9 +55,11 @@ public final class KnowledgeController {
             @RequestParam(required = false) String sourceUrl,
             HttpServletRequest httpServletRequest) {
         try {
+            // 1. 核对输入或读取结果的存在性，失败中止当前处理。
             if (file.isEmpty() || file.getSize() > 10485760) {
                 throw new DomainException(DomainErrorCode.INVALID);
             }
+            // 2. 取得本段结果并准备本层转换，随后显式核对成功状态。
             var result =
                     application.manage(
                             new KnowledgeCommand(
@@ -69,9 +72,10 @@ public final class KnowledgeController {
                                     null,
                                     0,
                                     100));
+            // 3. 返回本段实际处理结果，保持本层输出契约。
             return views.respond(result, KnowledgeResponse.class);
         } catch (Exception exception) {
-            return com.hellotravel.adaptor.http.support.HttpResults.capture(exception);
+            return HttpResults.capture(exception);
         }
     }
 
@@ -90,6 +94,7 @@ public final class KnowledgeController {
             @Valid @RequestBody KnowledgeRequest knowledgeRequest,
             HttpServletRequest httpServletRequest) {
         try {
+            // 1. 取得候选任务快照，领取时再次核验，供本段后续处理使用。
             String selected =
                     switch (action) {
                         case "list" -> "LIST";
@@ -112,9 +117,10 @@ public final class KnowledgeController {
                                     knowledgeRequest.limit() == null
                                             ? 100
                                             : knowledgeRequest.limit()));
+            // 2. 返回本段实际处理结果，保持本层输出契约。
             return views.respond(result, KnowledgeResponse.class);
         } catch (Exception exception) {
-            return com.hellotravel.adaptor.http.support.HttpResults.capture(exception);
+            return HttpResults.capture(exception);
         }
     }
 }

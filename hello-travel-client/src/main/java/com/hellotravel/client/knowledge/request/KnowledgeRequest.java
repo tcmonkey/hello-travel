@@ -11,4 +11,4 @@ package com.hellotravel.client.knowledge.request;
  */
 public record KnowledgeRequest(
         String documentId, Long expectedVersion, Long after, Integer limit) {
-        }
+}

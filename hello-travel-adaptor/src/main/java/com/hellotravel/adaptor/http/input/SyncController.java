@@ -2,6 +2,7 @@ package com.hellotravel.adaptor.http.input;
 
 import com.hellotravel.adaptor.http.support.ApiViews;
 import com.hellotravel.adaptor.http.support.HttpIdentity;
+import com.hellotravel.adaptor.http.support.HttpResults;
 import com.hellotravel.application.sync.command.SyncCommand;
 import com.hellotravel.application.sync.service.SyncApplication;
 import com.hellotravel.client.sync.response.SyncResponse;
@@ -47,7 +48,7 @@ public final class SyncController {
                             new SyncCommand(HttpIdentity.user(httpServletRequest), after, 100)),
                     SyncResponse.class);
         } catch (Exception exception) {
-            return com.hellotravel.adaptor.http.support.HttpResults.capture(exception);
+            return HttpResults.capture(exception);
         }
     }
 }

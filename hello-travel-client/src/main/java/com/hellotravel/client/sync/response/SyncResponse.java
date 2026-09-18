@@ -10,4 +10,4 @@ package com.hellotravel.client.sync.response;
  */
 public record SyncResponse(
         java.util.List<SyncEventResponse> items, long highWater, boolean hasMore) {
-        }
+}

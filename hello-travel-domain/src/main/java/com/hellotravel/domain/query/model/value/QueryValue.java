@@ -20,7 +20,9 @@ public record QueryValue(List<FilterValue> filters, String order, boolean descen
      * @author AIGenerator
      */
     public QueryValue {
+        // 1. 保存独立的条件列表，调用者不能改变已建立的查询。
         filters = List.copyOf(filters);
+        // 2. 固定单次查询数量上限，禁止不受限的窗口。
         if (limit < 1 || limit > 1000) {
             throw new IllegalArgumentException("query limit");
         }
@@ -48,8 +50,11 @@ public record QueryValue(List<FilterValue> filters, String order, boolean descen
      * @return 当前操作的业务结果
      */
     public QueryValue where(String column, String operator, Object value) {
+        // 1. 复制已有过滤条件，追加条件不修改原查询。
         List<FilterValue> next = new ArrayList<>(filters);
+        // 2. 由过滤值对象验证列名和操作符后，追加新的绑定条件。
         next.add(new FilterValue(column, operator, value));
+        // 3. 返回保留原排序与数量边界的新查询快照。
         return new QueryValue(next, order, descending, limit);
     }
 

@@ -62,44 +62,19 @@ public final class VectorOutAdaptorImpl implements VectorOutAdaptor {
      */
     public Result<VectorDO> index(VectorCommand vectorCommand) {
         try {
+            // 1. 取得有超时约束的第三方客户端，供本段后续处理使用。
             MilvusClientV2 client = client();
             String collection = "hello_travel_kb_v1_d1024";
+            // 2. 执行initialize职责步骤，并把失败交给所属事务或入口处理。
             initialize(client, collection);
+            // 3. 执行validateId职责步骤，并把失败交给所属事务或入口处理。
             validateId(vectorCommand.ownerId());
+            // 4. 取得凭据对应的已验证账号，供本段后续处理使用。
             String owner = "owner_user_id == \"" + vectorCommand.ownerId() + "\"";
+            // 5. 按可信业务动作分发独立分支，未知动作返回受控失败。
             switch (vectorCommand.action()) {
                 case "UPSERT" -> {
-                    if (vectorCommand.items() == null || vectorCommand.items().size() > 16) {
-                        throw new IllegalArgumentException("batch");
-                    }
-                    List<JsonObject> rows = new ArrayList<>();
-                    for (var item : vectorCommand.items()) {
-                        validateId(item.key());
-                        validateId(item.documentId());
-                        if (item.generation() < 1
-                                || item.vector().size() != 1024
-                                || !item.hash().matches("[a-f0-9]{64}")) {
-                            throw new IllegalArgumentException("vector schema");
-                        }
-                        JsonObject row = new JsonObject();
-                        row.addProperty("vector_key", item.key());
-                        row.addProperty("owner_user_id", vectorCommand.ownerId());
-                        row.addProperty("document_id", item.documentId());
-                        row.addProperty("index_generation", item.generation());
-                        row.addProperty("chunk_no", item.chunkNo());
-                        row.addProperty("content_hash", item.hash());
-                        JsonArray vector = new JsonArray();
-                        for (Float value : item.vector()) {
-                            if (!Float.isFinite(value)) {
-                                throw new IllegalArgumentException("vector");
-                            }
-                            vector.add(value);
-                        }
-                        row.add("vector", vector);
-                        rows.add(row);
-                    }
-                    client.upsert(
-                            UpsertReq.builder().collectionName(collection).data(rows).build());
+                    upsert(client, collection, vectorCommand);
                 }
                 case "SEARCH" -> {
                     if (vectorCommand.query() == null || vectorCommand.query().size() != 1024) {
@@ -149,6 +124,7 @@ public final class VectorOutAdaptorImpl implements VectorOutAdaptor {
                 }
                 default -> throw new IllegalArgumentException("operation");
             }
+            // 6. 将本层成功数据封装为标准结果，保持对外模型隔离。
             return Result.success(new VectorDO(List.of()));
         } catch (Exception exception) {
             return Result.failure(AdaptorErrorCode.UNAVAILABLE);
@@ -156,29 +132,36 @@ public final class VectorOutAdaptorImpl implements VectorOutAdaptor {
     }
 
     private synchronized MilvusClientV2 client() {
+        // 1. 复用已建立的Milvus客户端，避免每次查询重新创建连接。
         if (cached != null) {
             return cached;
         }
+        // 2. 取得待完成的请求构建器，供本段后续处理使用。
         var builder =
                 ConnectConfig.builder()
                         .uri(environment.getProperty("MILVUS_URI", "http://127.0.0.1:19530"))
                         .connectTimeoutMs(3000);
         String token = environment.getProperty("MILVUS_TOKEN");
+        // 3. 配置鉴权令牌时才设置Milvus访问凭据。
         if (token != null && !token.isBlank()) {
             builder.token(token);
         }
+        // 4. 更新本次处理的局部数据或上下文，后续步骤读取同一快照。
         cached = new MilvusClientV2(builder.build()).withTimeout(15, TimeUnit.SECONDS);
+        // 5. 返回本段实际处理结果，保持本层输出契约。
         return cached;
     }
 
     @jakarta.annotation.PreDestroy
     private void closeClient() {
+        // 1. 释放已创建的Milvus客户端，未创建时不触发外部连接。
         if (cached != null) {
             cached.close();
         }
     }
 
     private void initialize(MilvusClientV2 client, String collection) {
+        // 1. 首次使用时创建项目专属集合，不修改机器上已有其他集合。
         if (!client.hasCollection(HasCollectionReq.builder().collectionName(collection).build())) {
             var schema = client.createSchema();
             schema.addField(
@@ -228,10 +211,12 @@ public final class VectorOutAdaptorImpl implements VectorOutAdaptor {
                             .indexParams(List.of(index))
                             .build());
         }
+        // 2. 取得待返回的旅行事项说明，供本段后续处理使用。
         var description =
                 client.describeCollection(
                         DescribeCollectionReq.builder().collectionName(collection).build());
         var schema = description.getCollectionSchema();
+        // 3. 校验专属集合字段与预期一致，结构不兼容时拒绝继续写入。
         if (!Set.copyOf(description.getFieldNames())
                         .equals(
                                 Set.of(
@@ -248,12 +233,51 @@ public final class VectorOutAdaptorImpl implements VectorOutAdaptor {
                 || schema.getField("vector").getDataType() != DataType.FloatVector) {
             throw new IllegalStateException("collection drift");
         }
+        // 4. 执行loadCollection职责步骤，并把失败交给所属事务或入口处理。
         client.loadCollection(LoadCollectionReq.builder().collectionName(collection).build());
     }
 
     private void validateId(String value) {
+        // 1. 只接受项目生成的公开标识，避免向量过滤表达式被任意文本注入。
         if (value == null || !value.matches("[0-9A-HJKMNP-TV-Z]{26}")) {
             throw new IllegalArgumentException("identifier");
         }
+    }
+
+    private void upsert(MilvusClientV2 client, String collection, VectorCommand vectorCommand) {
+        // 1. 每次最多写入16个已验证分块，控制向量请求规模。
+        if (vectorCommand.items() == null || vectorCommand.items().size() > 16) {
+            throw new IllegalArgumentException("batch");
+        }
+        // 2. 读取当前用例的数据窗口，后续显式处理空结果。
+        List<JsonObject> rows = new ArrayList<>();
+        // 3. 逐项处理当前数据窗口，并在循环中核对可用状态与停止条件。
+        for (var item : vectorCommand.items()) {
+            validateId(item.key());
+            validateId(item.documentId());
+            if (item.generation() < 1
+                    || item.vector().size() != 1024
+                    || !item.hash().matches("[a-f0-9]{64}")) {
+                throw new IllegalArgumentException("vector schema");
+            }
+            JsonObject row = new JsonObject();
+            row.addProperty("vector_key", item.key());
+            row.addProperty("owner_user_id", vectorCommand.ownerId());
+            row.addProperty("document_id", item.documentId());
+            row.addProperty("index_generation", item.generation());
+            row.addProperty("chunk_no", item.chunkNo());
+            row.addProperty("content_hash", item.hash());
+            JsonArray vector = new JsonArray();
+            for (Float value : item.vector()) {
+                if (!Float.isFinite(value)) {
+                    throw new IllegalArgumentException("vector");
+                }
+                vector.add(value);
+            }
+            row.add("vector", vector);
+            rows.add(row);
+        }
+        // 4. 执行upsert职责步骤，并把失败交给所属事务或入口处理。
+        client.upsert(UpsertReq.builder().collectionName(collection).data(rows).build());
     }
 }

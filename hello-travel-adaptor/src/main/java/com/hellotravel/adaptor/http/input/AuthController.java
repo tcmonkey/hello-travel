@@ -1,6 +1,7 @@
 package com.hellotravel.adaptor.http.input;
 
 import com.hellotravel.adaptor.http.support.HttpIdentity;
+import com.hellotravel.adaptor.http.support.HttpResults;
 import com.hellotravel.application.auth.command.AuthCommand;
 import com.hellotravel.application.auth.service.AuthApplication;
 import com.hellotravel.application.security.adaptor.SecurityOutAdaptor;
@@ -63,6 +64,7 @@ public final class AuthController {
             HttpServletRequest httpServletRequest,
             HttpServletResponse response) {
         try {
+            // 1. 取得候选任务快照，领取时再次核验，供本段后续处理使用。
             String selected =
                     switch (action) {
                         case "challenge" -> "CHALLENGE";
@@ -89,16 +91,21 @@ public final class AuthController {
                                     HttpIdentity.cookie(httpServletRequest, "ht_refresh"),
                                     httpServletRequest.getHeader("X-CSRF-Token"),
                                     httpServletRequest.getRemoteAddr()));
+            // 2. 依据下层标准结果的成功状态处理分支，避免继续使用无效数据。
             if (!result.success()) {
-                return com.hellotravel.adaptor.http.support.HttpResults.failure(result);
+                return HttpResults.failure(result);
             }
+            // 3. 取得本段结果并准备本层转换，随后显式核对成功状态。
             var data = result.data();
+            // 4. 新签发或轮换凭据时更新受保护Cookie，原始刷新令牌不放入可读存储。
             if (data.refreshToken() != null) {
                 cookie(response, "ht_refresh", data.refreshToken(), 604800);
             }
+            // 5. 退出时清除本设备的认证Cookie。
             if ("LOGOUT".equals(selected)) {
                 cookie(response, "ht_refresh", "", 0);
             }
+            // 6. 将本层成功数据封装为标准结果，保持对外模型隔离。
             return Result.success(
                     new AuthResponse(
                             data.userPublicId(),
@@ -108,12 +115,14 @@ public final class AuthController {
                             data.csrf(),
                             data.challengeId()));
         } catch (Exception exception) {
-            return com.hellotravel.adaptor.http.support.HttpResults.capture(exception);
+            return HttpResults.capture(exception);
         }
     }
 
     private String device(HttpServletRequest httpServletRequest, HttpServletResponse response) {
+        // 1. 取得请求中的会话Cookie，供本段后续处理使用。
         String cookie = HttpIdentity.cookie(httpServletRequest, "ht_device");
+        // 2. 依据格式、长度或数量边界处理分支，避免继续使用无效数据。
         if (cookie != null && cookie.length() < 200) {
             String[] parts = cookie.split("\\.");
             if (parts.length == 2 && parts[0].matches("[a-zA-Z0-9_-]{43}")) {
@@ -125,21 +134,29 @@ public final class AuthController {
                 }
             }
         }
+        // 3. 准备当前操作的存储或签名标识。
         String key = Ids.token();
+        // 4. 执行cookie职责步骤，并把失败交给所属事务或入口处理。
         cookie(response, "ht_device", key + "." + sign(key), 31536000);
+        // 5. 返回本段实际处理结果，保持本层输出契约。
         return key;
     }
 
     private String sign(String key) {
+        // 1. 取得本段结果并准备本层转换，随后显式核对成功状态。
         var result = security.process(new SecurityCommand("SIGN_DEVICE", key, null, "device-v1"));
+        // 2. 核对下层标准结果的成功状态，失败中止当前处理。
         if (!result.success()) {
             throw new DomainException(DomainErrorCode.UNAVAILABLE);
         }
+        // 3. 返回本段实际处理结果，保持本层输出契约。
         return result.data().value();
     }
 
     private void cookie(HttpServletResponse response, String name, String value, long seconds) {
+        // 1. 取得安全端口的证明结果，供本段后续处理使用。
         boolean secure = environment.getProperty("COOKIE_SECURE", Boolean.class, false);
+        // 2. 执行addHeader职责步骤，并把失败交给所属事务或入口处理。
         response.addHeader(
                 "Set-Cookie",
                 ResponseCookie.from(name, value)

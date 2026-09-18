@@ -18,4 +18,4 @@ public record VectorItemCommand(
         int chunkNo,
         String hash,
         java.util.List<Float> vector) {
-        }
+}

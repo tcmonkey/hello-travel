@@ -1,5 +1,10 @@
 package com.hellotravel.domain.chat.model.entity;
 
+import com.hellotravel.common.identity.Ids;
+import com.hellotravel.domain.exception.DomainErrorCode;
+import com.hellotravel.domain.exception.DomainException;
+import com.hellotravel.domain.memory.model.value.ContextBudgetValue;
+
 /**
  * 持久化归属与状态快照；变更须经过语义方法和版本检查。
  *
@@ -58,11 +63,12 @@ public record ChatRunEntity(
         Long version) {
 
     /**
-     * 校验不可变值的边界并防御性复制输入集合。
+     * 防御性复制敏感字节字段，外部数组修改不能影响实体快照。
      *
      * @author AIGenerator
      */
     public ChatRunEntity {
+        // 1. 复制输入摘要或加密载荷，外部数组修改不能改变实体快照。
         requestDigest = requestDigest == null ? null : requestDigest.clone();
     }
 
@@ -74,9 +80,11 @@ public record ChatRunEntity(
      * @return 当前操作的业务结果
      */
     public ChatRunEntity claim(String owner) {
+        // 1. 依据实体当前状态与允许的操作处理分支，避免继续使用无效数据。
         if (!"ACCEPTED".equals(status)) {
             throw new IllegalStateException("run not accepted");
         }
+        // 2. 领取待执行任务并提高租约栅栏，返回不可变快照。
         return new ChatRunEntity(
                 this.id(),
                 this.publicId(),
@@ -114,6 +122,7 @@ public record ChatRunEntity(
      * @return 当前操作的业务结果
      */
     public ChatRunEntity finish(String terminal, String error) {
+        // 1. 结束当前生成尝试，终态不自动重复调用模型，返回不可变快照。
         return new ChatRunEntity(
                 this.id(),
                 this.publicId(),
@@ -150,9 +159,11 @@ public record ChatRunEntity(
      * @return 当前操作的业务结果
      */
     public ChatRunEntity retry(long epoch) {
+        // 1. 依据实体当前状态与允许的操作处理分支，避免继续使用无效数据。
         if (!java.util.Set.of("FAILED", "INTERRUPTED", "CANCELLED").contains(status)) {
             throw new IllegalStateException("not retryable");
         }
+        // 2. 启动显式重试代次，复用原始消息而不再次提交用户输入，返回不可变快照。
         return new ChatRunEntity(
                 this.id(),
                 this.publicId(),
@@ -191,6 +202,7 @@ public record ChatRunEntity(
      * @return 当前操作的业务结果
      */
     public ChatRunEntity checkpoint(String node, String data, String budget) {
+        // 1. 保留当前图节点与预算，旧执行者须通过栅栏检查，返回不可变快照。
         return new ChatRunEntity(
                 this.id(),
                 this.publicId(),
@@ -237,6 +249,110 @@ public record ChatRunEntity(
      * @return 当前操作的业务结果
      */
     public byte[] requestDigest() {
+        // 1. 交付摘要的独立副本，调用者修改返回数组不会改变实体快照。
         return requestDigest == null ? null : requestDigest.clone();
+    }
+
+    /**
+     * 接受绑定消息对及记忆代次的新任务，初始尝试与租约不能由调用方任意设置。
+     *
+     * @param conversation 任务绑定的会话
+     * @param sessionId 发起登录会话
+     * @param requestKey 请求幂等键
+     * @param digest 请求正文摘要
+     * @param input 已持久化的用户消息
+     * @param output 已持久化的助手占位消息
+     * @param time 当前UTC时间
+     * @return 待执行任务
+     * @author AIGenerator
+     */
+    public static ChatRunEntity accepted(
+            ConversationEntity conversation,
+            Long sessionId,
+            String requestKey,
+            byte[] digest,
+            MessageEntity input,
+            MessageEntity output,
+            java.time.LocalDateTime time) {
+        // 1. 核对关联对象归属与角色，拒绝跨账号或跨会话关联。
+        if (input.id() == null
+                || output.id() == null
+                || !conversation.id().equals(input.conversationId())
+                || !conversation.id().equals(output.conversationId())
+                || !conversation.userId().equals(input.userId())
+                || !conversation.userId().equals(output.userId())
+                || !"USER".equals(input.role())
+                || !"ASSISTANT".equals(output.role())) {
+            throw new IllegalArgumentException("message ownership");
+        }
+        // 2. 生成本次业务的公开标识，内部数据库主键保持由仓储分配。
+        String publicId = Ids.next();
+        // 3. 接受绑定消息对、幂等键和记忆代次的生成任务，返回不可变快照。
+        return new ChatRunEntity(
+                null,
+                publicId,
+                conversation.userId(),
+                conversation.id(),
+                sessionId,
+                requestKey,
+                digest,
+                input.id(),
+                output.id(),
+                "ACCEPTED",
+                0,
+                null,
+                "travel-v1",
+                conversation.memoryEpoch(),
+                null,
+                null,
+                null,
+                0L,
+                null,
+                null,
+                null,
+                null,
+                time,
+                time,
+                0L);
+    }
+
+    /**
+     * 核对快照更新的不变量，保持版本、归属与删除状态一致。
+     *
+     * @param prior 已持久化的实体快照
+     * @author AIGenerator
+     */
+    public void assertUpdateAgainst(ChatRunEntity prior) {
+        // 1. 核对数据库版本未发生并发变化，不满足时拒绝本次更新。
+        if (!prior.version().equals(this.version())) {
+            throw new DomainException(DomainErrorCode.CONFLICT);
+        }
+        // 2. 核对账号归属不变，不满足时拒绝本次更新。
+        if (!java.util.Objects.equals(prior.userId(), this.userId())) {
+            throw new DomainException(DomainErrorCode.INVALID);
+        }
+        // 3. 核对会话归属不变，不满足时拒绝本次更新。
+        if (!java.util.Objects.equals(prior.conversationId(), this.conversationId())) {
+            throw new DomainException(DomainErrorCode.INVALID);
+        }
+        // 4. 核对公开标识不被改写，不满足时拒绝本次更新。
+        if (!java.util.Objects.equals(prior.publicId(), this.publicId())) {
+            throw new DomainException(DomainErrorCode.INVALID);
+        }
+    }
+
+    /**
+     * 创建本次生成任务的上下文预算，容量和预留不变量由领域值对象控制。
+     *
+     * @param window 应用模型窗口
+     * @param input 当前完整输入的保守估算
+     * @param output 输出预留
+     * @param safety 安全预留
+     * @return 本次任务预算
+     * @author AIGenerator
+     */
+    public ContextBudgetValue contextBudget(int window, int input, int output, int safety) {
+        // 1. 封装当前任务的预算，应用编排只读取容量与压缩决策。
+        return new ContextBudgetValue(window, input, output, safety);
     }
 }

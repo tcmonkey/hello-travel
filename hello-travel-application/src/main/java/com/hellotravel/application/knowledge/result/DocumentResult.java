@@ -20,4 +20,4 @@ public record DocumentResult(
         String sourceUrl,
         String error,
         String text) {
-        }
+}

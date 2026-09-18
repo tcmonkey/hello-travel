@@ -24,4 +24,4 @@ public record KnowledgeCommand(
         Long expectedVersion,
         long after,
         int limit) {
-        }
+}

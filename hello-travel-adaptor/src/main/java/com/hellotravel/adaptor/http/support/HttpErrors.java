@@ -84,10 +84,12 @@ public final class HttpErrors {
      */
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Result<Void>> unexpected(Exception exception) {
+        // 1. 执行error职责步骤，并把失败交给所属事务或入口处理。
         LOGGER.error(
                 "request_failed type={} traceId={}",
                 exception.getClass().getSimpleName(),
                 MDC.get("traceId"));
+        // 2. 传播稳定失败分类，不泄漏原始技术异常。
         return ResponseEntity.status(500).body(Result.failure(AdaptorErrorCode.FAILED));
     }
 }
