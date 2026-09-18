@@ -3,10 +3,10 @@ package com.hellotravel.infrastructure.chat.repository;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.hellotravel.domain.chat.model.aggregate.ConversationAggregate;
-import com.hellotravel.domain.chat.model.entity.ConversationEntity;
 import com.hellotravel.domain.chat.repository.ConversationRepository;
 import com.hellotravel.domain.query.model.value.QueryValue;
 import com.hellotravel.infrastructure.TravelBaseRepository;
+import com.hellotravel.infrastructure.chat.converter.ConversationPersistenceConverter;
 import com.hellotravel.infrastructure.chat.mysql.mapper.ConversationMapper;
 import com.hellotravel.infrastructure.chat.mysql.pojo.ConversationPO;
 import com.hellotravel.infrastructure.exception.InfrastructureErrorCode;
@@ -27,6 +27,8 @@ public class ConversationRepositoryImpl
         extends TravelBaseRepository<ConversationMapper, ConversationPO>
         implements ConversationRepository {
 
+    private final ConversationPersistenceConverter conversationPersistenceConverter;
+
     /**
      * 按内部主键恢复完整聚合；不存在时返回空值。
      *
@@ -38,7 +40,7 @@ public class ConversationRepositoryImpl
         // 1. 转换完整聚合为本仓储PO，映射与状态决策分开。
         ConversationPO po = getById(id);
         // 2. 显式处理不存在的记录，并恢复聚合快照。
-        return po == null ? null : restore(po);
+        return po == null ? null : conversationPersistenceConverter.restore(po);
     }
 
     /**
@@ -68,7 +70,9 @@ public class ConversationRepositoryImpl
                                 "version"));
         Page<ConversationPO> page = new Page<>(1, queryValue.limit(), false);
         // 2. 读取有界PO集合并恢复完整聚合，不向上暴露ORM对象。
-        return page(page, wrapper).getRecords().stream().map(this::restore).toList();
+        return page(page, wrapper).getRecords().stream()
+                .map(conversationPersistenceConverter::restore)
+                .toList();
     }
 
     /**
@@ -81,7 +85,7 @@ public class ConversationRepositoryImpl
     public Boolean save(ConversationAggregate aggregate) {
         try {
             // 1. 转换完整聚合为本仓储PO，映射与状态决策分开。
-            ConversationPO po = toPersistence(aggregate);
+            ConversationPO po = conversationPersistenceConverter.toPersistence(aggregate);
             // 2. 区分新快照新增与已保存快照的版本CAS更新。
             if (po.getId() == null) {
                 return super.save(po);
@@ -114,48 +118,8 @@ public class ConversationRepositoryImpl
         return super.removeById(id);
     }
 
-    private ConversationAggregate restore(ConversationPO po) {
-        return new ConversationAggregate(
-                new ConversationEntity(
-                        po.getId(),
-                        po.getPublicId(),
-                        po.getUserId(),
-                        po.getTitle(),
-                        po.getLastMessageSeq(),
-                        po.getHistoryEpoch(),
-                        po.getMemoryEpoch(),
-                        po.getLastActivityAt(),
-                        po.getDeletedAt(),
-                        po.getCreatedAt(),
-                        po.getUpdatedAt(),
-                        po.getVersion()));
-    }
-
-    private
-    /**
-     * 将完整聚合快照转换为本仓储PO，映射不参与业务状态决策。
-     *
-     * @param aggregate 待保存聚合
-     * @return 数据库存储快照
-     * @author AIGenerator
-     */
-    ConversationPO toPersistence(ConversationAggregate aggregate) {
-        // 1. 转换完整聚合为本仓储PO，映射与状态决策分开。
-        ConversationPO po = new ConversationPO();
-        // 2. 映射本段快照字段，业务状态规则不放入PO赋值。
-        po.setId(aggregate.entity().id());
-        po.setPublicId(aggregate.entity().publicId());
-        po.setUserId(aggregate.entity().userId());
-        po.setTitle(aggregate.entity().title());
-        po.setLastMessageSeq(aggregate.entity().lastMessageSeq());
-        po.setHistoryEpoch(aggregate.entity().historyEpoch());
-        po.setMemoryEpoch(aggregate.entity().memoryEpoch());
-        po.setLastActivityAt(aggregate.entity().lastActivityAt());
-        po.setDeletedAt(aggregate.entity().deletedAt());
-        po.setCreatedAt(aggregate.entity().createdAt());
-        po.setUpdatedAt(aggregate.entity().updatedAt());
-        po.setVersion(aggregate.entity().version());
-        // 3. 返回完整存储快照，由保存步骤决定新增或版本CAS更新。
-        return po;
+    public ConversationRepositoryImpl(
+            ConversationPersistenceConverter conversationPersistenceConverter) {
+        this.conversationPersistenceConverter = conversationPersistenceConverter;
     }
 }

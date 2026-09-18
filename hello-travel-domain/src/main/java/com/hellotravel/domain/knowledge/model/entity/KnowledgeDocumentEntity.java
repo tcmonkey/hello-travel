@@ -3,6 +3,7 @@ package com.hellotravel.domain.knowledge.model.entity;
 import com.hellotravel.common.identity.Ids;
 import com.hellotravel.domain.exception.DomainErrorCode;
 import com.hellotravel.domain.exception.DomainException;
+import com.hellotravel.domain.knowledge.model.value.EmbeddingProfileValue;
 
 /**
  * 持久化归属与状态快照；变更须经过语义方法和版本检查。
@@ -239,6 +240,7 @@ public record KnowledgeDocumentEntity(
      * @param contentSha256 原始文件SHA256校验及重复导入识别
      * @param extractedText 提取的明文，页面分段加载；应用有提取上限
      * @param sourceUrl 官方来源链接或用户提供的来源，仅作引用
+     * @param profile 已选择的不可变索引配置
      * @param createdAt 创建时间
      * @param updatedAt 当前变更时间
      * @return 保持归属与版本的业务快照
@@ -254,6 +256,7 @@ public record KnowledgeDocumentEntity(
             byte[] contentSha256,
             String extractedText,
             String sourceUrl,
+            EmbeddingProfileValue profile,
             java.time.LocalDateTime createdAt,
             java.time.LocalDateTime updatedAt) {
         // 1. 创建已解析的知识文档，索引就绪需后续任务确认，返回不可变快照。
@@ -273,9 +276,9 @@ public record KnowledgeDocumentEntity(
                 null,
                 "RECEIVED",
                 1L,
-                "text-embedding-v4",
-                1024,
-                "hello_travel_kb_v1_d1024",
+                profile.model(),
+                profile.dimensions(),
+                profile.collection(),
                 null,
                 null,
                 createdAt,

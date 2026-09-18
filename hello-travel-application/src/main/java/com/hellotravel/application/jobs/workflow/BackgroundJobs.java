@@ -1,21 +1,21 @@
 package com.hellotravel.application.jobs.workflow;
 
+import com.hellotravel.application.exception.ApplicationErrorCode;
+import com.hellotravel.application.exception.ApplicationException;
 import com.hellotravel.application.knowledge.workflow.KnowledgeIndexer;
 import com.hellotravel.application.mail.adaptor.MailOutAdaptor;
-import com.hellotravel.application.mail.command.MailCommand;
+import com.hellotravel.application.mail.assembler.MailCommandAssembler;
 import com.hellotravel.application.memory.workflow.MemoryFlow;
 import com.hellotravel.application.memory.workflow.PrivacyCleanup;
 import com.hellotravel.application.persistence.DomainWrites;
 import com.hellotravel.application.persistence.TravelRepositories;
 import com.hellotravel.application.security.adaptor.SecurityOutAdaptor;
-import com.hellotravel.application.security.command.SecurityCommand;
+import com.hellotravel.application.security.assembler.SecurityCommandAssembler;
 import com.hellotravel.application.support.Json;
 import com.hellotravel.application.travel.workflow.RunCoordinator;
 import com.hellotravel.application.travel.workflow.TravelGraph;
 import com.hellotravel.application.tx.Transactions;
 import com.hellotravel.domain.auth.model.aggregate.EmailChallengeAggregate;
-import com.hellotravel.domain.exception.DomainErrorCode;
-import com.hellotravel.domain.exception.DomainException;
 import com.hellotravel.domain.query.model.value.QueryValue;
 import com.hellotravel.domain.sync.model.aggregate.OutboxEventAggregate;
 import com.hellotravel.domain.sync.model.entity.OutboxEventEntity;
@@ -76,6 +76,10 @@ public final class BackgroundJobs {
                     },
                     new java.util.concurrent.ThreadPoolExecutor.AbortPolicy());
 
+    private final MailCommandAssembler mailCommandAssembler;
+
+    private final SecurityCommandAssembler securityCommandAssembler;
+
     public BackgroundJobs(
             DomainWrites writes,
             TravelRepositories repositories,
@@ -86,7 +90,9 @@ public final class BackgroundJobs {
             KnowledgeIndexer indexer,
             RunCoordinator coordinator,
             SecurityOutAdaptor security,
-            MailOutAdaptor mail) {
+            MailOutAdaptor mail,
+            MailCommandAssembler mailCommandAssembler,
+            SecurityCommandAssembler securityCommandAssembler) {
         this.writes = writes;
         this.repositories = repositories;
         this.transactions = transactions;
@@ -97,6 +103,8 @@ public final class BackgroundJobs {
         this.coordinator = coordinator;
         this.security = security;
         this.mail = mail;
+        this.mailCommandAssembler = mailCommandAssembler;
+        this.securityCommandAssembler = securityCommandAssembler;
     }
 
     /**
@@ -203,14 +211,10 @@ public final class BackgroundJobs {
         // 5. 准备可投递的加密验证码，原始码不进入数据库。
         String encrypted =
                 java.util.Base64.getEncoder().encodeToString(challenge.deliveryCiphertext());
-        var decrypted = security.process(new SecurityCommand("DECRYPT", encrypted, null, id));
+        var decrypted = security.process(securityCommandAssembler.decrypt(encrypted, id));
         boolean sent =
                 decrypted.success()
-                        && mail.deliver(
-                                        new MailCommand(
-                                                challenge.emailNormalized(),
-                                                decrypted.data().value(),
-                                                id))
+                        && mail.deliver(mailCommandAssembler.challenge(challenge, decrypted.data()))
                                 .success();
         // 6. 进入受控事务处理，结果与回滚责任保持清晰。
         transactions.plain(
@@ -229,7 +233,7 @@ public final class BackgroundJobs {
                 });
         // 7. 邮件未确认投递成功时登记可恢复失败，不能把任务标为已发送。
         if (!sent) {
-            throw new DomainException(DomainErrorCode.UNAVAILABLE);
+            throw new ApplicationException(ApplicationErrorCode.UNAVAILABLE);
         }
     }
 

@@ -1,15 +1,11 @@
 package com.hellotravel.adaptor.http.input;
 
-import com.hellotravel.adaptor.http.support.ApiViews;
-import com.hellotravel.adaptor.http.support.HttpIdentity;
+import com.hellotravel.adaptor.http.assembler.ChatInputAssembler;
 import com.hellotravel.adaptor.http.support.HttpResults;
-import com.hellotravel.application.chat.command.ChatCommand;
 import com.hellotravel.application.chat.service.ChatApplication;
 import com.hellotravel.client.chat.request.ChatRequest;
 import com.hellotravel.client.chat.response.ChatResponse;
 import com.hellotravel.common.result.Result;
-import com.hellotravel.domain.exception.DomainErrorCode;
-import com.hellotravel.domain.exception.DomainException;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -31,11 +27,11 @@ public final class ChatController {
 
     private final ChatApplication application;
 
-    private final ApiViews views;
+    private final ChatInputAssembler chatInputAssembler;
 
-    public ChatController(ChatApplication application, ApiViews views) {
+    public ChatController(ChatApplication application, ChatInputAssembler chatInputAssembler) {
         this.application = application;
-        this.views = views;
+        this.chatInputAssembler = chatInputAssembler;
     }
 
     /**
@@ -53,42 +49,15 @@ public final class ChatController {
             @Valid @RequestBody ChatRequest chatRequest,
             HttpServletRequest httpServletRequest) {
         try {
-            // 1. 取得候选任务快照，领取时再次核验，供本段后续处理使用。
-            String selected =
-                    switch (action) {
-                        case "bootstrap" -> "BOOTSTRAP";
-                        case "list" -> "LIST";
-                        case "create" -> "CREATE";
-                        case "rename" -> "RENAME";
-                        case "history" -> "HISTORY";
-                        case "submit" -> "SUBMIT";
-                        case "run" -> "RUN";
-                        case "cancel" -> "CANCEL";
-                        case "retry" -> "RETRY";
-                        case "delete" -> "DELETE";
-                        case "delete-messages" -> "DELETE_MESSAGES";
-                        case "context" -> "CONTEXT";
-                        default -> throw new DomainException(DomainErrorCode.NOT_FOUND);
-                    };
-            var result =
-                    application.manage(
-                            new ChatCommand(
-                                    selected,
-                                    HttpIdentity.user(httpServletRequest),
-                                    HttpIdentity.session(httpServletRequest),
-                                    chatRequest.conversationId(),
-                                    chatRequest.runId(),
-                                    chatRequest.title(),
-                                    chatRequest.text(),
-                                    chatRequest.requestKey(),
-                                    chatRequest.messageIds(),
-                                    chatRequest.expectedVersion(),
-                                    chatRequest.after() == null ? 0 : chatRequest.after(),
-                                    chatRequest.maxSeq(),
-                                    chatRequest.historyEpoch(),
-                                    chatRequest.limit() == null ? 100 : chatRequest.limit()));
-            // 2. 返回本段实际处理结果，保持本层输出契约。
-            return views.respond(result, ChatResponse.class);
+            // 1. 将协议路由和完整请求转换为具有可信身份的用例命令。
+            var command = chatInputAssembler.toCommand(action, chatRequest, httpServletRequest);
+            // 2. 执行应用入口，保留失败分类且不向外暴露内部载荷。
+            var result = application.manage(command);
+            if (!result.success()) {
+                return HttpResults.failure(result);
+            }
+            // 3. 通过本层assembler投影公开响应。
+            return Result.success(chatInputAssembler.toResponse(result.data()));
         } catch (Exception exception) {
             return HttpResults.capture(exception);
         }

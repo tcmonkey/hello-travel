@@ -1,10 +1,14 @@
 package com.hellotravel.application.auth.workflow;
 
+import com.hellotravel.application.auth.assembler.AuthApplicationAssembler;
 import com.hellotravel.application.auth.command.AuthCommand;
 import com.hellotravel.application.auth.result.AuthResult;
+import com.hellotravel.application.exception.ApplicationErrorCode;
+import com.hellotravel.application.exception.ApplicationException;
 import com.hellotravel.application.persistence.DomainWrites;
 import com.hellotravel.application.persistence.TravelRepositories;
 import com.hellotravel.application.security.adaptor.SecurityOutAdaptor;
+import com.hellotravel.application.security.assembler.SecurityCommandAssembler;
 import com.hellotravel.application.security.command.SecurityCommand;
 import com.hellotravel.application.support.Json;
 import com.hellotravel.application.sync.workflow.SyncEvents;
@@ -20,8 +24,6 @@ import com.hellotravel.domain.auth.model.entity.DeviceEntity;
 import com.hellotravel.domain.auth.model.entity.EmailChallengeEntity;
 import com.hellotravel.domain.auth.model.entity.LoginSessionEntity;
 import com.hellotravel.domain.auth.model.entity.UserAccountEntity;
-import com.hellotravel.domain.exception.DomainErrorCode;
-import com.hellotravel.domain.exception.DomainException;
 import com.hellotravel.domain.query.model.value.QueryValue;
 import com.hellotravel.model.security.SecurityDO;
 
@@ -54,17 +56,25 @@ public final class AuthFlow {
 
     private final SecurityOutAdaptor security;
 
+    private final AuthApplicationAssembler authApplicationAssembler;
+
+    private final SecurityCommandAssembler securityCommandAssembler;
+
     public AuthFlow(
             DomainWrites writes,
             TravelRepositories repositories,
             Transactions transactions,
             SyncEvents events,
-            SecurityOutAdaptor security) {
+            SecurityOutAdaptor security,
+            AuthApplicationAssembler authApplicationAssembler,
+            SecurityCommandAssembler securityCommandAssembler) {
         this.writes = writes;
         this.repositories = repositories;
         this.transactions = transactions;
         this.events = events;
         this.security = security;
+        this.authApplicationAssembler = authApplicationAssembler;
+        this.securityCommandAssembler = securityCommandAssembler;
     }
 
     /**
@@ -84,17 +94,16 @@ public final class AuthFlow {
             case "CHECK" -> check(command);
             case "RESET" -> reset(command);
             case "LOGOUT" -> logout(command);
-            default -> throw new DomainException(DomainErrorCode.INVALID);
+            default -> throw new ApplicationException(ApplicationErrorCode.INVALID);
         };
     }
 
-    private SecurityDO secure(String action, String value, String proof, String scope) {
+    private SecurityDO secure(SecurityCommand command) {
         // 1. 取得本段结果并准备本层转换，随后显式核对成功状态。
-        Result<SecurityDO> result =
-                security.process(new SecurityCommand(action, value, proof, scope));
+        Result<SecurityDO> result = security.process(command);
         // 2. 核对下层标准结果的成功状态，失败中止当前处理。
         if (!result.success()) {
-            throw new DomainException(DomainErrorCode.UNAVAILABLE);
+            throw new ApplicationException(ApplicationErrorCode.UNAVAILABLE);
         }
         // 3. 返回本段实际处理结果，保持本层输出契约。
         return result.data();
@@ -103,7 +112,7 @@ public final class AuthFlow {
     private String email(String raw) {
         // 1. 拒绝为空、超长或不符合基本格式的邮箱，避免无效证明进入认证链路。
         if (raw == null || raw.length() > 254 || !raw.matches("[^\\s@]+@[^\\s@]+\\.[^\\s@]+")) {
-            throw new DomainException(DomainErrorCode.INVALID);
+            throw new ApplicationException(ApplicationErrorCode.INVALID);
         }
         // 2. 返回去空白、统一大小写的规范邮箱供唯一键与证明绑定使用。
         return raw.strip().toLowerCase(Locale.ROOT);
@@ -111,10 +120,10 @@ public final class AuthFlow {
 
     private void limit(AuthCommand command, String key) {
         // 1. 取得本段结果并准备本层转换，随后显式核对成功状态。
-        SecurityDO result = secure("LIMIT", command.rateKey(), null, key);
+        SecurityDO result = secure(securityCommandAssembler.limit(command.rateKey(), key));
         // 2. 核对安全端口返回的验证或限流结果，失败提前中止。
         if (!result.valid()) {
-            throw new DomainException(DomainErrorCode.RATE_LIMITED);
+            throw new ApplicationException(ApplicationErrorCode.RATE_LIMITED);
         }
     }
 
@@ -132,7 +141,7 @@ public final class AuthFlow {
         if (command.challengeId() == null
                 || command.code() == null
                 || !command.code().matches("[0-9]{6}")) {
-            throw new DomainException(DomainErrorCode.UNAUTHORIZED);
+            throw new ApplicationException(ApplicationErrorCode.UNAUTHORIZED);
         }
         // 2. 读取邮箱验证码，按当前用例条件限定查询窗口。
         var found =
@@ -140,7 +149,7 @@ public final class AuthFlow {
                         QueryValue.all("id", 1).where("public_id", "EQ", command.challengeId()));
         // 3. 验证码记录缺失时统一拒绝邮箱证明。
         if (found.isEmpty()) {
-            throw new DomainException(DomainErrorCode.UNAUTHORIZED);
+            throw new ApplicationException(ApplicationErrorCode.UNAUTHORIZED);
         }
         // 4. 取得当前对话或验证码快照，供本段后续处理使用。
         EmailChallengeEntity c = found.get(0).entity();
@@ -154,10 +163,13 @@ public final class AuthFlow {
                 Base64.getDecoder()
                         .decode(
                                 secure(
-                                                "HMAC",
-                                                command.code(),
-                                                null,
-                                                c.publicId() + "|" + address + "|" + purpose)
+                                                securityCommandAssembler.hmac(
+                                                        command.code(),
+                                                        c.publicId()
+                                                                + "|"
+                                                                + address
+                                                                + "|"
+                                                                + purpose))
                                         .value());
         // 5. 核对验证码有效期、用途、状态与HMAC证明，验证失败统一拒绝。
         if (!usable || !MessageDigest.isEqual(computed, c.codeHmac())) {
@@ -178,7 +190,7 @@ public final class AuthFlow {
                             return null;
                         });
             }
-            throw new DomainException(DomainErrorCode.UNAUTHORIZED);
+            throw new ApplicationException(ApplicationErrorCode.UNAUTHORIZED);
         }
         // 6. 返回本段实际处理结果，保持本层输出契约。
         return c;
@@ -189,7 +201,7 @@ public final class AuthFlow {
         EmailChallengeEntity current = repositories.emailChallenge.findById(proof.id()).entity();
         // 2. 核对快照版本与预期版本，失败中止当前处理。
         if (!current.version().equals(proof.version()) || !"ISSUED".equals(current.status())) {
-            throw new DomainException(DomainErrorCode.UNAUTHORIZED);
+            throw new ApplicationException(ApplicationErrorCode.UNAUTHORIZED);
         }
         // 3. 持久化当前完整聚合，失败必须中断事务而非继续提交。
         Transactions.require(
@@ -199,10 +211,10 @@ public final class AuthFlow {
     private String hashPassword(String password) {
         // 1. 核对输入或读取结果的存在性，失败中止当前处理。
         if (password == null || password.length() < 12 || password.length() > 128) {
-            throw new DomainException(DomainErrorCode.INVALID);
+            throw new ApplicationException(ApplicationErrorCode.INVALID);
         }
         // 2. 返回带算法、参数与盐的密码摘要，原始密码不进入数据库。
-        return secure("HASH_PASSWORD", password, null, null).value();
+        return secure(securityCommandAssembler.hashPassword(password)).value();
     }
 
     private AuthResult challenge(AuthCommand command) {
@@ -210,11 +222,11 @@ public final class AuthFlow {
         String address = email(command.email());
         // 2. 仅接受注册、登录和密码重置三种验证码用途。
         if (!Set.of("REGISTER", "LOGIN", "RESET_PASSWORD").contains(command.purpose())) {
-            throw new DomainException(DomainErrorCode.INVALID);
+            throw new ApplicationException(ApplicationErrorCode.INVALID);
         }
         // 3. 核对安全端口返回的验证或限流结果，失败提前中止。
-        if (!secure("MAIL_AVAILABLE", null, null, null).valid()) {
-            throw new DomainException(DomainErrorCode.UNAVAILABLE);
+        if (!secure(securityCommandAssembler.mailAvailable()).valid()) {
+            throw new ApplicationException(ApplicationErrorCode.UNAVAILABLE);
         }
         // 4. 执行当前主体及用途的频控，超限提前中止。
         limit(command, "issue:" + address + ":" + command.purpose());
@@ -222,17 +234,22 @@ public final class AuthFlow {
         limit(command, "issue-ip");
         // 6. 生成本次业务的公开标识，内部数据库主键保持由仓储分配。
         String id = Ids.next();
-        String code = secure("OTP", null, null, null).value();
+        String code = secure(securityCommandAssembler.otp()).value();
         byte[] hmac =
                 Base64.getDecoder()
                         .decode(
                                 secure(
-                                                "HMAC",
-                                                code,
-                                                null,
-                                                id + "|" + address + "|" + command.purpose())
+                                                securityCommandAssembler.hmac(
+                                                        code,
+                                                        id
+                                                                + "|"
+                                                                + address
+                                                                + "|"
+                                                                + command.purpose()))
                                         .value());
-        byte[] encrypted = Base64.getDecoder().decode(secure("ENCRYPT", code, null, id).value());
+        byte[] encrypted =
+                Base64.getDecoder()
+                        .decode(secure(securityCommandAssembler.encrypt(code, id)).value());
         // 7. 进入受控事务处理，结果与回滚责任保持清晰。
         transactions.plain(
                 () -> {
@@ -274,7 +291,7 @@ public final class AuthFlow {
                     return null;
                 });
         // 8. 返回本段实际处理结果，保持本层输出契约。
-        return new AuthResult(null, null, null, null, null, null, null, null, id);
+        return authApplicationAssembler.challenge(id);
     }
 
     private AuthResult register(AuthCommand command) {
@@ -307,7 +324,7 @@ public final class AuthFlow {
         // 5. 取得新账号的持久化快照，供本段后续处理使用。
         UserAccountEntity user = account(address);
         // 6. 将已读取快照转为本用例视图，凭据与内部字段按协议隔离。
-        return view(user, null, null, null, null);
+        return authApplicationAssembler.account(user);
     }
 
     private AuthResult login(AuthCommand command) {
@@ -322,23 +339,15 @@ public final class AuthFlow {
         if (command.challengeId() != null && !command.challengeId().isBlank()) {
             verified = proof(command, "LOGIN", address);
         } else {
-            String fake =
-                    "$argon2id$v=19$m=19456,t=2,p=1$MDEyMzQ1Njc4OWFiY2RlZg$U"
-                            + "Vh1B85rlNqd2WCQ9z89uC0mPPsTLcI90J6V3fZnMmM";
             boolean valid =
-                    secure(
-                                    "VERIFY_PASSWORD",
-                                    command.password() == null ? "" : command.password(),
-                                    snapshot == null ? fake : snapshot.passwordHash(),
-                                    null)
-                            .valid();
+                    secure(securityCommandAssembler.passwordProof(command, snapshot)).valid();
             if (!valid) {
-                throw new DomainException(DomainErrorCode.UNAUTHORIZED);
+                throw new ApplicationException(ApplicationErrorCode.UNAUTHORIZED);
             }
         }
         // 5. 本浏览器设备尚未登记时创建归属当前账号的设备实例。
         if (snapshot == null || !"ACTIVE".equals(snapshot.status())) {
-            throw new DomainException(DomainErrorCode.UNAUTHORIZED);
+            throw new ApplicationException(ApplicationErrorCode.UNAUTHORIZED);
         }
         // 6. 固定外部校验结果，事务内再次核对账号代次。
         EmailChallengeEntity codeProof = verified;
@@ -350,7 +359,7 @@ public final class AuthFlow {
                     // 1. 再次核对密码快照与账号认证代次，阻断重置后的旧校验结果。
                     if (!current.passwordHash().equals(snapshot.passwordHash())
                             || !current.authEpoch().equals(snapshot.authEpoch())) {
-                        throw new DomainException(DomainErrorCode.UNAUTHORIZED);
+                        throw new ApplicationException(ApplicationErrorCode.UNAUTHORIZED);
                     }
                     // 2. 验证码登录在签发会话事务中消费证明，失败随业务一起回滚。
                     if (codeProof != null) {
@@ -422,14 +431,14 @@ public final class AuthFlow {
                                     .get(0)
                                     .entity();
                     // 11. 将已读取快照转为本用例视图，凭据与内部字段按协议隔离。
-                    return view(current, stored, access, refresh, csrf);
+                    return authApplicationAssembler.session(current, stored, access, refresh, csrf);
                 });
     }
 
     private LoginSessionEntity session(String token, boolean refresh) {
         // 1. 核对输入或读取结果的存在性，失败中止当前处理。
         if (token == null || token.length() > 200) {
-            throw new DomainException(DomainErrorCode.UNAUTHORIZED);
+            throw new ApplicationException(ApplicationErrorCode.UNAUTHORIZED);
         }
         // 2. 读取登录会话，按当前用例条件限定查询窗口。
         var found =
@@ -441,7 +450,7 @@ public final class AuthFlow {
                                         Ids.hash(token)));
         // 3. 凭据没有匹配会话时返回认证失效，不猜测历史会话。
         if (found.isEmpty()) {
-            throw new DomainException(DomainErrorCode.UNAUTHORIZED);
+            throw new ApplicationException(ApplicationErrorCode.UNAUTHORIZED);
         }
         // 4. 返回凭据摘要对应的登录快照，活动状态由下一步骤核验。
         return found.get(0).entity();
@@ -450,7 +459,7 @@ public final class AuthFlow {
     private UserAccountEntity valid(LoginSessionEntity session, String expected, boolean refresh) {
         // 1. 核对页面绑定的会话SID，旧页面不得借新Cookie恢复为有效身份。
         if (!session.publicId().equals(expected)) {
-            throw new DomainException(DomainErrorCode.SESSION_REPLACED);
+            throw new ApplicationException(ApplicationErrorCode.SESSION_REPLACED);
         }
         // 2. 按可信内部标识读取账号当前快照。
         UserAccountEntity user = repositories.userAccount.findById(session.userId()).entity();
@@ -460,7 +469,7 @@ public final class AuthFlow {
                 || !session.authEpoch().equals(user.authEpoch())
                 || !(refresh ? session.refreshExpiresAt() : session.accessExpiresAt())
                         .isAfter(now())) {
-            throw new DomainException(DomainErrorCode.UNAUTHORIZED);
+            throw new ApplicationException(ApplicationErrorCode.UNAUTHORIZED);
         }
         // 4. 返回通过会话、页面SID、有效期与认证代次核验的账号。
         return user;
@@ -470,7 +479,7 @@ public final class AuthFlow {
         // 1. 取得当前登录会话快照，供本段后续处理使用。
         LoginSessionEntity s = session(command.accessToken(), false);
         // 2. 将已读取快照转为本用例视图，凭据与内部字段按协议隔离。
-        return view(valid(s, command.expectedSid(), false), s, null, null, null);
+        return authApplicationAssembler.checked(valid(s, command.expectedSid(), false), s);
     }
 
     private AuthResult refresh(AuthCommand command) {
@@ -479,7 +488,7 @@ public final class AuthFlow {
         // 2. 在异常捕获或资源释放边界内完成本段处理，失败不得伪装为成功。
         try {
             snapshot = session(command.refreshToken(), true);
-        } catch (DomainException exception) {
+        } catch (ApplicationException exception) {
             if (command.refreshToken() != null && command.refreshToken().length() <= 200) {
                 var receipts =
                         repositories.refreshReceipt.query(
@@ -493,7 +502,7 @@ public final class AuthFlow {
                                     .findById(receipts.get(0).entity().sessionId())
                                     .entity();
                     if (!prior.publicId().equals(command.expectedSid())) {
-                        throw new DomainException(DomainErrorCode.SESSION_REPLACED);
+                        throw new ApplicationException(ApplicationErrorCode.SESSION_REPLACED);
                     }
                     transactions.mutate(
                             prior.userId(),
@@ -526,7 +535,7 @@ public final class AuthFlow {
         // 4. 核对CSRF证明与当前会话凭据，防止跨站或旧页面冒用。
         if (command.csrf() == null
                 || !MessageDigest.isEqual(snapshot.csrfTokenHash(), Ids.hash(command.csrf()))) {
-            throw new DomainException(DomainErrorCode.UNAUTHORIZED);
+            throw new ApplicationException(ApplicationErrorCode.UNAUTHORIZED);
         }
         // 5. 生成本次签发或轮换的随机访问、刷新及CSRF凭据。
         String access = Ids.token(), refresh = Ids.token(), csrf = Ids.token();
@@ -542,7 +551,7 @@ public final class AuthFlow {
                     // 3. 刷新证明与已加载快照不一致时拒绝轮换，阻断消费后的重放。
                     if (!MessageDigest.isEqual(
                             stored.refreshTokenHash(), Ids.hash(command.refreshToken()))) {
-                        throw new DomainException(DomainErrorCode.UNAUTHORIZED);
+                        throw new ApplicationException(ApplicationErrorCode.UNAUTHORIZED);
                     }
                     // 4. 通过领域聚合语义准备业务快照，固定状态由实体封装。
                     var receipt =
@@ -577,7 +586,8 @@ public final class AuthFlow {
                             null,
                             "{}");
                     // 9. 将已读取快照转为本用例视图，凭据与内部字段按协议隔离。
-                    return view(current, rotated, access, refresh, csrf);
+                    return authApplicationAssembler.session(
+                            current, rotated, access, refresh, csrf);
                 });
     }
 
@@ -621,7 +631,7 @@ public final class AuthFlow {
         UserAccountEntity owner = account(address);
         // 4. 核对输入或读取结果的存在性，失败中止当前处理。
         if (owner == null) {
-            throw new DomainException(DomainErrorCode.UNAUTHORIZED);
+            throw new ApplicationException(ApplicationErrorCode.UNAUTHORIZED);
         }
         // 5. 进入受控事务处理，结果与回滚责任保持清晰。
         transactions.mutate(
@@ -659,25 +669,7 @@ public final class AuthFlow {
                     return null;
                 });
         // 6. 将已读取快照转为本用例视图，凭据与内部字段按协议隔离。
-        return view(owner, null, null, null, null);
-    }
-
-    private AuthResult view(
-            UserAccountEntity account,
-            LoginSessionEntity session,
-            String access,
-            String refresh,
-            String csrf) {
-        return new AuthResult(
-                account.id(),
-                account.publicId(),
-                account.emailNormalized(),
-                session == null ? null : session.publicId(),
-                session == null ? null : session.id(),
-                access,
-                refresh,
-                csrf,
-                null);
+        return authApplicationAssembler.account(owner);
     }
 
     private static LocalDateTime now() {

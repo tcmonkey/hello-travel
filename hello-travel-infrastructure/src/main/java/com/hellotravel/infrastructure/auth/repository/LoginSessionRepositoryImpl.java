@@ -3,10 +3,10 @@ package com.hellotravel.infrastructure.auth.repository;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.hellotravel.domain.auth.model.aggregate.LoginSessionAggregate;
-import com.hellotravel.domain.auth.model.entity.LoginSessionEntity;
 import com.hellotravel.domain.auth.repository.LoginSessionRepository;
 import com.hellotravel.domain.query.model.value.QueryValue;
 import com.hellotravel.infrastructure.TravelBaseRepository;
+import com.hellotravel.infrastructure.auth.converter.LoginSessionPersistenceConverter;
 import com.hellotravel.infrastructure.auth.mysql.mapper.LoginSessionMapper;
 import com.hellotravel.infrastructure.auth.mysql.pojo.LoginSessionPO;
 import com.hellotravel.infrastructure.exception.InfrastructureErrorCode;
@@ -27,6 +27,8 @@ public class LoginSessionRepositoryImpl
         extends TravelBaseRepository<LoginSessionMapper, LoginSessionPO>
         implements LoginSessionRepository {
 
+    private final LoginSessionPersistenceConverter loginSessionPersistenceConverter;
+
     /**
      * 按内部主键恢复完整聚合；不存在时返回空值。
      *
@@ -38,7 +40,7 @@ public class LoginSessionRepositoryImpl
         // 1. 转换完整聚合为本仓储PO，映射与状态决策分开。
         LoginSessionPO po = getById(id);
         // 2. 显式处理不存在的记录，并恢复聚合快照。
-        return po == null ? null : restore(po);
+        return po == null ? null : loginSessionPersistenceConverter.restore(po);
     }
 
     /**
@@ -73,7 +75,9 @@ public class LoginSessionRepositoryImpl
                                 "version"));
         Page<LoginSessionPO> page = new Page<>(1, queryValue.limit(), false);
         // 2. 读取有界PO集合并恢复完整聚合，不向上暴露ORM对象。
-        return page(page, wrapper).getRecords().stream().map(this::restore).toList();
+        return page(page, wrapper).getRecords().stream()
+                .map(loginSessionPersistenceConverter::restore)
+                .toList();
     }
 
     /**
@@ -86,7 +90,7 @@ public class LoginSessionRepositoryImpl
     public Boolean save(LoginSessionAggregate aggregate) {
         try {
             // 1. 转换完整聚合为本仓储PO，映射与状态决策分开。
-            LoginSessionPO po = toPersistence(aggregate);
+            LoginSessionPO po = loginSessionPersistenceConverter.toPersistence(aggregate);
             // 2. 区分新快照新增与已保存快照的版本CAS更新。
             if (po.getId() == null) {
                 return super.save(po);
@@ -119,58 +123,8 @@ public class LoginSessionRepositoryImpl
         return super.removeById(id);
     }
 
-    private LoginSessionAggregate restore(LoginSessionPO po) {
-        return new LoginSessionAggregate(
-                new LoginSessionEntity(
-                        po.getId(),
-                        po.getPublicId(),
-                        po.getUserId(),
-                        po.getDeviceId(),
-                        po.getAccessTokenHash(),
-                        po.getRefreshTokenHash(),
-                        po.getCsrfTokenHash(),
-                        po.getAuthEpoch(),
-                        po.getStatus(),
-                        po.getRevokeReason(),
-                        po.getAccessExpiresAt(),
-                        po.getRefreshExpiresAt(),
-                        po.getLastSeenAt(),
-                        po.getRevokedAt(),
-                        po.getCreatedAt(),
-                        po.getUpdatedAt(),
-                        po.getVersion()));
-    }
-
-    private
-    /**
-     * 将完整聚合快照转换为本仓储PO，映射不参与业务状态决策。
-     *
-     * @param aggregate 待保存聚合
-     * @return 数据库存储快照
-     * @author AIGenerator
-     */
-    LoginSessionPO toPersistence(LoginSessionAggregate aggregate) {
-        // 1. 转换完整聚合为本仓储PO，映射与状态决策分开。
-        LoginSessionPO po = new LoginSessionPO();
-        // 2. 映射本段快照字段，业务状态规则不放入PO赋值。
-        po.setId(aggregate.entity().id());
-        po.setPublicId(aggregate.entity().publicId());
-        po.setUserId(aggregate.entity().userId());
-        po.setDeviceId(aggregate.entity().deviceId());
-        po.setAccessTokenHash(aggregate.entity().accessTokenHash());
-        po.setRefreshTokenHash(aggregate.entity().refreshTokenHash());
-        po.setCsrfTokenHash(aggregate.entity().csrfTokenHash());
-        po.setAuthEpoch(aggregate.entity().authEpoch());
-        po.setStatus(aggregate.entity().status());
-        po.setRevokeReason(aggregate.entity().revokeReason());
-        po.setAccessExpiresAt(aggregate.entity().accessExpiresAt());
-        po.setRefreshExpiresAt(aggregate.entity().refreshExpiresAt());
-        po.setLastSeenAt(aggregate.entity().lastSeenAt());
-        po.setRevokedAt(aggregate.entity().revokedAt());
-        po.setCreatedAt(aggregate.entity().createdAt());
-        po.setUpdatedAt(aggregate.entity().updatedAt());
-        po.setVersion(aggregate.entity().version());
-        // 3. 返回完整存储快照，由保存步骤决定新增或版本CAS更新。
-        return po;
+    public LoginSessionRepositoryImpl(
+            LoginSessionPersistenceConverter loginSessionPersistenceConverter) {
+        this.loginSessionPersistenceConverter = loginSessionPersistenceConverter;
     }
 }

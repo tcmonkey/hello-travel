@@ -2,6 +2,7 @@ package com.hellotravel.adaptor.travel.output;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.hellotravel.adaptor.exception.AdaptorErrorCode;
+import com.hellotravel.adaptor.travel.output.converter.TravelOutputConverter;
 import com.hellotravel.application.support.Json;
 import com.hellotravel.application.travel.adaptor.TravelOutAdaptor;
 import com.hellotravel.application.travel.command.TravelCommand;
@@ -12,10 +13,7 @@ import com.hellotravel.model.travel.TravelDO;
 import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Component;
 
-import java.net.URI;
-import java.net.URLEncoder;
 import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
@@ -31,8 +29,12 @@ public final class TravelOutAdaptorImpl implements TravelOutAdaptor {
 
     private final Environment environment;
 
-    public TravelOutAdaptorImpl(Environment environment) {
+    private final TravelOutputConverter travelOutputConverter;
+
+    public TravelOutAdaptorImpl(
+            Environment environment, TravelOutputConverter travelOutputConverter) {
         this.environment = environment;
+        this.travelOutputConverter = travelOutputConverter;
     }
 
     /**
@@ -48,7 +50,7 @@ public final class TravelOutAdaptorImpl implements TravelOutAdaptor {
             String key = environment.getProperty("AMAP_MAPS_API_KEY");
             // 2. 缺少高德凭据时返回未配置结果，由用例向用户说明实时事实不可用。
             if (key == null || key.isBlank()) {
-                return Result.success(new TravelDO("实时天气和路线工具未配置，请核实后出行。", false));
+                return Result.success(travelOutputConverter.notConfigured());
             }
             // 3. 在异常捕获或资源释放边界内完成本段处理，失败不得伪装为成功。
             try {
@@ -60,14 +62,8 @@ public final class TravelOutAdaptorImpl implements TravelOutAdaptor {
                     var weather =
                             get(
                                     "/v3/weather/weatherInfo",
-                                    Map.of(
-                                            "key",
-                                            key,
-                                            "city",
-                                            point.path("adcode").asText(),
-                                            "extensions",
-                                            "all"));
-                    facts.append("城市未来天气预报：").append(weather.path("forecasts")).append("\n");
+                                    travelOutputConverter.weather(key, point));
+                    facts.append(travelOutputConverter.weatherFacts(weather));
                 }
                 // 3. 仅在起终点都有效时查询路程，避免不完整路线请求。
                 if (valid(travelCommand.origin()) && valid(travelCommand.destination())) {
@@ -76,33 +72,20 @@ public final class TravelOutAdaptorImpl implements TravelOutAdaptor {
                     var route =
                             get(
                                     "/v3/direction/driving",
-                                    Map.of(
-                                            "key",
-                                            key,
-                                            "origin",
-                                            origin.path("location").asText(),
-                                            "destination",
-                                            destination.path("location").asText(),
-                                            "extensions",
-                                            "base"));
-                    var path = route.path("route").path("paths").path(0);
-                    facts.append("驾车参考距离（米）：")
-                            .append(path.path("distance").asText())
-                            .append("；参考时长（秒）：")
-                            .append(path.path("duration").asText())
-                            .append("。非实时路况保证。\n");
+                                    travelOutputConverter.driving(key, origin, destination));
+                    facts.append(travelOutputConverter.drivingFacts(route));
                 }
                 // 4. 依据格式、长度或数量边界处理分支，避免继续使用无效数据。
                 if (facts.length() > 6000) {
-                    return Result.success(new TravelDO("工具结果超限，请缩小查询范围。", false));
+                    return Result.success(travelOutputConverter.exceeded());
                 }
                 // 5. 将本层成功数据封装为标准结果，保持对外模型隔离。
-                return Result.success(new TravelDO(facts.toString(), true));
+                return Result.success(travelOutputConverter.available(facts));
             } catch (Exception exception) {
                 if (exception instanceof InterruptedException) {
                     Thread.currentThread().interrupt();
                 }
-                return Result.success(new TravelDO("实时工具暂不可用；天气、路程和耗时须用户另行核实。", false));
+                return Result.success(travelOutputConverter.unavailable());
             }
         } catch (Exception exception) {
             return Failures.capture(exception, AdaptorErrorCode.FAILED);
@@ -115,7 +98,7 @@ public final class TravelOutAdaptorImpl implements TravelOutAdaptor {
 
     private JsonNode geo(String key, String address) throws Exception {
         // 1. 取得本段结果并准备本层转换，随后显式核对成功状态。
-        var data = get("/v3/geocode/geo", Map.of("key", key, "address", address));
+        var data = get("/v3/geocode/geo", travelOutputConverter.geocode(key, address));
         var point = data.path("geocodes").path(0);
         // 2. 依据格式、长度或数量边界处理分支，避免继续使用无效数据。
         if (!point.path("location").asText().matches("[0-9.]+,[0-9.]+")
@@ -127,26 +110,13 @@ public final class TravelOutAdaptorImpl implements TravelOutAdaptor {
     }
 
     private JsonNode get(String path, Map<String, String> parameters) throws Exception {
-        // 1. 取得字段受限的查询条件，供本段后续处理使用。
-        String query =
-                parameters.entrySet().stream()
-                        .map(
-                                e ->
-                                        URLEncoder.encode(e.getKey(), StandardCharsets.UTF_8)
-                                                + "="
-                                                + URLEncoder.encode(
-                                                        e.getValue(), StandardCharsets.UTF_8))
-                        .collect(java.util.stream.Collectors.joining("&"));
+        // 1. 建立禁止重定向且有连接超时的客户端，转换固定端点请求后执行。
         var client =
                 HttpClient.newBuilder()
                         .connectTimeout(Duration.ofSeconds(3))
                         .followRedirects(HttpClient.Redirect.NEVER)
                         .build();
-        var request =
-                HttpRequest.newBuilder(URI.create("https://restapi.amap.com" + path + "?" + query))
-                        .timeout(Duration.ofSeconds(5))
-                        .GET()
-                        .build();
+        var request = travelOutputConverter.request(path, parameters);
         var response = client.send(request, HttpResponse.BodyHandlers.ofInputStream());
         // 2. 在异常捕获或资源释放边界内完成本段处理，失败不得伪装为成功。
         try (var stream = response.body()) {

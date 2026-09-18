@@ -1,8 +1,10 @@
 package com.hellotravel.adaptor.security.output;
 
 import com.hellotravel.adaptor.exception.AdaptorErrorCode;
+import com.hellotravel.adaptor.security.output.converter.SecurityOutputConverter;
 import com.hellotravel.application.security.adaptor.SecurityOutAdaptor;
 import com.hellotravel.application.security.command.SecurityCommand;
+import com.hellotravel.common.error.Failures;
 import com.hellotravel.common.identity.Ids;
 import com.hellotravel.common.result.Result;
 import com.hellotravel.model.security.SecurityDO;
@@ -36,9 +38,15 @@ public final class SecurityOutAdaptorImpl implements SecurityOutAdaptor {
 
     private final StringRedisTemplate redis;
 
-    public SecurityOutAdaptorImpl(Environment environment, StringRedisTemplate redis) {
+    private final SecurityOutputConverter securityOutputConverter;
+
+    public SecurityOutAdaptorImpl(
+            Environment environment,
+            StringRedisTemplate redis,
+            SecurityOutputConverter securityOutputConverter) {
         this.environment = environment;
         this.redis = redis;
+        this.securityOutputConverter = securityOutputConverter;
     }
 
     /**
@@ -54,61 +62,54 @@ public final class SecurityOutAdaptorImpl implements SecurityOutAdaptor {
             return Result.success(
                     switch (securityCommand.action()) {
                         case "HASH_PASSWORD" ->
-                                new SecurityDO(encoder().encode(securityCommand.value()), true);
+                                securityOutputConverter.value(
+                                        encoder().encode(securityCommand.value()));
                         case "VERIFY_PASSWORD" ->
-                                new SecurityDO(
-                                        null,
+                                securityOutputConverter.verification(
                                         encoder()
                                                 .matches(
                                                         securityCommand.value(),
                                                         securityCommand.proof()));
                         case "OTP" ->
-                                new SecurityDO(
+                                securityOutputConverter.value(
                                         String.format(
                                                 java.util.Locale.ROOT,
                                                 "%06d",
-                                                new SecureRandom().nextInt(1000000)),
-                                        true);
+                                                new SecureRandom().nextInt(1000000)));
                         case "HMAC" ->
-                                new SecurityDO(
+                                securityOutputConverter.value(
                                         Base64.getEncoder()
                                                 .encodeToString(
                                                         hmac(
                                                                 securityCommand.value(),
                                                                 securityCommand.scope(),
-                                                                "OTP_HMAC_KEY")),
-                                        true);
+                                                                "OTP_HMAC_KEY")));
                         case "SIGN_DEVICE" ->
-                                new SecurityDO(
+                                securityOutputConverter.value(
                                         Base64.getUrlEncoder()
                                                 .withoutPadding()
                                                 .encodeToString(
                                                         hmac(
                                                                 securityCommand.value(),
                                                                 "device",
-                                                                "DEVICE_SIGNING_KEY")),
-                                        true);
+                                                                "DEVICE_SIGNING_KEY")));
                         case "ENCRYPT" ->
-                                new SecurityDO(
-                                        encrypt(securityCommand.value(), securityCommand.scope()),
-                                        true);
+                                securityOutputConverter.value(
+                                        encrypt(securityCommand.value(), securityCommand.scope()));
                         case "DECRYPT" ->
-                                new SecurityDO(
-                                        decrypt(securityCommand.value(), securityCommand.scope()),
-                                        true);
+                                securityOutputConverter.value(
+                                        decrypt(securityCommand.value(), securityCommand.scope()));
                         case "MAIL_AVAILABLE" ->
-                                new SecurityDO(
-                                        null,
+                                securityOutputConverter.verification(
                                         environment.containsProperty("SMTP_HOST")
                                                 && environment.containsProperty("SMTP_FROM"));
                         case "LIMIT" ->
-                                new SecurityDO(
-                                        null,
+                                securityOutputConverter.verification(
                                         limit(securityCommand.value(), securityCommand.scope()));
                         default -> throw new IllegalArgumentException("security action");
                     });
         } catch (Exception exception) {
-            return Result.failure(AdaptorErrorCode.UNAVAILABLE);
+            return Failures.capture(exception, AdaptorErrorCode.UNAVAILABLE);
         }
     }
 

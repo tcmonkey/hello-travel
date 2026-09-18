@@ -1,13 +1,13 @@
 package com.hellotravel.adaptor.http.support;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.hellotravel.application.auth.command.AuthCommand;
+import com.hellotravel.adaptor.exception.AdaptorErrorCode;
+import com.hellotravel.adaptor.exception.AdaptorException;
+import com.hellotravel.adaptor.http.assembler.AuthInputAssembler;
 import com.hellotravel.application.auth.service.AuthApplication;
 import com.hellotravel.common.error.BaseException;
 import com.hellotravel.common.identity.Ids;
 import com.hellotravel.common.result.Result;
-import com.hellotravel.domain.exception.DomainErrorCode;
-import com.hellotravel.domain.exception.DomainException;
 
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -38,11 +38,17 @@ public final class SessionFilter extends OncePerRequestFilter {
 
     private final Environment environment;
 
+    private final AuthInputAssembler authInputAssembler;
+
     public SessionFilter(
-            AuthApplication application, ObjectMapper mapper, Environment environment) {
+            AuthApplication application,
+            ObjectMapper mapper,
+            Environment environment,
+            AuthInputAssembler authInputAssembler) {
         this.application = application;
         this.mapper = mapper;
         this.environment = environment;
+        this.authInputAssembler = authInputAssembler;
     }
 
     /**
@@ -82,7 +88,7 @@ public final class SessionFilter extends OncePerRequestFilter {
                                                         + "lhost:8080,http://127.0.0.1:8080")
                                             .split(","));
                     if (origin == null || !allowed.contains(origin)) {
-                        throw new DomainException(DomainErrorCode.UNAUTHORIZED);
+                        throw new AdaptorException(AdaptorErrorCode.UNAUTHORIZED);
                     }
                 }
                 String path = request.getRequestURI();
@@ -90,22 +96,9 @@ public final class SessionFilter extends OncePerRequestFilter {
                         List.of("challenge", "register", "login", "refresh", "reset").stream()
                                 .anyMatch(action -> path.equals("/api/v1/auth/" + action));
                 if (!open) {
-                    var data =
-                            HttpResults.required(
-                                    application.authenticate(
-                                            new AuthCommand(
-                                                    "CHECK",
-                                                    null,
-                                                    null,
-                                                    null,
-                                                    null,
-                                                    null,
-                                                    null,
-                                                    request.getHeader("X-Session-ID"),
-                                                    HttpIdentity.access(request),
-                                                    null,
-                                                    null,
-                                                    request.getRemoteAddr())));
+                    var command = authInputAssembler.check(request);
+                    var result = application.authenticate(command);
+                    var data = HttpResults.required(result);
                     request.setAttribute("ht.user", data.userId());
                     request.setAttribute("ht.session", data.sessionId());
                 }

@@ -3,10 +3,10 @@ package com.hellotravel.infrastructure.auth.repository;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.hellotravel.domain.auth.model.aggregate.DeviceAggregate;
-import com.hellotravel.domain.auth.model.entity.DeviceEntity;
 import com.hellotravel.domain.auth.repository.DeviceRepository;
 import com.hellotravel.domain.query.model.value.QueryValue;
 import com.hellotravel.infrastructure.TravelBaseRepository;
+import com.hellotravel.infrastructure.auth.converter.DevicePersistenceConverter;
 import com.hellotravel.infrastructure.auth.mysql.mapper.DeviceMapper;
 import com.hellotravel.infrastructure.auth.mysql.pojo.DevicePO;
 import com.hellotravel.infrastructure.exception.InfrastructureErrorCode;
@@ -26,6 +26,8 @@ import java.util.Set;
 public class DeviceRepositoryImpl extends TravelBaseRepository<DeviceMapper, DevicePO>
         implements DeviceRepository {
 
+    private final DevicePersistenceConverter devicePersistenceConverter;
+
     /**
      * 按内部主键恢复完整聚合；不存在时返回空值。
      *
@@ -37,7 +39,7 @@ public class DeviceRepositoryImpl extends TravelBaseRepository<DeviceMapper, Dev
         // 1. 转换完整聚合为本仓储PO，映射与状态决策分开。
         DevicePO po = getById(id);
         // 2. 显式处理不存在的记录，并恢复聚合快照。
-        return po == null ? null : restore(po);
+        return po == null ? null : devicePersistenceConverter.restore(po);
     }
 
     /**
@@ -64,7 +66,9 @@ public class DeviceRepositoryImpl extends TravelBaseRepository<DeviceMapper, Dev
                                 "version"));
         Page<DevicePO> page = new Page<>(1, queryValue.limit(), false);
         // 2. 读取有界PO集合并恢复完整聚合，不向上暴露ORM对象。
-        return page(page, wrapper).getRecords().stream().map(this::restore).toList();
+        return page(page, wrapper).getRecords().stream()
+                .map(devicePersistenceConverter::restore)
+                .toList();
     }
 
     /**
@@ -77,7 +81,7 @@ public class DeviceRepositoryImpl extends TravelBaseRepository<DeviceMapper, Dev
     public Boolean save(DeviceAggregate aggregate) {
         try {
             // 1. 转换完整聚合为本仓储PO，映射与状态决策分开。
-            DevicePO po = toPersistence(aggregate);
+            DevicePO po = devicePersistenceConverter.toPersistence(aggregate);
             // 2. 区分新快照新增与已保存快照的版本CAS更新。
             if (po.getId() == null) {
                 return super.save(po);
@@ -110,42 +114,7 @@ public class DeviceRepositoryImpl extends TravelBaseRepository<DeviceMapper, Dev
         return super.removeById(id);
     }
 
-    private DeviceAggregate restore(DevicePO po) {
-        return new DeviceAggregate(
-                new DeviceEntity(
-                        po.getId(),
-                        po.getPublicId(),
-                        po.getUserId(),
-                        po.getDeviceKeyHash(),
-                        po.getDeviceLabel(),
-                        po.getLastSeenAt(),
-                        po.getCreatedAt(),
-                        po.getUpdatedAt(),
-                        po.getVersion()));
-    }
-
-    private
-    /**
-     * 将完整聚合快照转换为本仓储PO，映射不参与业务状态决策。
-     *
-     * @param aggregate 待保存聚合
-     * @return 数据库存储快照
-     * @author AIGenerator
-     */
-    DevicePO toPersistence(DeviceAggregate aggregate) {
-        // 1. 转换完整聚合为本仓储PO，映射与状态决策分开。
-        DevicePO po = new DevicePO();
-        // 2. 映射本段快照字段，业务状态规则不放入PO赋值。
-        po.setId(aggregate.entity().id());
-        po.setPublicId(aggregate.entity().publicId());
-        po.setUserId(aggregate.entity().userId());
-        po.setDeviceKeyHash(aggregate.entity().deviceKeyHash());
-        po.setDeviceLabel(aggregate.entity().deviceLabel());
-        po.setLastSeenAt(aggregate.entity().lastSeenAt());
-        po.setCreatedAt(aggregate.entity().createdAt());
-        po.setUpdatedAt(aggregate.entity().updatedAt());
-        po.setVersion(aggregate.entity().version());
-        // 3. 返回完整存储快照，由保存步骤决定新增或版本CAS更新。
-        return po;
+    public DeviceRepositoryImpl(DevicePersistenceConverter devicePersistenceConverter) {
+        this.devicePersistenceConverter = devicePersistenceConverter;
     }
 }

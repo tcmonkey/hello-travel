@@ -56,4 +56,39 @@ public record ContextBudgetValue(
                 ? 0
                 : Math.addExact(text.getBytes(java.nio.charset.StandardCharsets.UTF_8).length, 64);
     }
+
+    /**
+     * 定义已选择的模型限制，初始输入为零。
+     *
+     * @param window 本次转换的window快照
+     * @param outputReserve 本次转换的outputReserve快照
+     * @param safetyReserve 本次转换的safetyReserve快照
+     * @return 明确用途的转换结果
+     * @author AIGenerator
+     */
+    public static ContextBudgetValue policy(int window, int outputReserve, int safetyReserve) {
+        return new ContextBudgetValue(window, 0, outputReserve, safetyReserve);
+    }
+
+    /**
+     * 在同一模型限制下替换完整输入估算。
+     *
+     * @param estimatedInput 本次转换的estimatedInput快照
+     * @return 明确用途的转换结果
+     * @author AIGenerator
+     */
+    public ContextBudgetValue withInput(int estimatedInput) {
+        return new ContextBudgetValue(window, estimatedInput, outputReserve, safetyReserve);
+    }
+
+    /**
+     * 为本次能力调用选择实际输出预留，窗口及安全预留保持不变。
+     *
+     * @param output 当前能力的输出上限
+     * @return 本次完整预算
+     * @author AIGenerator
+     */
+    public ContextBudgetValue withOutput(int output) {
+        return new ContextBudgetValue(window, estimatedInput, output, safetyReserve);
+    }
 }

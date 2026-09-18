@@ -3,12 +3,12 @@ package com.hellotravel.infrastructure.memory.repository;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.hellotravel.domain.memory.model.aggregate.MemoryFactAggregate;
-import com.hellotravel.domain.memory.model.entity.MemoryFactEntity;
 import com.hellotravel.domain.memory.repository.MemoryFactRepository;
 import com.hellotravel.domain.query.model.value.QueryValue;
 import com.hellotravel.infrastructure.TravelBaseRepository;
 import com.hellotravel.infrastructure.exception.InfrastructureErrorCode;
 import com.hellotravel.infrastructure.exception.InfrastructureException;
+import com.hellotravel.infrastructure.memory.converter.MemoryFactPersistenceConverter;
 import com.hellotravel.infrastructure.memory.mysql.mapper.MemoryFactMapper;
 import com.hellotravel.infrastructure.memory.mysql.pojo.MemoryFactPO;
 
@@ -26,6 +26,8 @@ import java.util.Set;
 public class MemoryFactRepositoryImpl extends TravelBaseRepository<MemoryFactMapper, MemoryFactPO>
         implements MemoryFactRepository {
 
+    private final MemoryFactPersistenceConverter memoryFactPersistenceConverter;
+
     /**
      * 按内部主键恢复完整聚合；不存在时返回空值。
      *
@@ -37,7 +39,7 @@ public class MemoryFactRepositoryImpl extends TravelBaseRepository<MemoryFactMap
         // 1. 转换完整聚合为本仓储PO，映射与状态决策分开。
         MemoryFactPO po = getById(id);
         // 2. 显式处理不存在的记录，并恢复聚合快照。
-        return po == null ? null : restore(po);
+        return po == null ? null : memoryFactPersistenceConverter.restore(po);
     }
 
     /**
@@ -70,7 +72,9 @@ public class MemoryFactRepositoryImpl extends TravelBaseRepository<MemoryFactMap
                                 "version"));
         Page<MemoryFactPO> page = new Page<>(1, queryValue.limit(), false);
         // 2. 读取有界PO集合并恢复完整聚合，不向上暴露ORM对象。
-        return page(page, wrapper).getRecords().stream().map(this::restore).toList();
+        return page(page, wrapper).getRecords().stream()
+                .map(memoryFactPersistenceConverter::restore)
+                .toList();
     }
 
     /**
@@ -83,7 +87,7 @@ public class MemoryFactRepositoryImpl extends TravelBaseRepository<MemoryFactMap
     public Boolean save(MemoryFactAggregate aggregate) {
         try {
             // 1. 转换完整聚合为本仓储PO，映射与状态决策分开。
-            MemoryFactPO po = toPersistence(aggregate);
+            MemoryFactPO po = memoryFactPersistenceConverter.toPersistence(aggregate);
             // 2. 区分新快照新增与已保存快照的版本CAS更新。
             if (po.getId() == null) {
                 return super.save(po);
@@ -116,54 +120,7 @@ public class MemoryFactRepositoryImpl extends TravelBaseRepository<MemoryFactMap
         return super.removeById(id);
     }
 
-    private MemoryFactAggregate restore(MemoryFactPO po) {
-        return new MemoryFactAggregate(
-                new MemoryFactEntity(
-                        po.getId(),
-                        po.getPublicId(),
-                        po.getUserId(),
-                        po.getConversationId(),
-                        po.getMemoryEpoch(),
-                        po.getFactKey(),
-                        po.getCategory(),
-                        po.getContent(),
-                        po.getEvidenceType(),
-                        po.getSourceCount(),
-                        po.getStatus(),
-                        po.getExpiresAt(),
-                        po.getCreatedAt(),
-                        po.getUpdatedAt(),
-                        po.getVersion()));
-    }
-
-    private
-    /**
-     * 将完整聚合快照转换为本仓储PO，映射不参与业务状态决策。
-     *
-     * @param aggregate 待保存聚合
-     * @return 数据库存储快照
-     * @author AIGenerator
-     */
-    MemoryFactPO toPersistence(MemoryFactAggregate aggregate) {
-        // 1. 转换完整聚合为本仓储PO，映射与状态决策分开。
-        MemoryFactPO po = new MemoryFactPO();
-        // 2. 映射本段快照字段，业务状态规则不放入PO赋值。
-        po.setId(aggregate.entity().id());
-        po.setPublicId(aggregate.entity().publicId());
-        po.setUserId(aggregate.entity().userId());
-        po.setConversationId(aggregate.entity().conversationId());
-        po.setMemoryEpoch(aggregate.entity().memoryEpoch());
-        po.setFactKey(aggregate.entity().factKey());
-        po.setCategory(aggregate.entity().category());
-        po.setContent(aggregate.entity().content());
-        po.setEvidenceType(aggregate.entity().evidenceType());
-        po.setSourceCount(aggregate.entity().sourceCount());
-        po.setStatus(aggregate.entity().status());
-        po.setExpiresAt(aggregate.entity().expiresAt());
-        po.setCreatedAt(aggregate.entity().createdAt());
-        po.setUpdatedAt(aggregate.entity().updatedAt());
-        po.setVersion(aggregate.entity().version());
-        // 3. 返回完整存储快照，由保存步骤决定新增或版本CAS更新。
-        return po;
+    public MemoryFactRepositoryImpl(MemoryFactPersistenceConverter memoryFactPersistenceConverter) {
+        this.memoryFactPersistenceConverter = memoryFactPersistenceConverter;
     }
 }

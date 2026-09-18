@@ -1,0 +1,25 @@
+Java business quality: classes=292, methods=816, flow_blocks=399, violations=0
+Java HotSpot(TM) 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
+16:02:37.229 [main] INFO org.springframework.test.context.support.AnnotationConfigContextLoaderUtils -- Could not detect default configuration classes for test class [com.hellotravel.start.OfflineAssemblyTest]: OfflineAssemblyTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+16:02:37.507 [main] INFO org.springframework.boot.test.context.SpringBootTestContextBootstrapper -- Found @SpringBootConfiguration com.hellotravel.start.Application for test class com.hellotravel.start.OfflineAssemblyTest
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::               (v3.5.16)
+
+2026-09-18T16:02:38.250+08:00  INFO 6776 --- [hello-travel] [           main] c.hellotravel.start.OfflineAssemblyTest  : Starting OfflineAssemblyTest using Java 17.0.19 with PID 6776 (started by monkey in /Users/monkey/Documents/kit/workspace/hello-travel/hello-travel-start)
+2026-09-18T16:02:38.251+08:00  INFO 6776 --- [hello-travel] [           main] c.hellotravel.start.OfflineAssemblyTest  : No active profile set, falling back to 1 default profile: "default"
+2026-09-18T16:02:39.311+08:00  INFO 6776 --- [hello-travel] [           main] .s.d.r.c.RepositoryConfigurationDelegate : Multiple Spring Data modules found, entering strict repository configuration mode
+2026-09-18T16:02:39.312+08:00  INFO 6776 --- [hello-travel] [           main] .s.d.r.c.RepositoryConfigurationDelegate : Bootstrapping Spring Data Redis repositories in DEFAULT mode.
+2026-09-18T16:02:39.335+08:00  INFO 6776 --- [hello-travel] [           main] .s.d.r.c.RepositoryConfigurationDelegate : Finished Spring Data repository scanning in 10 ms. Found 0 Redis repository interfaces.
+ _ _   |_  _ _|_. ___ _ |    _ 
+| | |\/|_)(_| | |_\  |_)||_|_\ 
+     /               |         
+                        null 
+2026-09-18T16:02:40.391+08:00  INFO 6776 --- [hello-travel] [           main] b.m.s.MybatisPlusApplicationContextAware : Register ApplicationContext instances org.springframework.context.annotation.AnnotationConfigApplicationContext@2199e845
+2026-09-18T16:02:40.609+08:00  INFO 6776 --- [hello-travel] [           main] c.hellotravel.start.OfflineAssemblyTest  : Started OfflineAssemblyTest in 2.78 seconds (process running for 6.361)

@@ -3,12 +3,12 @@ package com.hellotravel.infrastructure.knowledge.repository;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.hellotravel.domain.knowledge.model.aggregate.KnowledgeChunkAggregate;
-import com.hellotravel.domain.knowledge.model.entity.KnowledgeChunkEntity;
 import com.hellotravel.domain.knowledge.repository.KnowledgeChunkRepository;
 import com.hellotravel.domain.query.model.value.QueryValue;
 import com.hellotravel.infrastructure.TravelBaseRepository;
 import com.hellotravel.infrastructure.exception.InfrastructureErrorCode;
 import com.hellotravel.infrastructure.exception.InfrastructureException;
+import com.hellotravel.infrastructure.knowledge.converter.KnowledgeChunkPersistenceConverter;
 import com.hellotravel.infrastructure.knowledge.mysql.mapper.KnowledgeChunkMapper;
 import com.hellotravel.infrastructure.knowledge.mysql.pojo.KnowledgeChunkPO;
 
@@ -27,6 +27,8 @@ public class KnowledgeChunkRepositoryImpl
         extends TravelBaseRepository<KnowledgeChunkMapper, KnowledgeChunkPO>
         implements KnowledgeChunkRepository {
 
+    private final KnowledgeChunkPersistenceConverter knowledgeChunkPersistenceConverter;
+
     /**
      * 按内部主键恢复完整聚合；不存在时返回空值。
      *
@@ -38,7 +40,7 @@ public class KnowledgeChunkRepositoryImpl
         // 1. 转换完整聚合为本仓储PO，映射与状态决策分开。
         KnowledgeChunkPO po = getById(id);
         // 2. 显式处理不存在的记录，并恢复聚合快照。
-        return po == null ? null : restore(po);
+        return po == null ? null : knowledgeChunkPersistenceConverter.restore(po);
     }
 
     /**
@@ -71,7 +73,9 @@ public class KnowledgeChunkRepositoryImpl
                                 "version"));
         Page<KnowledgeChunkPO> page = new Page<>(1, queryValue.limit(), false);
         // 2. 读取有界PO集合并恢复完整聚合，不向上暴露ORM对象。
-        return page(page, wrapper).getRecords().stream().map(this::restore).toList();
+        return page(page, wrapper).getRecords().stream()
+                .map(knowledgeChunkPersistenceConverter::restore)
+                .toList();
     }
 
     /**
@@ -84,7 +88,7 @@ public class KnowledgeChunkRepositoryImpl
     public Boolean save(KnowledgeChunkAggregate aggregate) {
         try {
             // 1. 转换完整聚合为本仓储PO，映射与状态决策分开。
-            KnowledgeChunkPO po = toPersistence(aggregate);
+            KnowledgeChunkPO po = knowledgeChunkPersistenceConverter.toPersistence(aggregate);
             // 2. 区分新快照新增与已保存快照的版本CAS更新。
             if (po.getId() == null) {
                 return super.save(po);
@@ -117,54 +121,8 @@ public class KnowledgeChunkRepositoryImpl
         return super.removeById(id);
     }
 
-    private KnowledgeChunkAggregate restore(KnowledgeChunkPO po) {
-        return new KnowledgeChunkAggregate(
-                new KnowledgeChunkEntity(
-                        po.getId(),
-                        po.getPublicId(),
-                        po.getUserId(),
-                        po.getDocumentId(),
-                        po.getIndexGeneration(),
-                        po.getChunkNo(),
-                        po.getContent(),
-                        po.getContentSha256(),
-                        po.getEstimatedTokens(),
-                        po.getVectorKey(),
-                        po.getStatus(),
-                        po.getDeletedAt(),
-                        po.getCreatedAt(),
-                        po.getUpdatedAt(),
-                        po.getVersion()));
-    }
-
-    private
-    /**
-     * 将完整聚合快照转换为本仓储PO，映射不参与业务状态决策。
-     *
-     * @param aggregate 待保存聚合
-     * @return 数据库存储快照
-     * @author AIGenerator
-     */
-    KnowledgeChunkPO toPersistence(KnowledgeChunkAggregate aggregate) {
-        // 1. 转换完整聚合为本仓储PO，映射与状态决策分开。
-        KnowledgeChunkPO po = new KnowledgeChunkPO();
-        // 2. 映射本段快照字段，业务状态规则不放入PO赋值。
-        po.setId(aggregate.entity().id());
-        po.setPublicId(aggregate.entity().publicId());
-        po.setUserId(aggregate.entity().userId());
-        po.setDocumentId(aggregate.entity().documentId());
-        po.setIndexGeneration(aggregate.entity().indexGeneration());
-        po.setChunkNo(aggregate.entity().chunkNo());
-        po.setContent(aggregate.entity().content());
-        po.setContentSha256(aggregate.entity().contentSha256());
-        po.setEstimatedTokens(aggregate.entity().estimatedTokens());
-        po.setVectorKey(aggregate.entity().vectorKey());
-        po.setStatus(aggregate.entity().status());
-        po.setDeletedAt(aggregate.entity().deletedAt());
-        po.setCreatedAt(aggregate.entity().createdAt());
-        po.setUpdatedAt(aggregate.entity().updatedAt());
-        po.setVersion(aggregate.entity().version());
-        // 3. 返回完整存储快照，由保存步骤决定新增或版本CAS更新。
-        return po;
+    public KnowledgeChunkRepositoryImpl(
+            KnowledgeChunkPersistenceConverter knowledgeChunkPersistenceConverter) {
+        this.knowledgeChunkPersistenceConverter = knowledgeChunkPersistenceConverter;
     }
 }

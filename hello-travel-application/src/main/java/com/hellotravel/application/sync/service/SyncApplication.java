@@ -1,18 +1,16 @@
 package com.hellotravel.application.sync.service;
 
+import com.hellotravel.application.exception.ApplicationErrorCode;
+import com.hellotravel.application.exception.ApplicationException;
 import com.hellotravel.application.persistence.TravelRepositories;
 import com.hellotravel.application.support.ApplicationFailures;
+import com.hellotravel.application.sync.assembler.SyncApplicationAssembler;
 import com.hellotravel.application.sync.command.SyncCommand;
-import com.hellotravel.application.sync.result.SyncEventResult;
 import com.hellotravel.application.sync.result.SyncResult;
 import com.hellotravel.common.result.Result;
-import com.hellotravel.domain.exception.DomainErrorCode;
-import com.hellotravel.domain.exception.DomainException;
 import com.hellotravel.domain.query.model.value.QueryValue;
 
 import org.springframework.stereotype.Service;
-
-import java.util.List;
 
 /**
  * 账号隔离的持久同步补齐，过期/缺口必须重建快照。
@@ -24,8 +22,12 @@ public final class SyncApplication {
 
     private final TravelRepositories repositories;
 
-    public SyncApplication(TravelRepositories repositories) {
+    private final SyncApplicationAssembler syncApplicationAssembler;
+
+    public SyncApplication(
+            TravelRepositories repositories, SyncApplicationAssembler syncApplicationAssembler) {
         this.repositories = repositories;
+        this.syncApplicationAssembler = syncApplicationAssembler;
     }
 
     /**
@@ -41,13 +43,13 @@ public final class SyncApplication {
             if (syncCommand.limit() < 1
                     || syncCommand.limit() > 200
                     || syncCommand.afterSeq() < 0) {
-                throw new DomainException(DomainErrorCode.INVALID);
+                throw new ApplicationException(ApplicationErrorCode.INVALID);
             }
             // 2. 按可信内部标识读取账号当前快照。
             long high = repositories.userAccount.findById(syncCommand.userId()).entity().syncSeq();
             // 3. 核对分页游标与快照上界，防止越界或无法推进的恢复。
             if (syncCommand.afterSeq() > high) {
-                throw new DomainException(DomainErrorCode.SYNC_RESET_REQUIRED);
+                throw new ApplicationException(ApplicationErrorCode.SYNC_RESET_REQUIRED);
             }
             // 4. 读取同步事件，限定当前用户及查询窗口。
             var rows =
@@ -64,27 +66,10 @@ public final class SyncApplication {
             if (high > syncCommand.afterSeq()
                     && (rows.isEmpty()
                             || rows.get(0).entity().eventSeq() != syncCommand.afterSeq() + 1)) {
-                throw new DomainException(DomainErrorCode.SYNC_RESET_REQUIRED);
+                throw new ApplicationException(ApplicationErrorCode.SYNC_RESET_REQUIRED);
             }
-            // 6. 取得本段结果并准备本层转换，随后显式核对成功状态。
-            List<SyncEventResult> result =
-                    rows.stream()
-                            .map(
-                                    x ->
-                                            new SyncEventResult(
-                                                    x.entity().eventSeq(),
-                                                    x.entity().eventType(),
-                                                    x.entity().aggregatePublicId(),
-                                                    x.entity().aggregateVersion(),
-                                                    x.entity().targetSessionPublicId(),
-                                                    x.entity().payloadJson()))
-                            .toList();
-            // 7. 将本层成功数据封装为标准结果，保持对外模型隔离。
-            return Result.success(
-                    new SyncResult(
-                            result,
-                            high,
-                            !result.isEmpty() && result.get(result.size() - 1).seq() < high));
+            // 6. 将本层成功数据封装为标准结果，保持对外模型隔离。
+            return Result.success(syncApplicationAssembler.page(rows, high));
         } catch (Exception exception) {
             return ApplicationFailures.capture(exception);
         }

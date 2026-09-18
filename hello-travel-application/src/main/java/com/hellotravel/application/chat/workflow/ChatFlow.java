@@ -3,9 +3,10 @@ package com.hellotravel.application.chat.workflow;
 import com.hellotravel.application.chat.assembler.ChatApplicationAssembler;
 import com.hellotravel.application.chat.command.ChatCommand;
 import com.hellotravel.application.chat.result.ChatResult;
-import com.hellotravel.application.chat.result.ConversationResult;
-import com.hellotravel.application.chat.result.MessageResult;
-import com.hellotravel.application.chat.result.RunResult;
+import com.hellotravel.application.exception.ApplicationErrorCode;
+import com.hellotravel.application.exception.ApplicationException;
+import com.hellotravel.application.memory.assembler.ContextApplicationAssembler;
+import com.hellotravel.application.model.policy.ModelContextPolicy;
 import com.hellotravel.application.persistence.DomainWrites;
 import com.hellotravel.application.persistence.TravelRepositories;
 import com.hellotravel.application.support.Json;
@@ -18,8 +19,6 @@ import com.hellotravel.domain.chat.model.aggregate.MessageAggregate;
 import com.hellotravel.domain.chat.model.entity.ChatRunEntity;
 import com.hellotravel.domain.chat.model.entity.ConversationEntity;
 import com.hellotravel.domain.chat.model.entity.MessageEntity;
-import com.hellotravel.domain.exception.DomainErrorCode;
-import com.hellotravel.domain.exception.DomainException;
 import com.hellotravel.domain.query.model.value.QueryValue;
 
 import org.springframework.stereotype.Component;
@@ -46,19 +45,27 @@ public final class ChatFlow {
 
     private final SyncEvents events;
 
+    private final ModelContextPolicy contextPolicy;
+
     private final ChatApplicationAssembler assembler;
+
+    private final ContextApplicationAssembler contextApplicationAssembler;
 
     public ChatFlow(
             DomainWrites writes,
             TravelRepositories repositories,
             Transactions transactions,
             SyncEvents events,
-            ChatApplicationAssembler assembler) {
+            ChatApplicationAssembler assembler,
+            ModelContextPolicy contextPolicy,
+            ContextApplicationAssembler contextApplicationAssembler) {
         this.writes = writes;
         this.repositories = repositories;
         this.transactions = transactions;
         this.events = events;
         this.assembler = assembler;
+        this.contextPolicy = contextPolicy;
+        this.contextApplicationAssembler = contextApplicationAssembler;
     }
 
     /**
@@ -71,7 +78,7 @@ public final class ChatFlow {
     public ChatResult perform(ChatCommand command) {
         // 1. 分页数量限定在1到200，防止全量历史被无界单次查询。
         if (command.limit() < 1 || command.limit() > 200) {
-            throw new DomainException(DomainErrorCode.INVALID);
+            throw new ApplicationException(ApplicationErrorCode.INVALID);
         }
         // 2. 返回本段实际处理结果，保持本层输出契约。
         return switch (command.action()) {
@@ -87,7 +94,7 @@ public final class ChatFlow {
             case "CANCEL" -> cancel(command);
             case "RETRY" -> retry(command);
             case "CONTEXT" -> context(command);
-            default -> throw new DomainException(DomainErrorCode.INVALID);
+            default -> throw new ApplicationException(ApplicationErrorCode.INVALID);
         };
     }
 
@@ -109,7 +116,7 @@ public final class ChatFlow {
                                 .where("deleted_at", "NULL", null));
         // 2. 对象不存在时按当前用例的NOT_FOUND契约拒绝操作。
         if (found.isEmpty()) {
-            throw new DomainException(DomainErrorCode.NOT_FOUND);
+            throw new ApplicationException(ApplicationErrorCode.NOT_FOUND);
         }
         // 3. 返回当前用户可访问的对象，已删除或越权对象不会进入后续操作。
         return found.get(0).entity();
@@ -124,14 +131,14 @@ public final class ChatFlow {
                                 .where("public_id", "EQ", command.runId()));
         // 2. 对象不存在时按当前用例的NOT_FOUND契约拒绝操作。
         if (found.isEmpty()) {
-            throw new DomainException(DomainErrorCode.NOT_FOUND);
+            throw new ApplicationException(ApplicationErrorCode.NOT_FOUND);
         }
         // 3. 按可信内部标识读取对话当前快照。
         ConversationEntity conversation =
                 repositories.conversation.findById(found.get(0).entity().conversationId()).entity();
         // 4. 核对删除状态与当前记忆代次，失败中止当前处理。
         if (conversation.deletedAt() != null) {
-            throw new DomainException(DomainErrorCode.NOT_FOUND);
+            throw new ApplicationException(ApplicationErrorCode.NOT_FOUND);
         }
         // 5. 返回本段实际处理结果，保持本层输出契约。
         return found.get(0).entity();
@@ -140,7 +147,7 @@ public final class ChatFlow {
     private void version(ConversationEntity c, Long expected) {
         // 1. 核对客户端预期版本，防止旧页面覆盖较新对话状态。
         if (expected == null || !c.version().equals(expected)) {
-            throw new DomainException(DomainErrorCode.CONFLICT);
+            throw new ApplicationException(ApplicationErrorCode.CONFLICT);
         }
     }
 
@@ -149,19 +156,6 @@ public final class ChatFlow {
                 QueryValue.all("id", 1)
                         .where("conversation_id", "EQ", c.id())
                         .where("status", "IN", List.of("ACCEPTED", "RUNNING")));
-    }
-
-    private ChatResult result(
-            List<ConversationResult> tabs,
-            List<MessageResult> messages,
-            RunResult run,
-            long cursor,
-            boolean more,
-            long max,
-            long epoch,
-            long sync,
-            String context) {
-        return new ChatResult(tabs, messages, run, cursor, more, max, epoch, sync, context);
     }
 
     private ChatResult bootstrap(ChatCommand command) {
@@ -177,7 +171,7 @@ public final class ChatFlow {
                     long sync =
                             repositories.userAccount.findById(command.userId()).entity().syncSeq();
                     // 2. 提供本事务或回调的处理结果，完成责任由所属外层流程承接。
-                    return result(List.of(), List.of(), null, 0, false, max, 0, sync, null);
+                    return assembler.bootstrap(max, sync);
                 });
     }
 
@@ -194,18 +188,8 @@ public final class ChatFlow {
         }
         // 3. 读取对话，按当前用例条件限定查询窗口。
         var rows = repositories.conversation.query(query);
-        long cursor = rows.isEmpty() ? command.after() : rows.get(rows.size() - 1).entity().id();
         // 4. 返回本段实际处理结果，保持本层输出契约。
-        return result(
-                rows.stream().map(x -> assembler.conversation(x.entity())).toList(),
-                List.of(),
-                null,
-                cursor,
-                rows.size() == command.limit(),
-                command.maxSeq() == null ? 0 : command.maxSeq(),
-                0,
-                0,
-                null);
+        return assembler.tabs(rows, command);
     }
 
     private ChatResult create(ChatCommand command) {
@@ -231,16 +215,7 @@ public final class ChatFlow {
                     events.append(
                             account, "conversation.created", created.publicId(), 0, null, "{}");
                     // 4. 提供本事务或回调的处理结果，完成责任由所属外层流程承接。
-                    return result(
-                            List.of(assembler.conversation(created)),
-                            List.of(),
-                            null,
-                            0,
-                            false,
-                            0,
-                            0,
-                            account.syncSeq(),
-                            null);
+                    return assembler.changed(created, account);
                 });
     }
 
@@ -267,16 +242,7 @@ public final class ChatFlow {
                     // 5. 读取当前持久化快照，避免依据外部旧快照直接写入。
                     ConversationEntity current = owned(account.id(), stored.publicId());
                     // 6. 提供本事务或回调的处理结果，完成责任由所属外层流程承接。
-                    return result(
-                            List.of(assembler.conversation(current)),
-                            List.of(),
-                            null,
-                            0,
-                            false,
-                            0,
-                            0,
-                            account.syncSeq(),
-                            null);
+                    return assembler.changed(current, account);
                 });
     }
 
@@ -285,7 +251,7 @@ public final class ChatFlow {
         ConversationEntity c = owned(command.userId(), command.conversationId());
         // 2. 核对历史或记忆代次，分页与派生记忆不能跨删除边界使用。
         if (command.historyEpoch() != null && !c.historyEpoch().equals(command.historyEpoch())) {
-            throw new DomainException(DomainErrorCode.SYNC_RESET_REQUIRED);
+            throw new ApplicationException(ApplicationErrorCode.SYNC_RESET_REQUIRED);
         }
         // 3. 取得本次操作的容量上限，供本段后续处理使用。
         long max = command.maxSeq() == null ? c.lastMessageSeq() : command.maxSeq();
@@ -305,34 +271,22 @@ public final class ChatFlow {
                 .entity()
                 .historyEpoch()
                 .equals(c.historyEpoch())) {
-            throw new DomainException(DomainErrorCode.SYNC_RESET_REQUIRED);
+            throw new ApplicationException(ApplicationErrorCode.SYNC_RESET_REQUIRED);
         }
-        // 5. 取得本次分页的稳定恢复游标，供本段后续处理使用。
-        long cursor =
-                rows.isEmpty() ? command.after() : rows.get(rows.size() - 1).entity().messageSeq();
-        // 6. 返回本段实际处理结果，保持本层输出契约。
-        return result(
-                List.of(assembler.conversation(c)),
-                rows.stream().map(x -> assembler.message(x.entity())).toList(),
-                null,
-                cursor,
-                rows.size() == command.limit() && cursor < max,
-                max,
-                c.historyEpoch(),
-                0,
-                null);
+        // 5. 返回本段实际处理结果，保持本层输出契约。
+        return assembler.history(c, rows, command, max);
     }
 
     private synchronized ChatResult submit(ChatCommand command) {
         // 1. 核对输入或读取结果的存在性，失败中止当前处理。
         if (command.text() == null || command.text().isBlank() || command.text().length() > 8000) {
-            throw new DomainException(DomainErrorCode.INVALID);
+            throw new ApplicationException(ApplicationErrorCode.INVALID);
         }
         // 2. 在异常捕获或资源释放边界内完成本段处理，失败不得伪装为成功。
         try {
             UUID.fromString(command.requestKey());
         } catch (RuntimeException e) {
-            throw new DomainException(DomainErrorCode.INVALID);
+            throw new ApplicationException(ApplicationErrorCode.INVALID);
         }
         // 3. 计算请求正文摘要，绑定幂等键与实际内容。
         byte[] digest = Ids.hash(command.text());
@@ -352,7 +306,8 @@ public final class ChatFlow {
                     if (!replay.isEmpty()) {
                         if (!java.security.MessageDigest.isEqual(
                                 digest, replay.get(0).entity().requestDigest())) {
-                            throw new DomainException(DomainErrorCode.IDEMPOTENCY_CONFLICT);
+                            throw new ApplicationException(
+                                    ApplicationErrorCode.IDEMPOTENCY_CONFLICT);
                         }
                         // 即使幂等重放也提交一个无正文事件，保持账号序列没有补齐缺口。
                         events.append(
@@ -362,7 +317,9 @@ public final class ChatFlow {
                                 replay.get(0).entity().version(),
                                 null,
                                 "{}");
-                        return readRun(commandForRun(command, replay.get(0).entity().publicId()));
+                        return readRun(
+                                assembler.commandForRun(
+                                        command, replay.get(0).entity().publicId()));
                     }
                     // 3. 核对实体当前状态与允许的操作，失败中止当前处理。
                     if (repositories
@@ -375,7 +332,7 @@ public final class ChatFlow {
                                                             List.of("ACCEPTED", "RUNNING")))
                                     .size()
                             >= 8) {
-                        throw new DomainException(DomainErrorCode.RATE_LIMITED);
+                        throw new ApplicationException(ApplicationErrorCode.RATE_LIMITED);
                     }
                     // 4. 核对输入或读取结果的存在性，失败中止当前处理。
                     if (!active(c).isEmpty()
@@ -389,7 +346,7 @@ public final class ChatFlow {
                                                             "IN",
                                                             List.of("ACCEPTED", "RUNNING")))
                                     .isEmpty()) {
-                        throw new DomainException(DomainErrorCode.BUSY);
+                        throw new ApplicationException(ApplicationErrorCode.BUSY);
                     }
                     // 5. 通过领域聚合语义准备业务快照，固定状态由实体封装。
                     MessageEntity input =
@@ -446,35 +403,8 @@ public final class ChatFlow {
                             run.publicId(),
                             Json.encode(Map.of("runId", run.publicId())));
                     // 13. 提供本事务或回调的处理结果，完成责任由所属外层流程承接。
-                    return result(
-                            List.of(),
-                            List.of(assembler.message(input), assembler.message(output)),
-                            assembler.run(run, c.publicId()),
-                            0,
-                            false,
-                            0,
-                            0,
-                            account.syncSeq(),
-                            null);
+                    return assembler.accepted(List.of(input, output), run, c, account);
                 });
-    }
-
-    private ChatCommand commandForRun(ChatCommand c, String runId) {
-        return new ChatCommand(
-                "RUN",
-                c.userId(),
-                c.sessionId(),
-                null,
-                runId,
-                null,
-                null,
-                null,
-                null,
-                null,
-                0,
-                null,
-                null,
-                100);
     }
 
     private ChatResult readRun(ChatCommand command) {
@@ -483,16 +413,7 @@ public final class ChatFlow {
         ConversationEntity c = repositories.conversation.findById(r.conversationId()).entity();
         MessageEntity output = repositories.message.findById(r.assistantMessageId()).entity();
         // 2. 返回本段实际处理结果，保持本层输出契约。
-        return result(
-                List.of(),
-                output.deletedAt() == null ? List.of(assembler.message(output)) : List.of(),
-                assembler.run(r, c.publicId()),
-                0,
-                false,
-                0,
-                0,
-                0,
-                r.contextSnapshotJson());
+        return assembler.runSnapshot(r, c, output);
     }
 
     private ChatResult cancel(ChatCommand command) {
@@ -544,7 +465,7 @@ public final class ChatFlow {
                                                             "IN",
                                                             List.of("ACCEPTED", "RUNNING")))
                                     .isEmpty()) {
-                        throw new DomainException(DomainErrorCode.BUSY);
+                        throw new ApplicationException(ApplicationErrorCode.BUSY);
                     }
                     // 3. 按可信内部标识读取消息当前快照。
                     MessageEntity input = repositories.message.findById(r.userMessageId()).entity();
@@ -555,7 +476,7 @@ public final class ChatFlow {
                             || output.deletedAt() != null
                             || !"USER".equals(input.role())
                             || !"ASSISTANT".equals(output.role())) {
-                        throw new DomainException(DomainErrorCode.NOT_FOUND);
+                        throw new ApplicationException(ApplicationErrorCode.NOT_FOUND);
                     }
                     // 5. 通过领域聚合语义准备业务快照，固定状态由实体封装。
                     ChatRunEntity next = new ChatRunAggregate(r).retry(c.memoryEpoch()).entity();
@@ -592,7 +513,7 @@ public final class ChatFlow {
                     var running = active(c);
                     // 4. 核对输入或读取结果的存在性，失败中止当前处理。
                     if (!entire && !running.isEmpty()) {
-                        throw new DomainException(DomainErrorCode.BUSY);
+                        throw new ApplicationException(ApplicationErrorCode.BUSY);
                     }
                     // 5. 逐项处理当前数据窗口，并在循环中核对可用状态与停止条件。
                     for (var r : running) {
@@ -606,7 +527,7 @@ public final class ChatFlow {
                         if (command.messageIds() == null
                                 || command.messageIds().isEmpty()
                                 || command.messageIds().size() > 100) {
-                            throw new DomainException(DomainErrorCode.INVALID);
+                            throw new ApplicationException(ApplicationErrorCode.INVALID);
                         }
                         var rows =
                                 repositories.message.query(
@@ -616,7 +537,7 @@ public final class ChatFlow {
                                                 .where("public_id", "IN", command.messageIds())
                                                 .where("deleted_at", "NULL", null));
                         if (rows.size() != new java.util.HashSet<>(command.messageIds()).size()) {
-                            throw new DomainException(DomainErrorCode.NOT_FOUND);
+                            throw new ApplicationException(ApplicationErrorCode.NOT_FOUND);
                         }
                         for (var m : rows) {
                             Transactions.require(
@@ -645,7 +566,7 @@ public final class ChatFlow {
                     return null;
                 });
         // 2. 返回本段实际处理结果，保持本层输出契约。
-        return result(List.of(), List.of(), null, 0, false, 0, 0, 0, null);
+        return assembler.completed();
     }
 
     private ChatResult context(ChatCommand command) {
@@ -656,32 +577,10 @@ public final class ChatFlow {
                         QueryValue.all("id", 1).desc().where("conversation_id", "EQ", c.id()));
         String data =
                 found.isEmpty()
-                        ? Json.encode(
-                                Map.of(
-                                        "window",
-                                        32768,
-                                        "inputEstimate",
-                                        0,
-                                        "outputReserve",
-                                        4096,
-                                        "safetyReserve",
-                                        4096,
-                                        "estimator",
-                                        "utf8-upper-v1",
-                                        "compression",
-                                        "IDLE"))
+                        ? contextApplicationAssembler.initial(contextPolicy)
                         : found.get(0).entity().contextSnapshotJson();
         // 2. 返回本段实际处理结果，保持本层输出契约。
-        return result(
-                List.of(),
-                List.of(),
-                found.isEmpty() ? null : assembler.run(found.get(0).entity(), c.publicId()),
-                0,
-                false,
-                0,
-                0,
-                0,
-                data);
+        return assembler.context(c, found, data);
     }
 
     private static LocalDateTime now() {

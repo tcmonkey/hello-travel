@@ -3,12 +3,12 @@ package com.hellotravel.infrastructure.memory.repository;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.hellotravel.domain.memory.model.aggregate.MemorySummaryAggregate;
-import com.hellotravel.domain.memory.model.entity.MemorySummaryEntity;
 import com.hellotravel.domain.memory.repository.MemorySummaryRepository;
 import com.hellotravel.domain.query.model.value.QueryValue;
 import com.hellotravel.infrastructure.TravelBaseRepository;
 import com.hellotravel.infrastructure.exception.InfrastructureErrorCode;
 import com.hellotravel.infrastructure.exception.InfrastructureException;
+import com.hellotravel.infrastructure.memory.converter.MemorySummaryPersistenceConverter;
 import com.hellotravel.infrastructure.memory.mysql.mapper.MemorySummaryMapper;
 import com.hellotravel.infrastructure.memory.mysql.pojo.MemorySummaryPO;
 
@@ -27,6 +27,8 @@ public class MemorySummaryRepositoryImpl
         extends TravelBaseRepository<MemorySummaryMapper, MemorySummaryPO>
         implements MemorySummaryRepository {
 
+    private final MemorySummaryPersistenceConverter memorySummaryPersistenceConverter;
+
     /**
      * 按内部主键恢复完整聚合；不存在时返回空值。
      *
@@ -38,7 +40,7 @@ public class MemorySummaryRepositoryImpl
         // 1. 转换完整聚合为本仓储PO，映射与状态决策分开。
         MemorySummaryPO po = getById(id);
         // 2. 显式处理不存在的记录，并恢复聚合快照。
-        return po == null ? null : restore(po);
+        return po == null ? null : memorySummaryPersistenceConverter.restore(po);
     }
 
     /**
@@ -72,7 +74,9 @@ public class MemorySummaryRepositoryImpl
                                 "version"));
         Page<MemorySummaryPO> page = new Page<>(1, queryValue.limit(), false);
         // 2. 读取有界PO集合并恢复完整聚合，不向上暴露ORM对象。
-        return page(page, wrapper).getRecords().stream().map(this::restore).toList();
+        return page(page, wrapper).getRecords().stream()
+                .map(memorySummaryPersistenceConverter::restore)
+                .toList();
     }
 
     /**
@@ -85,7 +89,7 @@ public class MemorySummaryRepositoryImpl
     public Boolean save(MemorySummaryAggregate aggregate) {
         try {
             // 1. 转换完整聚合为本仓储PO，映射与状态决策分开。
-            MemorySummaryPO po = toPersistence(aggregate);
+            MemorySummaryPO po = memorySummaryPersistenceConverter.toPersistence(aggregate);
             // 2. 区分新快照新增与已保存快照的版本CAS更新。
             if (po.getId() == null) {
                 return super.save(po);
@@ -118,56 +122,8 @@ public class MemorySummaryRepositoryImpl
         return super.removeById(id);
     }
 
-    private MemorySummaryAggregate restore(MemorySummaryPO po) {
-        return new MemorySummaryAggregate(
-                new MemorySummaryEntity(
-                        po.getId(),
-                        po.getPublicId(),
-                        po.getUserId(),
-                        po.getConversationId(),
-                        po.getMemoryEpoch(),
-                        po.getCoveredFromSeq(),
-                        po.getCoveredThroughSeq(),
-                        po.getStructuredContent(),
-                        po.getEstimatedTokens(),
-                        po.getEstimatorVersion(),
-                        po.getModelName(),
-                        po.getPromptRevision(),
-                        po.getStatus(),
-                        po.getCreatedAt(),
-                        po.getUpdatedAt(),
-                        po.getVersion()));
-    }
-
-    private
-    /**
-     * 将完整聚合快照转换为本仓储PO，映射不参与业务状态决策。
-     *
-     * @param aggregate 待保存聚合
-     * @return 数据库存储快照
-     * @author AIGenerator
-     */
-    MemorySummaryPO toPersistence(MemorySummaryAggregate aggregate) {
-        // 1. 转换完整聚合为本仓储PO，映射与状态决策分开。
-        MemorySummaryPO po = new MemorySummaryPO();
-        // 2. 映射本段快照字段，业务状态规则不放入PO赋值。
-        po.setId(aggregate.entity().id());
-        po.setPublicId(aggregate.entity().publicId());
-        po.setUserId(aggregate.entity().userId());
-        po.setConversationId(aggregate.entity().conversationId());
-        po.setMemoryEpoch(aggregate.entity().memoryEpoch());
-        po.setCoveredFromSeq(aggregate.entity().coveredFromSeq());
-        po.setCoveredThroughSeq(aggregate.entity().coveredThroughSeq());
-        po.setStructuredContent(aggregate.entity().structuredContent());
-        po.setEstimatedTokens(aggregate.entity().estimatedTokens());
-        po.setEstimatorVersion(aggregate.entity().estimatorVersion());
-        po.setModelName(aggregate.entity().modelName());
-        po.setPromptRevision(aggregate.entity().promptRevision());
-        po.setStatus(aggregate.entity().status());
-        po.setCreatedAt(aggregate.entity().createdAt());
-        po.setUpdatedAt(aggregate.entity().updatedAt());
-        po.setVersion(aggregate.entity().version());
-        // 3. 返回完整存储快照，由保存步骤决定新增或版本CAS更新。
-        return po;
+    public MemorySummaryRepositoryImpl(
+            MemorySummaryPersistenceConverter memorySummaryPersistenceConverter) {
+        this.memorySummaryPersistenceConverter = memorySummaryPersistenceConverter;
     }
 }

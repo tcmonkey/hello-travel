@@ -3,12 +3,12 @@ package com.hellotravel.infrastructure.memory.repository;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.hellotravel.domain.memory.model.aggregate.MemoryFactSourceAggregate;
-import com.hellotravel.domain.memory.model.entity.MemoryFactSourceEntity;
 import com.hellotravel.domain.memory.repository.MemoryFactSourceRepository;
 import com.hellotravel.domain.query.model.value.QueryValue;
 import com.hellotravel.infrastructure.TravelBaseRepository;
 import com.hellotravel.infrastructure.exception.InfrastructureErrorCode;
 import com.hellotravel.infrastructure.exception.InfrastructureException;
+import com.hellotravel.infrastructure.memory.converter.MemoryFactSourcePersistenceConverter;
 import com.hellotravel.infrastructure.memory.mysql.mapper.MemoryFactSourceMapper;
 import com.hellotravel.infrastructure.memory.mysql.pojo.MemoryFactSourcePO;
 
@@ -27,6 +27,8 @@ public class MemoryFactSourceRepositoryImpl
         extends TravelBaseRepository<MemoryFactSourceMapper, MemoryFactSourcePO>
         implements MemoryFactSourceRepository {
 
+    private final MemoryFactSourcePersistenceConverter memoryFactSourcePersistenceConverter;
+
     /**
      * 按内部主键恢复完整聚合；不存在时返回空值。
      *
@@ -38,7 +40,7 @@ public class MemoryFactSourceRepositoryImpl
         // 1. 转换完整聚合为本仓储PO，映射与状态决策分开。
         MemoryFactSourcePO po = getById(id);
         // 2. 显式处理不存在的记录，并恢复聚合快照。
-        return po == null ? null : restore(po);
+        return po == null ? null : memoryFactSourcePersistenceConverter.restore(po);
     }
 
     /**
@@ -64,7 +66,9 @@ public class MemoryFactSourceRepositoryImpl
                                 "created_at"));
         Page<MemoryFactSourcePO> page = new Page<>(1, queryValue.limit(), false);
         // 2. 读取有界PO集合并恢复完整聚合，不向上暴露ORM对象。
-        return page(page, wrapper).getRecords().stream().map(this::restore).toList();
+        return page(page, wrapper).getRecords().stream()
+                .map(memoryFactSourcePersistenceConverter::restore)
+                .toList();
     }
 
     /**
@@ -77,7 +81,7 @@ public class MemoryFactSourceRepositoryImpl
     public Boolean save(MemoryFactSourceAggregate aggregate) {
         try {
             // 1. 转换完整聚合为本仓储PO，映射与状态决策分开。
-            MemoryFactSourcePO po = toPersistence(aggregate);
+            MemoryFactSourcePO po = memoryFactSourcePersistenceConverter.toPersistence(aggregate);
             // 2. 区分新快照新增与已保存快照的版本CAS更新。
             if (po.getId() == null) {
                 return super.save(po);
@@ -103,40 +107,8 @@ public class MemoryFactSourceRepositoryImpl
         return super.removeById(id);
     }
 
-    private MemoryFactSourceAggregate restore(MemoryFactSourcePO po) {
-        return new MemoryFactSourceAggregate(
-                new MemoryFactSourceEntity(
-                        po.getId(),
-                        po.getUserId(),
-                        po.getConversationId(),
-                        po.getFactId(),
-                        po.getMessageId(),
-                        po.getEvidenceExcerpt(),
-                        po.getMessageVersion(),
-                        po.getCreatedAt()));
-    }
-
-    private
-    /**
-     * 将完整聚合快照转换为本仓储PO，映射不参与业务状态决策。
-     *
-     * @param aggregate 待保存聚合
-     * @return 数据库存储快照
-     * @author AIGenerator
-     */
-    MemoryFactSourcePO toPersistence(MemoryFactSourceAggregate aggregate) {
-        // 1. 转换完整聚合为本仓储PO，映射与状态决策分开。
-        MemoryFactSourcePO po = new MemoryFactSourcePO();
-        // 2. 映射本段快照字段，业务状态规则不放入PO赋值。
-        po.setId(aggregate.entity().id());
-        po.setUserId(aggregate.entity().userId());
-        po.setConversationId(aggregate.entity().conversationId());
-        po.setFactId(aggregate.entity().factId());
-        po.setMessageId(aggregate.entity().messageId());
-        po.setEvidenceExcerpt(aggregate.entity().evidenceExcerpt());
-        po.setMessageVersion(aggregate.entity().messageVersion());
-        po.setCreatedAt(aggregate.entity().createdAt());
-        // 3. 返回完整存储快照，由保存步骤决定新增或版本CAS更新。
-        return po;
+    public MemoryFactSourceRepositoryImpl(
+            MemoryFactSourcePersistenceConverter memoryFactSourcePersistenceConverter) {
+        this.memoryFactSourcePersistenceConverter = memoryFactSourcePersistenceConverter;
     }
 }

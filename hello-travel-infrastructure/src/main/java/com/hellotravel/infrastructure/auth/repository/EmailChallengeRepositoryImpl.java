@@ -3,10 +3,10 @@ package com.hellotravel.infrastructure.auth.repository;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.hellotravel.domain.auth.model.aggregate.EmailChallengeAggregate;
-import com.hellotravel.domain.auth.model.entity.EmailChallengeEntity;
 import com.hellotravel.domain.auth.repository.EmailChallengeRepository;
 import com.hellotravel.domain.query.model.value.QueryValue;
 import com.hellotravel.infrastructure.TravelBaseRepository;
+import com.hellotravel.infrastructure.auth.converter.EmailChallengePersistenceConverter;
 import com.hellotravel.infrastructure.auth.mysql.mapper.EmailChallengeMapper;
 import com.hellotravel.infrastructure.auth.mysql.pojo.EmailChallengePO;
 import com.hellotravel.infrastructure.exception.InfrastructureErrorCode;
@@ -27,6 +27,8 @@ public class EmailChallengeRepositoryImpl
         extends TravelBaseRepository<EmailChallengeMapper, EmailChallengePO>
         implements EmailChallengeRepository {
 
+    private final EmailChallengePersistenceConverter emailChallengePersistenceConverter;
+
     /**
      * 按内部主键恢复完整聚合；不存在时返回空值。
      *
@@ -38,7 +40,7 @@ public class EmailChallengeRepositoryImpl
         // 1. 转换完整聚合为本仓储PO，映射与状态决策分开。
         EmailChallengePO po = getById(id);
         // 2. 显式处理不存在的记录，并恢复聚合快照。
-        return po == null ? null : restore(po);
+        return po == null ? null : emailChallengePersistenceConverter.restore(po);
     }
 
     /**
@@ -72,7 +74,9 @@ public class EmailChallengeRepositoryImpl
                                 "version"));
         Page<EmailChallengePO> page = new Page<>(1, queryValue.limit(), false);
         // 2. 读取有界PO集合并恢复完整聚合，不向上暴露ORM对象。
-        return page(page, wrapper).getRecords().stream().map(this::restore).toList();
+        return page(page, wrapper).getRecords().stream()
+                .map(emailChallengePersistenceConverter::restore)
+                .toList();
     }
 
     /**
@@ -85,7 +89,7 @@ public class EmailChallengeRepositoryImpl
     public Boolean save(EmailChallengeAggregate aggregate) {
         try {
             // 1. 转换完整聚合为本仓储PO，映射与状态决策分开。
-            EmailChallengePO po = toPersistence(aggregate);
+            EmailChallengePO po = emailChallengePersistenceConverter.toPersistence(aggregate);
             // 2. 区分新快照新增与已保存快照的版本CAS更新。
             if (po.getId() == null) {
                 return super.save(po);
@@ -118,56 +122,8 @@ public class EmailChallengeRepositoryImpl
         return super.removeById(id);
     }
 
-    private EmailChallengeAggregate restore(EmailChallengePO po) {
-        return new EmailChallengeAggregate(
-                new EmailChallengeEntity(
-                        po.getId(),
-                        po.getPublicId(),
-                        po.getEmailNormalized(),
-                        po.getPurpose(),
-                        po.getCodeHmac(),
-                        po.getCodeKeyVersion(),
-                        po.getDeliveryCiphertext(),
-                        po.getDeliveryKeyVersion(),
-                        po.getStatus(),
-                        po.getAttempts(),
-                        po.getMaxAttempts(),
-                        po.getExpiresAt(),
-                        po.getConsumedAt(),
-                        po.getCreatedAt(),
-                        po.getUpdatedAt(),
-                        po.getVersion()));
-    }
-
-    private
-    /**
-     * 将完整聚合快照转换为本仓储PO，映射不参与业务状态决策。
-     *
-     * @param aggregate 待保存聚合
-     * @return 数据库存储快照
-     * @author AIGenerator
-     */
-    EmailChallengePO toPersistence(EmailChallengeAggregate aggregate) {
-        // 1. 转换完整聚合为本仓储PO，映射与状态决策分开。
-        EmailChallengePO po = new EmailChallengePO();
-        // 2. 映射本段快照字段，业务状态规则不放入PO赋值。
-        po.setId(aggregate.entity().id());
-        po.setPublicId(aggregate.entity().publicId());
-        po.setEmailNormalized(aggregate.entity().emailNormalized());
-        po.setPurpose(aggregate.entity().purpose());
-        po.setCodeHmac(aggregate.entity().codeHmac());
-        po.setCodeKeyVersion(aggregate.entity().codeKeyVersion());
-        po.setDeliveryCiphertext(aggregate.entity().deliveryCiphertext());
-        po.setDeliveryKeyVersion(aggregate.entity().deliveryKeyVersion());
-        po.setStatus(aggregate.entity().status());
-        po.setAttempts(aggregate.entity().attempts());
-        po.setMaxAttempts(aggregate.entity().maxAttempts());
-        po.setExpiresAt(aggregate.entity().expiresAt());
-        po.setConsumedAt(aggregate.entity().consumedAt());
-        po.setCreatedAt(aggregate.entity().createdAt());
-        po.setUpdatedAt(aggregate.entity().updatedAt());
-        po.setVersion(aggregate.entity().version());
-        // 3. 返回完整存储快照，由保存步骤决定新增或版本CAS更新。
-        return po;
+    public EmailChallengeRepositoryImpl(
+            EmailChallengePersistenceConverter emailChallengePersistenceConverter) {
+        this.emailChallengePersistenceConverter = emailChallengePersistenceConverter;
     }
 }

@@ -1,5 +1,8 @@
 package com.hellotravel.application.persistence;
 
+import com.hellotravel.application.exception.ApplicationErrorCode;
+import com.hellotravel.application.exception.ApplicationException;
+import com.hellotravel.application.persistence.assembler.TravelWriteApplicationAssembler;
 import com.hellotravel.common.result.Result;
 import com.hellotravel.domain.auth.model.aggregate.DeviceAggregate;
 import com.hellotravel.domain.auth.model.aggregate.EmailChallengeAggregate;
@@ -10,48 +13,12 @@ import com.hellotravel.domain.chat.model.aggregate.ChatRunAggregate;
 import com.hellotravel.domain.chat.model.aggregate.ConversationAggregate;
 import com.hellotravel.domain.chat.model.aggregate.MessageAggregate;
 import com.hellotravel.domain.chat.model.aggregate.ModelInvocationAggregate;
-import com.hellotravel.domain.exception.DomainErrorCode;
-import com.hellotravel.domain.exception.DomainException;
 import com.hellotravel.domain.knowledge.model.aggregate.IndexJobAggregate;
 import com.hellotravel.domain.knowledge.model.aggregate.KnowledgeChunkAggregate;
 import com.hellotravel.domain.knowledge.model.aggregate.KnowledgeDocumentAggregate;
 import com.hellotravel.domain.memory.model.aggregate.MemoryFactAggregate;
 import com.hellotravel.domain.memory.model.aggregate.MemoryFactSourceAggregate;
 import com.hellotravel.domain.memory.model.aggregate.MemorySummaryAggregate;
-import com.hellotravel.domain.persistence.model.param.ChatRunRemoveParam;
-import com.hellotravel.domain.persistence.model.param.ChatRunWriteParam;
-import com.hellotravel.domain.persistence.model.param.ConversationRemoveParam;
-import com.hellotravel.domain.persistence.model.param.ConversationWriteParam;
-import com.hellotravel.domain.persistence.model.param.DeviceRemoveParam;
-import com.hellotravel.domain.persistence.model.param.DeviceWriteParam;
-import com.hellotravel.domain.persistence.model.param.EmailChallengeRemoveParam;
-import com.hellotravel.domain.persistence.model.param.EmailChallengeWriteParam;
-import com.hellotravel.domain.persistence.model.param.IndexJobRemoveParam;
-import com.hellotravel.domain.persistence.model.param.IndexJobWriteParam;
-import com.hellotravel.domain.persistence.model.param.KnowledgeChunkRemoveParam;
-import com.hellotravel.domain.persistence.model.param.KnowledgeChunkWriteParam;
-import com.hellotravel.domain.persistence.model.param.KnowledgeDocumentRemoveParam;
-import com.hellotravel.domain.persistence.model.param.KnowledgeDocumentWriteParam;
-import com.hellotravel.domain.persistence.model.param.LoginSessionRemoveParam;
-import com.hellotravel.domain.persistence.model.param.LoginSessionWriteParam;
-import com.hellotravel.domain.persistence.model.param.MemoryFactRemoveParam;
-import com.hellotravel.domain.persistence.model.param.MemoryFactSourceRemoveParam;
-import com.hellotravel.domain.persistence.model.param.MemoryFactSourceWriteParam;
-import com.hellotravel.domain.persistence.model.param.MemoryFactWriteParam;
-import com.hellotravel.domain.persistence.model.param.MemorySummaryRemoveParam;
-import com.hellotravel.domain.persistence.model.param.MemorySummaryWriteParam;
-import com.hellotravel.domain.persistence.model.param.MessageRemoveParam;
-import com.hellotravel.domain.persistence.model.param.MessageWriteParam;
-import com.hellotravel.domain.persistence.model.param.ModelInvocationRemoveParam;
-import com.hellotravel.domain.persistence.model.param.ModelInvocationWriteParam;
-import com.hellotravel.domain.persistence.model.param.OutboxEventRemoveParam;
-import com.hellotravel.domain.persistence.model.param.OutboxEventWriteParam;
-import com.hellotravel.domain.persistence.model.param.RefreshReceiptRemoveParam;
-import com.hellotravel.domain.persistence.model.param.RefreshReceiptWriteParam;
-import com.hellotravel.domain.persistence.model.param.SyncEventRemoveParam;
-import com.hellotravel.domain.persistence.model.param.SyncEventWriteParam;
-import com.hellotravel.domain.persistence.model.param.UserAccountRemoveParam;
-import com.hellotravel.domain.persistence.model.param.UserAccountWriteParam;
 import com.hellotravel.domain.persistence.service.TravelWriteDomainService;
 import com.hellotravel.domain.sync.model.aggregate.OutboxEventAggregate;
 import com.hellotravel.domain.sync.model.aggregate.SyncEventAggregate;
@@ -69,8 +36,13 @@ public final class DomainWrites {
 
     private final TravelWriteDomainService service;
 
-    public DomainWrites(TravelWriteDomainService service) {
+    private final TravelWriteApplicationAssembler travelWriteApplicationAssembler;
+
+    public DomainWrites(
+            TravelWriteDomainService service,
+            TravelWriteApplicationAssembler travelWriteApplicationAssembler) {
         this.service = service;
+        this.travelWriteApplicationAssembler = travelWriteApplicationAssembler;
     }
 
     /**
@@ -81,7 +53,12 @@ public final class DomainWrites {
      * @return 当前操作的业务结果
      */
     public Boolean saveUserAccount(UserAccountAggregate aggregate) {
-        return required(service.saveUserAccount(new UserAccountWriteParam(aggregate))).saved();
+        // 1. 用应用assembler绑定完整聚合或删除标识，禁止在调用处拼装Param。
+        var param = travelWriteApplicationAssembler.write(aggregate);
+        // 2. 执行领域入口，状态、并发和不可变归属由领域负责。
+        var result = service.saveUserAccount(param);
+        // 3. 核验持久化结果，失败中断当前事务而不继续提交。
+        return required(result).saved();
     }
 
     /**
@@ -92,7 +69,12 @@ public final class DomainWrites {
      * @return 当前操作的业务结果
      */
     public Boolean removeUserAccount(Long id) {
-        return required(service.removeUserAccount(new UserAccountRemoveParam(id))).saved();
+        // 1. 用应用assembler绑定完整聚合或删除标识，禁止在调用处拼装Param。
+        var param = travelWriteApplicationAssembler.removeUserAccount(id);
+        // 2. 执行领域入口，状态、并发和不可变归属由领域负责。
+        var result = service.removeUserAccount(param);
+        // 3. 核验持久化结果，失败中断当前事务而不继续提交。
+        return required(result).saved();
     }
 
     /**
@@ -103,7 +85,12 @@ public final class DomainWrites {
      * @return 当前操作的业务结果
      */
     public Boolean saveDevice(DeviceAggregate aggregate) {
-        return required(service.saveDevice(new DeviceWriteParam(aggregate))).saved();
+        // 1. 用应用assembler绑定完整聚合或删除标识，禁止在调用处拼装Param。
+        var param = travelWriteApplicationAssembler.write(aggregate);
+        // 2. 执行领域入口，状态、并发和不可变归属由领域负责。
+        var result = service.saveDevice(param);
+        // 3. 核验持久化结果，失败中断当前事务而不继续提交。
+        return required(result).saved();
     }
 
     /**
@@ -114,7 +101,12 @@ public final class DomainWrites {
      * @return 当前操作的业务结果
      */
     public Boolean removeDevice(Long id) {
-        return required(service.removeDevice(new DeviceRemoveParam(id))).saved();
+        // 1. 用应用assembler绑定完整聚合或删除标识，禁止在调用处拼装Param。
+        var param = travelWriteApplicationAssembler.removeDevice(id);
+        // 2. 执行领域入口，状态、并发和不可变归属由领域负责。
+        var result = service.removeDevice(param);
+        // 3. 核验持久化结果，失败中断当前事务而不继续提交。
+        return required(result).saved();
     }
 
     /**
@@ -125,7 +117,12 @@ public final class DomainWrites {
      * @return 当前操作的业务结果
      */
     public Boolean saveLoginSession(LoginSessionAggregate aggregate) {
-        return required(service.saveLoginSession(new LoginSessionWriteParam(aggregate))).saved();
+        // 1. 用应用assembler绑定完整聚合或删除标识，禁止在调用处拼装Param。
+        var param = travelWriteApplicationAssembler.write(aggregate);
+        // 2. 执行领域入口，状态、并发和不可变归属由领域负责。
+        var result = service.saveLoginSession(param);
+        // 3. 核验持久化结果，失败中断当前事务而不继续提交。
+        return required(result).saved();
     }
 
     /**
@@ -136,7 +133,12 @@ public final class DomainWrites {
      * @return 当前操作的业务结果
      */
     public Boolean removeLoginSession(Long id) {
-        return required(service.removeLoginSession(new LoginSessionRemoveParam(id))).saved();
+        // 1. 用应用assembler绑定完整聚合或删除标识，禁止在调用处拼装Param。
+        var param = travelWriteApplicationAssembler.removeLoginSession(id);
+        // 2. 执行领域入口，状态、并发和不可变归属由领域负责。
+        var result = service.removeLoginSession(param);
+        // 3. 核验持久化结果，失败中断当前事务而不继续提交。
+        return required(result).saved();
     }
 
     /**
@@ -147,8 +149,12 @@ public final class DomainWrites {
      * @return 当前操作的业务结果
      */
     public Boolean saveEmailChallenge(EmailChallengeAggregate aggregate) {
-        return required(service.saveEmailChallenge(new EmailChallengeWriteParam(aggregate)))
-                .saved();
+        // 1. 用应用assembler绑定完整聚合或删除标识，禁止在调用处拼装Param。
+        var param = travelWriteApplicationAssembler.write(aggregate);
+        // 2. 执行领域入口，状态、并发和不可变归属由领域负责。
+        var result = service.saveEmailChallenge(param);
+        // 3. 核验持久化结果，失败中断当前事务而不继续提交。
+        return required(result).saved();
     }
 
     /**
@@ -159,7 +165,12 @@ public final class DomainWrites {
      * @return 当前操作的业务结果
      */
     public Boolean removeEmailChallenge(Long id) {
-        return required(service.removeEmailChallenge(new EmailChallengeRemoveParam(id))).saved();
+        // 1. 用应用assembler绑定完整聚合或删除标识，禁止在调用处拼装Param。
+        var param = travelWriteApplicationAssembler.removeEmailChallenge(id);
+        // 2. 执行领域入口，状态、并发和不可变归属由领域负责。
+        var result = service.removeEmailChallenge(param);
+        // 3. 核验持久化结果，失败中断当前事务而不继续提交。
+        return required(result).saved();
     }
 
     /**
@@ -170,7 +181,12 @@ public final class DomainWrites {
      * @return 当前操作的业务结果
      */
     public Boolean saveConversation(ConversationAggregate aggregate) {
-        return required(service.saveConversation(new ConversationWriteParam(aggregate))).saved();
+        // 1. 用应用assembler绑定完整聚合或删除标识，禁止在调用处拼装Param。
+        var param = travelWriteApplicationAssembler.write(aggregate);
+        // 2. 执行领域入口，状态、并发和不可变归属由领域负责。
+        var result = service.saveConversation(param);
+        // 3. 核验持久化结果，失败中断当前事务而不继续提交。
+        return required(result).saved();
     }
 
     /**
@@ -181,7 +197,12 @@ public final class DomainWrites {
      * @return 当前操作的业务结果
      */
     public Boolean removeConversation(Long id) {
-        return required(service.removeConversation(new ConversationRemoveParam(id))).saved();
+        // 1. 用应用assembler绑定完整聚合或删除标识，禁止在调用处拼装Param。
+        var param = travelWriteApplicationAssembler.removeConversation(id);
+        // 2. 执行领域入口，状态、并发和不可变归属由领域负责。
+        var result = service.removeConversation(param);
+        // 3. 核验持久化结果，失败中断当前事务而不继续提交。
+        return required(result).saved();
     }
 
     /**
@@ -192,7 +213,12 @@ public final class DomainWrites {
      * @return 当前操作的业务结果
      */
     public Boolean saveMessage(MessageAggregate aggregate) {
-        return required(service.saveMessage(new MessageWriteParam(aggregate))).saved();
+        // 1. 用应用assembler绑定完整聚合或删除标识，禁止在调用处拼装Param。
+        var param = travelWriteApplicationAssembler.write(aggregate);
+        // 2. 执行领域入口，状态、并发和不可变归属由领域负责。
+        var result = service.saveMessage(param);
+        // 3. 核验持久化结果，失败中断当前事务而不继续提交。
+        return required(result).saved();
     }
 
     /**
@@ -203,7 +229,12 @@ public final class DomainWrites {
      * @return 当前操作的业务结果
      */
     public Boolean removeMessage(Long id) {
-        return required(service.removeMessage(new MessageRemoveParam(id))).saved();
+        // 1. 用应用assembler绑定完整聚合或删除标识，禁止在调用处拼装Param。
+        var param = travelWriteApplicationAssembler.removeMessage(id);
+        // 2. 执行领域入口，状态、并发和不可变归属由领域负责。
+        var result = service.removeMessage(param);
+        // 3. 核验持久化结果，失败中断当前事务而不继续提交。
+        return required(result).saved();
     }
 
     /**
@@ -214,7 +245,12 @@ public final class DomainWrites {
      * @return 当前操作的业务结果
      */
     public Boolean saveChatRun(ChatRunAggregate aggregate) {
-        return required(service.saveChatRun(new ChatRunWriteParam(aggregate))).saved();
+        // 1. 用应用assembler绑定完整聚合或删除标识，禁止在调用处拼装Param。
+        var param = travelWriteApplicationAssembler.write(aggregate);
+        // 2. 执行领域入口，状态、并发和不可变归属由领域负责。
+        var result = service.saveChatRun(param);
+        // 3. 核验持久化结果，失败中断当前事务而不继续提交。
+        return required(result).saved();
     }
 
     /**
@@ -225,7 +261,12 @@ public final class DomainWrites {
      * @return 当前操作的业务结果
      */
     public Boolean removeChatRun(Long id) {
-        return required(service.removeChatRun(new ChatRunRemoveParam(id))).saved();
+        // 1. 用应用assembler绑定完整聚合或删除标识，禁止在调用处拼装Param。
+        var param = travelWriteApplicationAssembler.removeChatRun(id);
+        // 2. 执行领域入口，状态、并发和不可变归属由领域负责。
+        var result = service.removeChatRun(param);
+        // 3. 核验持久化结果，失败中断当前事务而不继续提交。
+        return required(result).saved();
     }
 
     /**
@@ -236,7 +277,12 @@ public final class DomainWrites {
      * @return 当前操作的业务结果
      */
     public Boolean saveMemorySummary(MemorySummaryAggregate aggregate) {
-        return required(service.saveMemorySummary(new MemorySummaryWriteParam(aggregate))).saved();
+        // 1. 用应用assembler绑定完整聚合或删除标识，禁止在调用处拼装Param。
+        var param = travelWriteApplicationAssembler.write(aggregate);
+        // 2. 执行领域入口，状态、并发和不可变归属由领域负责。
+        var result = service.saveMemorySummary(param);
+        // 3. 核验持久化结果，失败中断当前事务而不继续提交。
+        return required(result).saved();
     }
 
     /**
@@ -247,7 +293,12 @@ public final class DomainWrites {
      * @return 当前操作的业务结果
      */
     public Boolean removeMemorySummary(Long id) {
-        return required(service.removeMemorySummary(new MemorySummaryRemoveParam(id))).saved();
+        // 1. 用应用assembler绑定完整聚合或删除标识，禁止在调用处拼装Param。
+        var param = travelWriteApplicationAssembler.removeMemorySummary(id);
+        // 2. 执行领域入口，状态、并发和不可变归属由领域负责。
+        var result = service.removeMemorySummary(param);
+        // 3. 核验持久化结果，失败中断当前事务而不继续提交。
+        return required(result).saved();
     }
 
     /**
@@ -258,7 +309,12 @@ public final class DomainWrites {
      * @return 当前操作的业务结果
      */
     public Boolean saveMemoryFact(MemoryFactAggregate aggregate) {
-        return required(service.saveMemoryFact(new MemoryFactWriteParam(aggregate))).saved();
+        // 1. 用应用assembler绑定完整聚合或删除标识，禁止在调用处拼装Param。
+        var param = travelWriteApplicationAssembler.write(aggregate);
+        // 2. 执行领域入口，状态、并发和不可变归属由领域负责。
+        var result = service.saveMemoryFact(param);
+        // 3. 核验持久化结果，失败中断当前事务而不继续提交。
+        return required(result).saved();
     }
 
     /**
@@ -269,7 +325,12 @@ public final class DomainWrites {
      * @return 当前操作的业务结果
      */
     public Boolean removeMemoryFact(Long id) {
-        return required(service.removeMemoryFact(new MemoryFactRemoveParam(id))).saved();
+        // 1. 用应用assembler绑定完整聚合或删除标识，禁止在调用处拼装Param。
+        var param = travelWriteApplicationAssembler.removeMemoryFact(id);
+        // 2. 执行领域入口，状态、并发和不可变归属由领域负责。
+        var result = service.removeMemoryFact(param);
+        // 3. 核验持久化结果，失败中断当前事务而不继续提交。
+        return required(result).saved();
     }
 
     /**
@@ -280,8 +341,12 @@ public final class DomainWrites {
      * @return 当前操作的业务结果
      */
     public Boolean saveMemoryFactSource(MemoryFactSourceAggregate aggregate) {
-        return required(service.saveMemoryFactSource(new MemoryFactSourceWriteParam(aggregate)))
-                .saved();
+        // 1. 用应用assembler绑定完整聚合或删除标识，禁止在调用处拼装Param。
+        var param = travelWriteApplicationAssembler.write(aggregate);
+        // 2. 执行领域入口，状态、并发和不可变归属由领域负责。
+        var result = service.saveMemoryFactSource(param);
+        // 3. 核验持久化结果，失败中断当前事务而不继续提交。
+        return required(result).saved();
     }
 
     /**
@@ -292,8 +357,12 @@ public final class DomainWrites {
      * @return 当前操作的业务结果
      */
     public Boolean removeMemoryFactSource(Long id) {
-        return required(service.removeMemoryFactSource(new MemoryFactSourceRemoveParam(id)))
-                .saved();
+        // 1. 用应用assembler绑定完整聚合或删除标识，禁止在调用处拼装Param。
+        var param = travelWriteApplicationAssembler.removeMemoryFactSource(id);
+        // 2. 执行领域入口，状态、并发和不可变归属由领域负责。
+        var result = service.removeMemoryFactSource(param);
+        // 3. 核验持久化结果，失败中断当前事务而不继续提交。
+        return required(result).saved();
     }
 
     /**
@@ -304,8 +373,12 @@ public final class DomainWrites {
      * @return 当前操作的业务结果
      */
     public Boolean saveKnowledgeDocument(KnowledgeDocumentAggregate aggregate) {
-        return required(service.saveKnowledgeDocument(new KnowledgeDocumentWriteParam(aggregate)))
-                .saved();
+        // 1. 用应用assembler绑定完整聚合或删除标识，禁止在调用处拼装Param。
+        var param = travelWriteApplicationAssembler.write(aggregate);
+        // 2. 执行领域入口，状态、并发和不可变归属由领域负责。
+        var result = service.saveKnowledgeDocument(param);
+        // 3. 核验持久化结果，失败中断当前事务而不继续提交。
+        return required(result).saved();
     }
 
     /**
@@ -316,8 +389,12 @@ public final class DomainWrites {
      * @return 当前操作的业务结果
      */
     public Boolean removeKnowledgeDocument(Long id) {
-        return required(service.removeKnowledgeDocument(new KnowledgeDocumentRemoveParam(id)))
-                .saved();
+        // 1. 用应用assembler绑定完整聚合或删除标识，禁止在调用处拼装Param。
+        var param = travelWriteApplicationAssembler.removeKnowledgeDocument(id);
+        // 2. 执行领域入口，状态、并发和不可变归属由领域负责。
+        var result = service.removeKnowledgeDocument(param);
+        // 3. 核验持久化结果，失败中断当前事务而不继续提交。
+        return required(result).saved();
     }
 
     /**
@@ -328,8 +405,12 @@ public final class DomainWrites {
      * @return 当前操作的业务结果
      */
     public Boolean saveKnowledgeChunk(KnowledgeChunkAggregate aggregate) {
-        return required(service.saveKnowledgeChunk(new KnowledgeChunkWriteParam(aggregate)))
-                .saved();
+        // 1. 用应用assembler绑定完整聚合或删除标识，禁止在调用处拼装Param。
+        var param = travelWriteApplicationAssembler.write(aggregate);
+        // 2. 执行领域入口，状态、并发和不可变归属由领域负责。
+        var result = service.saveKnowledgeChunk(param);
+        // 3. 核验持久化结果，失败中断当前事务而不继续提交。
+        return required(result).saved();
     }
 
     /**
@@ -340,7 +421,12 @@ public final class DomainWrites {
      * @return 当前操作的业务结果
      */
     public Boolean removeKnowledgeChunk(Long id) {
-        return required(service.removeKnowledgeChunk(new KnowledgeChunkRemoveParam(id))).saved();
+        // 1. 用应用assembler绑定完整聚合或删除标识，禁止在调用处拼装Param。
+        var param = travelWriteApplicationAssembler.removeKnowledgeChunk(id);
+        // 2. 执行领域入口，状态、并发和不可变归属由领域负责。
+        var result = service.removeKnowledgeChunk(param);
+        // 3. 核验持久化结果，失败中断当前事务而不继续提交。
+        return required(result).saved();
     }
 
     /**
@@ -351,7 +437,12 @@ public final class DomainWrites {
      * @return 当前操作的业务结果
      */
     public Boolean saveIndexJob(IndexJobAggregate aggregate) {
-        return required(service.saveIndexJob(new IndexJobWriteParam(aggregate))).saved();
+        // 1. 用应用assembler绑定完整聚合或删除标识，禁止在调用处拼装Param。
+        var param = travelWriteApplicationAssembler.write(aggregate);
+        // 2. 执行领域入口，状态、并发和不可变归属由领域负责。
+        var result = service.saveIndexJob(param);
+        // 3. 核验持久化结果，失败中断当前事务而不继续提交。
+        return required(result).saved();
     }
 
     /**
@@ -362,7 +453,12 @@ public final class DomainWrites {
      * @return 当前操作的业务结果
      */
     public Boolean removeIndexJob(Long id) {
-        return required(service.removeIndexJob(new IndexJobRemoveParam(id))).saved();
+        // 1. 用应用assembler绑定完整聚合或删除标识，禁止在调用处拼装Param。
+        var param = travelWriteApplicationAssembler.removeIndexJob(id);
+        // 2. 执行领域入口，状态、并发和不可变归属由领域负责。
+        var result = service.removeIndexJob(param);
+        // 3. 核验持久化结果，失败中断当前事务而不继续提交。
+        return required(result).saved();
     }
 
     /**
@@ -373,7 +469,12 @@ public final class DomainWrites {
      * @return 当前操作的业务结果
      */
     public Boolean saveSyncEvent(SyncEventAggregate aggregate) {
-        return required(service.saveSyncEvent(new SyncEventWriteParam(aggregate))).saved();
+        // 1. 用应用assembler绑定完整聚合或删除标识，禁止在调用处拼装Param。
+        var param = travelWriteApplicationAssembler.write(aggregate);
+        // 2. 执行领域入口，状态、并发和不可变归属由领域负责。
+        var result = service.saveSyncEvent(param);
+        // 3. 核验持久化结果，失败中断当前事务而不继续提交。
+        return required(result).saved();
     }
 
     /**
@@ -384,7 +485,12 @@ public final class DomainWrites {
      * @return 当前操作的业务结果
      */
     public Boolean removeSyncEvent(Long id) {
-        return required(service.removeSyncEvent(new SyncEventRemoveParam(id))).saved();
+        // 1. 用应用assembler绑定完整聚合或删除标识，禁止在调用处拼装Param。
+        var param = travelWriteApplicationAssembler.removeSyncEvent(id);
+        // 2. 执行领域入口，状态、并发和不可变归属由领域负责。
+        var result = service.removeSyncEvent(param);
+        // 3. 核验持久化结果，失败中断当前事务而不继续提交。
+        return required(result).saved();
     }
 
     /**
@@ -395,7 +501,12 @@ public final class DomainWrites {
      * @return 当前操作的业务结果
      */
     public Boolean saveOutboxEvent(OutboxEventAggregate aggregate) {
-        return required(service.saveOutboxEvent(new OutboxEventWriteParam(aggregate))).saved();
+        // 1. 用应用assembler绑定完整聚合或删除标识，禁止在调用处拼装Param。
+        var param = travelWriteApplicationAssembler.write(aggregate);
+        // 2. 执行领域入口，状态、并发和不可变归属由领域负责。
+        var result = service.saveOutboxEvent(param);
+        // 3. 核验持久化结果，失败中断当前事务而不继续提交。
+        return required(result).saved();
     }
 
     /**
@@ -406,7 +517,12 @@ public final class DomainWrites {
      * @return 当前操作的业务结果
      */
     public Boolean removeOutboxEvent(Long id) {
-        return required(service.removeOutboxEvent(new OutboxEventRemoveParam(id))).saved();
+        // 1. 用应用assembler绑定完整聚合或删除标识，禁止在调用处拼装Param。
+        var param = travelWriteApplicationAssembler.removeOutboxEvent(id);
+        // 2. 执行领域入口，状态、并发和不可变归属由领域负责。
+        var result = service.removeOutboxEvent(param);
+        // 3. 核验持久化结果，失败中断当前事务而不继续提交。
+        return required(result).saved();
     }
 
     /**
@@ -417,8 +533,12 @@ public final class DomainWrites {
      * @return 当前操作的业务结果
      */
     public Boolean saveModelInvocation(ModelInvocationAggregate aggregate) {
-        return required(service.saveModelInvocation(new ModelInvocationWriteParam(aggregate)))
-                .saved();
+        // 1. 用应用assembler绑定完整聚合或删除标识，禁止在调用处拼装Param。
+        var param = travelWriteApplicationAssembler.write(aggregate);
+        // 2. 执行领域入口，状态、并发和不可变归属由领域负责。
+        var result = service.saveModelInvocation(param);
+        // 3. 核验持久化结果，失败中断当前事务而不继续提交。
+        return required(result).saved();
     }
 
     /**
@@ -429,7 +549,12 @@ public final class DomainWrites {
      * @return 当前操作的业务结果
      */
     public Boolean removeModelInvocation(Long id) {
-        return required(service.removeModelInvocation(new ModelInvocationRemoveParam(id))).saved();
+        // 1. 用应用assembler绑定完整聚合或删除标识，禁止在调用处拼装Param。
+        var param = travelWriteApplicationAssembler.removeModelInvocation(id);
+        // 2. 执行领域入口，状态、并发和不可变归属由领域负责。
+        var result = service.removeModelInvocation(param);
+        // 3. 核验持久化结果，失败中断当前事务而不继续提交。
+        return required(result).saved();
     }
 
     /**
@@ -440,8 +565,12 @@ public final class DomainWrites {
      * @return 当前操作的业务结果
      */
     public Boolean saveRefreshReceipt(RefreshReceiptAggregate aggregate) {
-        return required(service.saveRefreshReceipt(new RefreshReceiptWriteParam(aggregate)))
-                .saved();
+        // 1. 用应用assembler绑定完整聚合或删除标识，禁止在调用处拼装Param。
+        var param = travelWriteApplicationAssembler.write(aggregate);
+        // 2. 执行领域入口，状态、并发和不可变归属由领域负责。
+        var result = service.saveRefreshReceipt(param);
+        // 3. 核验持久化结果，失败中断当前事务而不继续提交。
+        return required(result).saved();
     }
 
     /**
@@ -452,13 +581,18 @@ public final class DomainWrites {
      * @return 当前操作的业务结果
      */
     public Boolean removeRefreshReceipt(Long id) {
-        return required(service.removeRefreshReceipt(new RefreshReceiptRemoveParam(id))).saved();
+        // 1. 用应用assembler绑定完整聚合或删除标识，禁止在调用处拼装Param。
+        var param = travelWriteApplicationAssembler.removeRefreshReceipt(id);
+        // 2. 执行领域入口，状态、并发和不可变归属由领域负责。
+        var result = service.removeRefreshReceipt(param);
+        // 3. 核验持久化结果，失败中断当前事务而不继续提交。
+        return required(result).saved();
     }
 
     private static WriteDO required(Result<WriteDO> result) {
         // 1. 核对下层标准结果的成功状态，失败中止当前处理。
         if (!result.success()) {
-            throw new DomainException(DomainErrorCode.valueOf(result.code()));
+            throw new ApplicationException(ApplicationErrorCode.valueOf(result.code()));
         }
         // 2. 返回由领域服务成功结果转换的写标记，调用者据此确认持久化。
         return result.data();

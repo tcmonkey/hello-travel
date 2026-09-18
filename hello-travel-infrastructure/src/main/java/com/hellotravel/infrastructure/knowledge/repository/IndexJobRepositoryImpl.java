@@ -3,12 +3,12 @@ package com.hellotravel.infrastructure.knowledge.repository;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.hellotravel.domain.knowledge.model.aggregate.IndexJobAggregate;
-import com.hellotravel.domain.knowledge.model.entity.IndexJobEntity;
 import com.hellotravel.domain.knowledge.repository.IndexJobRepository;
 import com.hellotravel.domain.query.model.value.QueryValue;
 import com.hellotravel.infrastructure.TravelBaseRepository;
 import com.hellotravel.infrastructure.exception.InfrastructureErrorCode;
 import com.hellotravel.infrastructure.exception.InfrastructureException;
+import com.hellotravel.infrastructure.knowledge.converter.IndexJobPersistenceConverter;
 import com.hellotravel.infrastructure.knowledge.mysql.mapper.IndexJobMapper;
 import com.hellotravel.infrastructure.knowledge.mysql.pojo.IndexJobPO;
 
@@ -26,6 +26,8 @@ import java.util.Set;
 public class IndexJobRepositoryImpl extends TravelBaseRepository<IndexJobMapper, IndexJobPO>
         implements IndexJobRepository {
 
+    private final IndexJobPersistenceConverter indexJobPersistenceConverter;
+
     /**
      * 按内部主键恢复完整聚合；不存在时返回空值。
      *
@@ -37,7 +39,7 @@ public class IndexJobRepositoryImpl extends TravelBaseRepository<IndexJobMapper,
         // 1. 转换完整聚合为本仓储PO，映射与状态决策分开。
         IndexJobPO po = getById(id);
         // 2. 显式处理不存在的记录，并恢复聚合快照。
-        return po == null ? null : restore(po);
+        return po == null ? null : indexJobPersistenceConverter.restore(po);
     }
 
     /**
@@ -72,7 +74,9 @@ public class IndexJobRepositoryImpl extends TravelBaseRepository<IndexJobMapper,
                                 "version"));
         Page<IndexJobPO> page = new Page<>(1, queryValue.limit(), false);
         // 2. 读取有界PO集合并恢复完整聚合，不向上暴露ORM对象。
-        return page(page, wrapper).getRecords().stream().map(this::restore).toList();
+        return page(page, wrapper).getRecords().stream()
+                .map(indexJobPersistenceConverter::restore)
+                .toList();
     }
 
     /**
@@ -85,7 +89,7 @@ public class IndexJobRepositoryImpl extends TravelBaseRepository<IndexJobMapper,
     public Boolean save(IndexJobAggregate aggregate) {
         try {
             // 1. 转换完整聚合为本仓储PO，映射与状态决策分开。
-            IndexJobPO po = toPersistence(aggregate);
+            IndexJobPO po = indexJobPersistenceConverter.toPersistence(aggregate);
             // 2. 区分新快照新增与已保存快照的版本CAS更新。
             if (po.getId() == null) {
                 return super.save(po);
@@ -118,58 +122,7 @@ public class IndexJobRepositoryImpl extends TravelBaseRepository<IndexJobMapper,
         return super.removeById(id);
     }
 
-    private IndexJobAggregate restore(IndexJobPO po) {
-        return new IndexJobAggregate(
-                new IndexJobEntity(
-                        po.getId(),
-                        po.getPublicId(),
-                        po.getUserId(),
-                        po.getDocumentId(),
-                        po.getIndexGeneration(),
-                        po.getJobType(),
-                        po.getStatus(),
-                        po.getAttemptCount(),
-                        po.getMaxAttempts(),
-                        po.getNextAttemptAt(),
-                        po.getLeaseOwner(),
-                        po.getLeaseFence(),
-                        po.getLeaseUntil(),
-                        po.getErrorCode(),
-                        po.getCreatedAt(),
-                        po.getUpdatedAt(),
-                        po.getVersion()));
-    }
-
-    private
-    /**
-     * 将完整聚合快照转换为本仓储PO，映射不参与业务状态决策。
-     *
-     * @param aggregate 待保存聚合
-     * @return 数据库存储快照
-     * @author AIGenerator
-     */
-    IndexJobPO toPersistence(IndexJobAggregate aggregate) {
-        // 1. 转换完整聚合为本仓储PO，映射与状态决策分开。
-        IndexJobPO po = new IndexJobPO();
-        // 2. 映射本段快照字段，业务状态规则不放入PO赋值。
-        po.setId(aggregate.entity().id());
-        po.setPublicId(aggregate.entity().publicId());
-        po.setUserId(aggregate.entity().userId());
-        po.setDocumentId(aggregate.entity().documentId());
-        po.setIndexGeneration(aggregate.entity().indexGeneration());
-        po.setJobType(aggregate.entity().jobType());
-        po.setStatus(aggregate.entity().status());
-        po.setAttemptCount(aggregate.entity().attemptCount());
-        po.setMaxAttempts(aggregate.entity().maxAttempts());
-        po.setNextAttemptAt(aggregate.entity().nextAttemptAt());
-        po.setLeaseOwner(aggregate.entity().leaseOwner());
-        po.setLeaseFence(aggregate.entity().leaseFence());
-        po.setLeaseUntil(aggregate.entity().leaseUntil());
-        po.setErrorCode(aggregate.entity().errorCode());
-        po.setCreatedAt(aggregate.entity().createdAt());
-        po.setUpdatedAt(aggregate.entity().updatedAt());
-        po.setVersion(aggregate.entity().version());
-        // 3. 返回完整存储快照，由保存步骤决定新增或版本CAS更新。
-        return po;
+    public IndexJobRepositoryImpl(IndexJobPersistenceConverter indexJobPersistenceConverter) {
+        this.indexJobPersistenceConverter = indexJobPersistenceConverter;
     }
 }

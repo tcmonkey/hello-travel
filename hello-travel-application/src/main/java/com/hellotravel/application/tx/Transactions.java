@@ -1,11 +1,11 @@
 package com.hellotravel.application.tx;
 
+import com.hellotravel.application.exception.ApplicationErrorCode;
+import com.hellotravel.application.exception.ApplicationException;
 import com.hellotravel.application.persistence.DomainWrites;
 import com.hellotravel.application.persistence.TravelRepositories;
 import com.hellotravel.domain.auth.model.aggregate.UserAccountAggregate;
 import com.hellotravel.domain.auth.model.entity.UserAccountEntity;
-import com.hellotravel.domain.exception.DomainErrorCode;
-import com.hellotravel.domain.exception.DomainException;
 
 import org.springframework.dao.TransientDataAccessException;
 import org.springframework.stereotype.Component;
@@ -94,7 +94,7 @@ public final class Transactions {
                             UserAccountAggregate stored = repositories.userAccount.findById(userId);
                             // 2. 账号不存在或不活动时拒绝进入写事务，防止停用后的请求继续提交。
                             if (stored == null || !"ACTIVE".equals(stored.entity().status())) {
-                                throw new DomainException(DomainErrorCode.UNAUTHORIZED);
+                                throw new ApplicationException(ApplicationErrorCode.UNAUTHORIZED);
                             }
                             // 3. 通过领域聚合语义准备业务快照，固定状态由实体封装。
                             UserAccountEntity next =
@@ -106,18 +106,18 @@ public final class Transactions {
                             // 5. 提供本事务或回调的处理结果，完成责任由所属外层流程承接。
                             return operation.apply(next);
                         });
-            } catch (DomainException exception) {
-                if (exception.errorCode() != DomainErrorCode.CONFLICT || attempt == 2) {
+            } catch (ApplicationException exception) {
+                if (exception.errorCode() != ApplicationErrorCode.CONFLICT || attempt == 2) {
                     throw exception;
                 }
             } catch (TransientDataAccessException exception) {
                 if (attempt == 2) {
-                    throw new DomainException(DomainErrorCode.CONFLICT);
+                    throw new ApplicationException(ApplicationErrorCode.CONFLICT);
                 }
             }
         }
         // 2. 以稳定异常中断当前内部处理，由所属入口转换安全失败。
-        throw new DomainException(DomainErrorCode.CONFLICT);
+        throw new ApplicationException(ApplicationErrorCode.CONFLICT);
     }
 
     /**
@@ -129,7 +129,7 @@ public final class Transactions {
     public static void require(Boolean saved) {
         // 1. 未实际写入视为并发冲突，抛给所属事务以回滚整组状态变更。
         if (!Boolean.TRUE.equals(saved)) {
-            throw new DomainException(DomainErrorCode.CONFLICT);
+            throw new ApplicationException(ApplicationErrorCode.CONFLICT);
         }
     }
 }

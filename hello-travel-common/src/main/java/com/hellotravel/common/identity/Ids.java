@@ -34,7 +34,7 @@ public final class Ids {
      * @author AIGenerator
      */
     private Ids() {
-}
+    }
 
     /**
      * 生成带随机熵的公开ULID。

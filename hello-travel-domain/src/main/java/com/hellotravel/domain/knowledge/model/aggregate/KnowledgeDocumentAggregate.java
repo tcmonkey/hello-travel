@@ -3,6 +3,7 @@ package com.hellotravel.domain.knowledge.model.aggregate;
 import com.hellotravel.domain.exception.DomainErrorCode;
 import com.hellotravel.domain.exception.DomainException;
 import com.hellotravel.domain.knowledge.model.entity.KnowledgeDocumentEntity;
+import com.hellotravel.domain.knowledge.model.value.EmbeddingProfileValue;
 
 /**
  * 场景聚合容器，只持有实体。
@@ -97,6 +98,7 @@ public record KnowledgeDocumentAggregate(KnowledgeDocumentEntity entity) {
      * @param contentSha256 原始文件SHA256校验及重复导入识别
      * @param extractedText 提取的明文，页面分段加载；应用有提取上限
      * @param sourceUrl 官方来源链接或用户提供的来源，仅作引用
+     * @param profile 已选择的不可变索引配置
      * @param createdAt 创建时间
      * @param updatedAt 当前变更时间
      * @return 保持归属与版本的业务快照
@@ -112,6 +114,7 @@ public record KnowledgeDocumentAggregate(KnowledgeDocumentEntity entity) {
             byte[] contentSha256,
             String extractedText,
             String sourceUrl,
+            EmbeddingProfileValue profile,
             java.time.LocalDateTime createdAt,
             java.time.LocalDateTime updatedAt) {
         // 1. 创建已解析的知识文档，索引就绪需后续任务确认，具体变更委托实体。
@@ -126,6 +129,7 @@ public record KnowledgeDocumentAggregate(KnowledgeDocumentEntity entity) {
                         contentSha256,
                         extractedText,
                         sourceUrl,
+                        profile,
                         createdAt,
                         updatedAt));
     }

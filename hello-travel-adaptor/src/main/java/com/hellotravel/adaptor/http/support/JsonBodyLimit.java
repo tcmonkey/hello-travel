@@ -1,7 +1,7 @@
 package com.hellotravel.adaptor.http.support;
 
-import com.hellotravel.domain.exception.DomainErrorCode;
-import com.hellotravel.domain.exception.DomainException;
+import com.hellotravel.adaptor.exception.AdaptorErrorCode;
+import com.hellotravel.adaptor.exception.AdaptorException;
 
 import org.springframework.core.MethodParameter;
 import org.springframework.http.HttpInputMessage;
@@ -59,7 +59,7 @@ public final class JsonBodyLimit extends RequestBodyAdviceAdapter {
         byte[] body = inputMessage.getBody().readNBytes(32769);
         // 2. 核对格式、长度或数量边界，失败中止当前处理。
         if (body.length > 32768) {
-            throw new DomainException(DomainErrorCode.INVALID);
+            throw new AdaptorException(AdaptorErrorCode.INVALID);
         }
         // 3. 返回本段实际处理结果，保持本层输出契约。
         return new HttpInputMessage() {

@@ -15,7 +15,7 @@ public final class Failures {
      * @author AIGenerator
      */
     private Failures() {
-}
+    }
 
     /**
      * 将入口捕获的异常转换为安全失败结果，不返回异常正文或堆栈。

@@ -1,14 +1,14 @@
 package com.hellotravel.adaptor.http.stream;
 
+import com.hellotravel.adaptor.exception.AdaptorErrorCode;
+import com.hellotravel.adaptor.exception.AdaptorException;
+import com.hellotravel.adaptor.http.assembler.AuthInputAssembler;
+import com.hellotravel.adaptor.http.assembler.SyncInputAssembler;
 import com.hellotravel.adaptor.http.support.HttpIdentity;
 import com.hellotravel.adaptor.http.support.HttpResults;
-import com.hellotravel.application.auth.command.AuthCommand;
 import com.hellotravel.application.auth.service.AuthApplication;
-import com.hellotravel.application.sync.command.SyncCommand;
 import com.hellotravel.application.sync.service.SyncApplication;
 import com.hellotravel.common.identity.Ids;
-import com.hellotravel.domain.exception.DomainErrorCode;
-import com.hellotravel.domain.exception.DomainException;
 
 import jakarta.servlet.http.HttpServletRequest;
 
@@ -61,9 +61,19 @@ public final class SyncStreamController {
     private final java.util.concurrent.ConcurrentMap<String, Subscription> subscriptions =
             new java.util.concurrent.ConcurrentHashMap<>();
 
-    public SyncStreamController(AuthApplication auth, SyncApplication sync) {
+    private final AuthInputAssembler authInputAssembler;
+
+    private final SyncInputAssembler syncInputAssembler;
+
+    public SyncStreamController(
+            AuthApplication auth,
+            SyncApplication sync,
+            AuthInputAssembler authInputAssembler,
+            SyncInputAssembler syncInputAssembler) {
         this.auth = auth;
         this.sync = sync;
+        this.authInputAssembler = authInputAssembler;
+        this.syncInputAssembler = syncInputAssembler;
     }
 
     /**
@@ -85,7 +95,7 @@ public final class SyncStreamController {
                     || subscriptions.size() >= 100
                     || subscriptions.values().stream().filter(x -> x.user.equals(user)).count()
                             >= 4) {
-                throw new DomainException(DomainErrorCode.RATE_LIMITED);
+                throw new AdaptorException(AdaptorErrorCode.RATE_LIMITED);
             }
             // 3. 生成本次业务的公开标识，内部数据库主键保持由仓储分配。
             String id = Ids.next();
@@ -143,30 +153,21 @@ public final class SyncStreamController {
 
     private void emit(String id, Subscription sub) {
         try {
-            // 1. 执行required职责步骤，并把失败交给所属事务或入口处理。
-            HttpResults.required(
-                    auth.authenticate(
-                            new AuthCommand(
-                                    "CHECK",
-                                    null,
-                                    null,
-                                    null,
-                                    null,
-                                    null,
-                                    null,
-                                    sub.sid,
-                                    sub.access,
-                                    null,
-                                    null,
-                                    "stream")));
-            // 2. 取得本段结果并准备本层转换，随后显式核对成功状态。
-            var result =
-                    HttpResults.required(
-                            sync.synchronize(new SyncCommand(sub.user, sub.after, 100)));
+            // 1. 将订阅原始SID和令牌转换为检查命令，失效时停止发送。
+            var authCommand = authInputAssembler.check(sub.sid, sub.access, "stream");
+            var authResult = auth.authenticate(authCommand);
+            HttpResults.required(authResult);
+            // 2. 转换补齐命令并核验应用结果，保持持久游标连续性。
+            var syncCommand = syncInputAssembler.toCommand(sub.user, sub.after);
+            var syncResult = sync.synchronize(syncCommand);
+            var result = HttpResults.required(syncResult);
             // 3. 逐项处理当前数据窗口，并在循环中核对可用状态与停止条件。
             for (var event : result.items()) {
                 sub.emitter.send(
-                        SseEmitter.event().id(Long.toString(event.seq())).name("sync").data(event));
+                        SseEmitter.event()
+                                .id(Long.toString(event.seq()))
+                                .name("sync")
+                                .data(syncInputAssembler.event(event)));
                 sub.after = event.seq();
             }
             // 4. 无待发送事件时发送心跳，保持连接而不推进事件游标。

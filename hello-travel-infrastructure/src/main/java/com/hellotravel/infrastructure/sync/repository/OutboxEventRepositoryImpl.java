@@ -4,11 +4,11 @@ import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.hellotravel.domain.query.model.value.QueryValue;
 import com.hellotravel.domain.sync.model.aggregate.OutboxEventAggregate;
-import com.hellotravel.domain.sync.model.entity.OutboxEventEntity;
 import com.hellotravel.domain.sync.repository.OutboxEventRepository;
 import com.hellotravel.infrastructure.TravelBaseRepository;
 import com.hellotravel.infrastructure.exception.InfrastructureErrorCode;
 import com.hellotravel.infrastructure.exception.InfrastructureException;
+import com.hellotravel.infrastructure.sync.converter.OutboxEventPersistenceConverter;
 import com.hellotravel.infrastructure.sync.mysql.mapper.OutboxEventMapper;
 import com.hellotravel.infrastructure.sync.mysql.pojo.OutboxEventPO;
 
@@ -27,6 +27,8 @@ public class OutboxEventRepositoryImpl
         extends TravelBaseRepository<OutboxEventMapper, OutboxEventPO>
         implements OutboxEventRepository {
 
+    private final OutboxEventPersistenceConverter outboxEventPersistenceConverter;
+
     /**
      * 按内部主键恢复完整聚合；不存在时返回空值。
      *
@@ -38,7 +40,7 @@ public class OutboxEventRepositoryImpl
         // 1. 转换完整聚合为本仓储PO，映射与状态决策分开。
         OutboxEventPO po = getById(id);
         // 2. 显式处理不存在的记录，并恢复聚合快照。
-        return po == null ? null : restore(po);
+        return po == null ? null : outboxEventPersistenceConverter.restore(po);
     }
 
     /**
@@ -74,7 +76,9 @@ public class OutboxEventRepositoryImpl
                                 "version"));
         Page<OutboxEventPO> page = new Page<>(1, queryValue.limit(), false);
         // 2. 读取有界PO集合并恢复完整聚合，不向上暴露ORM对象。
-        return page(page, wrapper).getRecords().stream().map(this::restore).toList();
+        return page(page, wrapper).getRecords().stream()
+                .map(outboxEventPersistenceConverter::restore)
+                .toList();
     }
 
     /**
@@ -87,7 +91,7 @@ public class OutboxEventRepositoryImpl
     public Boolean save(OutboxEventAggregate aggregate) {
         try {
             // 1. 转换完整聚合为本仓储PO，映射与状态决策分开。
-            OutboxEventPO po = toPersistence(aggregate);
+            OutboxEventPO po = outboxEventPersistenceConverter.toPersistence(aggregate);
             // 2. 区分新快照新增与已保存快照的版本CAS更新。
             if (po.getId() == null) {
                 return super.save(po);
@@ -120,60 +124,8 @@ public class OutboxEventRepositoryImpl
         return super.removeById(id);
     }
 
-    private OutboxEventAggregate restore(OutboxEventPO po) {
-        return new OutboxEventAggregate(
-                new OutboxEventEntity(
-                        po.getId(),
-                        po.getPublicId(),
-                        po.getUserId(),
-                        po.getEventType(),
-                        po.getDedupeKey(),
-                        po.getPayloadJson(),
-                        po.getStatus(),
-                        po.getAttemptCount(),
-                        po.getMaxAttempts(),
-                        po.getNextAttemptAt(),
-                        po.getLeaseOwner(),
-                        po.getLeaseFence(),
-                        po.getLeaseUntil(),
-                        po.getDeliveredAt(),
-                        po.getErrorCode(),
-                        po.getCreatedAt(),
-                        po.getUpdatedAt(),
-                        po.getVersion()));
-    }
-
-    private
-    /**
-     * 将完整聚合快照转换为本仓储PO，映射不参与业务状态决策。
-     *
-     * @param aggregate 待保存聚合
-     * @return 数据库存储快照
-     * @author AIGenerator
-     */
-    OutboxEventPO toPersistence(OutboxEventAggregate aggregate) {
-        // 1. 转换完整聚合为本仓储PO，映射与状态决策分开。
-        OutboxEventPO po = new OutboxEventPO();
-        // 2. 映射本段快照字段，业务状态规则不放入PO赋值。
-        po.setId(aggregate.entity().id());
-        po.setPublicId(aggregate.entity().publicId());
-        po.setUserId(aggregate.entity().userId());
-        po.setEventType(aggregate.entity().eventType());
-        po.setDedupeKey(aggregate.entity().dedupeKey());
-        po.setPayloadJson(aggregate.entity().payloadJson());
-        po.setStatus(aggregate.entity().status());
-        po.setAttemptCount(aggregate.entity().attemptCount());
-        po.setMaxAttempts(aggregate.entity().maxAttempts());
-        po.setNextAttemptAt(aggregate.entity().nextAttemptAt());
-        po.setLeaseOwner(aggregate.entity().leaseOwner());
-        po.setLeaseFence(aggregate.entity().leaseFence());
-        po.setLeaseUntil(aggregate.entity().leaseUntil());
-        po.setDeliveredAt(aggregate.entity().deliveredAt());
-        po.setErrorCode(aggregate.entity().errorCode());
-        po.setCreatedAt(aggregate.entity().createdAt());
-        po.setUpdatedAt(aggregate.entity().updatedAt());
-        po.setVersion(aggregate.entity().version());
-        // 3. 返回完整存储快照，由保存步骤决定新增或版本CAS更新。
-        return po;
+    public OutboxEventRepositoryImpl(
+            OutboxEventPersistenceConverter outboxEventPersistenceConverter) {
+        this.outboxEventPersistenceConverter = outboxEventPersistenceConverter;
     }
 }

@@ -7,11 +7,15 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import com.hellotravel.application.auth.assembler.AuthApplicationAssembler;
 import com.hellotravel.application.auth.command.AuthCommand;
 import com.hellotravel.application.auth.workflow.AuthFlow;
+import com.hellotravel.application.exception.ApplicationErrorCode;
+import com.hellotravel.application.exception.ApplicationException;
 import com.hellotravel.application.persistence.DomainWrites;
 import com.hellotravel.application.persistence.TravelRepositories;
 import com.hellotravel.application.security.adaptor.SecurityOutAdaptor;
+import com.hellotravel.application.security.assembler.SecurityCommandAssembler;
 import com.hellotravel.application.sync.workflow.SyncEvents;
 import com.hellotravel.application.tx.Transactions;
 import com.hellotravel.common.identity.Ids;
@@ -26,8 +30,6 @@ import com.hellotravel.domain.chat.repository.ChatRunRepository;
 import com.hellotravel.domain.chat.repository.ConversationRepository;
 import com.hellotravel.domain.chat.repository.MessageRepository;
 import com.hellotravel.domain.chat.repository.ModelInvocationRepository;
-import com.hellotravel.domain.exception.DomainErrorCode;
-import com.hellotravel.domain.exception.DomainException;
 import com.hellotravel.domain.knowledge.repository.IndexJobRepository;
 import com.hellotravel.domain.knowledge.repository.KnowledgeChunkRepository;
 import com.hellotravel.domain.knowledge.repository.KnowledgeDocumentRepository;
@@ -96,7 +98,15 @@ class PageSessionIsolationTest {
         var writes = mock(DomainWrites.class);
         var events = mock(SyncEvents.class);
         var security = mock(SecurityOutAdaptor.class);
-        var flow = new AuthFlow(writes, repositories, transactions, events, security);
+        var flow =
+                new AuthFlow(
+                        writes,
+                        repositories,
+                        transactions,
+                        events,
+                        security,
+                        new AuthApplicationAssembler(),
+                        new SecurityCommandAssembler());
         var command =
                 new AuthCommand(
                         "REFRESH",
@@ -111,8 +121,8 @@ class PageSessionIsolationTest {
                         "refresh",
                         "old-csrf",
                         "test");
-        var rejected = assertThrows(DomainException.class, () -> flow.perform(command));
-        assertEquals(DomainErrorCode.SESSION_REPLACED, rejected.errorCode());
+        var rejected = assertThrows(ApplicationException.class, () -> flow.perform(command));
+        assertEquals(ApplicationErrorCode.SESSION_REPLACED, rejected.errorCode());
         verifyNoInteractions(transactions, writes, events, security);
     }
 }

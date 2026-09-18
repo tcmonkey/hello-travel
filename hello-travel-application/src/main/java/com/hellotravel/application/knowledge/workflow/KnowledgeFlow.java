@@ -1,16 +1,16 @@
 package com.hellotravel.application.knowledge.workflow;
 
+import com.hellotravel.application.exception.ApplicationErrorCode;
+import com.hellotravel.application.exception.ApplicationException;
 import com.hellotravel.application.file.adaptor.FileOutAdaptor;
-import com.hellotravel.application.file.command.FileCommand;
+import com.hellotravel.application.file.assembler.FileCommandAssembler;
+import com.hellotravel.application.knowledge.assembler.KnowledgeApplicationAssembler;
 import com.hellotravel.application.knowledge.command.KnowledgeCommand;
-import com.hellotravel.application.knowledge.result.DocumentResult;
 import com.hellotravel.application.knowledge.result.KnowledgeResult;
 import com.hellotravel.application.persistence.DomainWrites;
 import com.hellotravel.application.persistence.TravelRepositories;
 import com.hellotravel.application.sync.workflow.SyncEvents;
 import com.hellotravel.application.tx.Transactions;
-import com.hellotravel.domain.exception.DomainErrorCode;
-import com.hellotravel.domain.exception.DomainException;
 import com.hellotravel.domain.knowledge.model.aggregate.IndexJobAggregate;
 import com.hellotravel.domain.knowledge.model.aggregate.KnowledgeDocumentAggregate;
 import com.hellotravel.domain.knowledge.model.entity.IndexJobEntity;
@@ -18,8 +18,6 @@ import com.hellotravel.domain.knowledge.model.entity.KnowledgeDocumentEntity;
 import com.hellotravel.domain.query.model.value.QueryValue;
 
 import org.springframework.stereotype.Component;
-
-import java.util.List;
 
 /**
  * MySQL保存原文和状态，Milvus仅保存隔离向量；删除先阻断检索再异步清理。
@@ -39,17 +37,25 @@ public final class KnowledgeFlow {
 
     private final FileOutAdaptor files;
 
+    private final FileCommandAssembler fileCommandAssembler;
+
+    private final KnowledgeApplicationAssembler knowledgeApplicationAssembler;
+
     public KnowledgeFlow(
             DomainWrites writes,
             TravelRepositories repositories,
             Transactions transactions,
             SyncEvents events,
-            FileOutAdaptor files) {
+            FileOutAdaptor files,
+            FileCommandAssembler fileCommandAssembler,
+            KnowledgeApplicationAssembler knowledgeApplicationAssembler) {
         this.writes = writes;
         this.repositories = repositories;
         this.transactions = transactions;
         this.events = events;
         this.files = files;
+        this.fileCommandAssembler = fileCommandAssembler;
+        this.knowledgeApplicationAssembler = knowledgeApplicationAssembler;
     }
 
     /**
@@ -70,7 +76,7 @@ public final class KnowledgeFlow {
                                 .where("deleted_at", "NULL", null));
         // 2. 知识列表为空时结束有界分页，不制造额外文档。
         if (rows.isEmpty()) {
-            throw new DomainException(DomainErrorCode.NOT_FOUND);
+            throw new ApplicationException(ApplicationErrorCode.NOT_FOUND);
         }
         // 3. 返回当前用户可访问的对象，已删除或越权对象不会进入后续操作。
         return rows.get(0).entity();
@@ -90,8 +96,8 @@ public final class KnowledgeFlow {
         }
         // 2. 按详情读取场景进入对应职责分支。
         if ("READ".equals(command.action())) {
-            return new KnowledgeResult(
-                    List.of(view(owned(command.userId(), command.documentId()), true)), 0, false);
+            return knowledgeApplicationAssembler.single(
+                    owned(command.userId(), command.documentId()), true);
         }
         // 3. 按文件受理场景进入对应职责分支。
         if ("UPLOAD".equals(command.action())) {
@@ -106,12 +112,12 @@ public final class KnowledgeFlow {
                     // 2. 核对快照版本与预期版本，失败中止当前处理。
                     if (command.expectedVersion() == null
                             || !command.expectedVersion().equals(document.version())) {
-                        throw new DomainException(DomainErrorCode.CONFLICT);
+                        throw new ApplicationException(ApplicationErrorCode.CONFLICT);
                     }
                     // 3. 按显式重试场景进入对应职责分支。
                     if ("RETRY".equals(command.action())) {
                         if (!"FAILED".equals(document.status())) {
-                            throw new DomainException(DomainErrorCode.CONFLICT);
+                            throw new ApplicationException(ApplicationErrorCode.CONFLICT);
                         }
                         document = new KnowledgeDocumentAggregate(document).reindex().entity();
                         Transactions.require(
@@ -125,7 +131,7 @@ public final class KnowledgeFlow {
                                         new KnowledgeDocumentAggregate(document)));
                         job(document, "DELETE");
                     } else {
-                        throw new DomainException(DomainErrorCode.INVALID);
+                        throw new ApplicationException(ApplicationErrorCode.INVALID);
                     }
                     // 4. 同事务记录用户提交序号与同步事件，推送不能代替持久化。
                     events.append(
@@ -136,7 +142,7 @@ public final class KnowledgeFlow {
                             null,
                             "{}");
                     // 5. 将已读取快照转为本用例视图，凭据与内部字段按协议隔离。
-                    return new KnowledgeResult(List.of(view(document, false)), 0, false);
+                    return knowledgeApplicationAssembler.single(document, false);
                 });
     }
 
@@ -155,23 +161,6 @@ public final class KnowledgeFlow {
         Transactions.require(writes.saveIndexJob(new IndexJobAggregate(job)));
     }
 
-    private DocumentResult view(KnowledgeDocumentEntity entity, boolean body) {
-        return new DocumentResult(
-                entity.publicId(),
-                entity.title(),
-                entity.status(),
-                entity.version(),
-                entity.sourceUrl(),
-                entity.errorCode(),
-                body
-                        ? entity.extractedText()
-                        : entity.extractedText() == null
-                                ? null
-                                : entity.extractedText()
-                                        .substring(
-                                                0, Math.min(240, entity.extractedText().length())));
-    }
-
     private KnowledgeResult list(KnowledgeCommand command) {
         // 1. 取得有界查询的结果数量，供本段后续处理使用。
         int limit = Math.min(100, Math.max(1, command.limit()));
@@ -182,10 +171,7 @@ public final class KnowledgeFlow {
                                 .where("deleted_at", "NULL", null)
                                 .where("id", "GT", command.after()));
         // 2. 将已读取快照转为本用例视图，凭据与内部字段按协议隔离。
-        return new KnowledgeResult(
-                rows.stream().map(x -> view(x.entity(), false)).toList(),
-                rows.isEmpty() ? command.after() : rows.get(rows.size() - 1).entity().id(),
-                rows.size() == limit);
+        return knowledgeApplicationAssembler.page(rows, command, limit);
     }
 
     private KnowledgeResult upload(KnowledgeCommand command) {
@@ -196,15 +182,14 @@ public final class KnowledgeFlow {
                     || !"https".equals(uri.getScheme())
                     || uri.getHost() == null
                     || uri.getUserInfo() != null) {
-                throw new DomainException(DomainErrorCode.INVALID);
+                throw new ApplicationException(ApplicationErrorCode.INVALID);
             }
         }
         // 2. 取得本段结果并准备本层转换，随后显式核对成功状态。
-        var result =
-                files.store(new FileCommand("SAVE", command.filename(), command.bytes(), null));
+        var result = files.store(fileCommandAssembler.save(command));
         // 3. 核对下层标准结果的成功状态，失败中止当前处理。
         if (!result.success()) {
-            throw new DomainException(DomainErrorCode.INVALID);
+            throw new ApplicationException(ApplicationErrorCode.INVALID);
         }
         // 4. 解析受限附件，格式与容量约束由解析步骤核对。
         var parsed = result.data();
@@ -215,27 +200,7 @@ public final class KnowledgeFlow {
                     account -> {
                         // 1. 通过领域聚合语义准备业务快照，固定状态由实体封装。
                         var document =
-                                KnowledgeDocumentAggregate.received(
-                                                command.userId(),
-                                                command.filename()
-                                                        .substring(
-                                                                0,
-                                                                Math.min(
-                                                                        200,
-                                                                        command.filename()
-                                                                                .length())),
-                                                command.filename(),
-                                                parsed.mime(),
-                                                parsed.storageKey(),
-                                                (long) command.bytes().length,
-                                                parsed.hash(),
-                                                parsed.text(),
-                                                command.sourceUrl(),
-                                                java.time.LocalDateTime.now(
-                                                        java.time.ZoneOffset.UTC),
-                                                java.time.LocalDateTime.now(
-                                                        java.time.ZoneOffset.UTC))
-                                        .entity();
+                                knowledgeApplicationAssembler.received(command, parsed).entity();
                         // 2. 持久化当前完整聚合，失败必须中断事务而非继续提交。
                         Transactions.require(
                                 writes.saveKnowledgeDocument(
@@ -253,10 +218,10 @@ public final class KnowledgeFlow {
                                 null,
                                 "{}");
                         // 6. 将已读取快照转为本用例视图，凭据与内部字段按协议隔离。
-                        return new KnowledgeResult(List.of(view(document, true)), 0, false);
+                        return knowledgeApplicationAssembler.single(document, true);
                     });
         } catch (RuntimeException exception) {
-            files.store(new FileCommand("DELETE", null, null, parsed.storageKey()));
+            files.store(fileCommandAssembler.delete(parsed.storageKey()));
             throw exception;
         }
     }

@@ -1,0 +1,16 @@
+
+> hello-travel-app@0.0.1 test
+> node --test tests/*.test.ts
+
+✔ 未知或非法预算不能展示默认窗口或伪造占比 (1.036875ms)
+✔ 占比采用服务端配置的窗口和预留，实际用量缺失保持未知 (29.37475ms)
+✔ 迟到草稿不覆盖新正文，大整数序号保持稳定顺序 (1.542416ms)
+✔ 全量恢复清除旧代次消息，外部修改不能改变历史对象 (0.241542ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 4
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 126.578625

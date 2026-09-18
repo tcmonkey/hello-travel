@@ -1,6 +1,7 @@
 package com.hellotravel.adaptor.mail.output;
 
 import com.hellotravel.adaptor.exception.AdaptorErrorCode;
+import com.hellotravel.adaptor.mail.output.converter.MailOutputConverter;
 import com.hellotravel.application.mail.adaptor.MailOutAdaptor;
 import com.hellotravel.application.mail.command.MailCommand;
 import com.hellotravel.common.error.Failures;
@@ -22,8 +23,11 @@ public final class MailOutAdaptorImpl implements MailOutAdaptor {
 
     private final Environment environment;
 
-    public MailOutAdaptorImpl(Environment environment) {
+    private final MailOutputConverter mailOutputConverter;
+
+    public MailOutAdaptorImpl(Environment environment, MailOutputConverter mailOutputConverter) {
         this.environment = environment;
+        this.mailOutputConverter = mailOutputConverter;
     }
 
     /**
@@ -78,7 +82,7 @@ public final class MailOutAdaptorImpl implements MailOutAdaptor {
                 // 7. 执行send职责步骤，并把失败交给所属事务或入口处理。
                 sender.send(message);
                 // 8. 将本层成功数据封装为标准结果，保持对外模型隔离。
-                return Result.success(new MailDO(true));
+                return Result.success(mailOutputConverter.accepted());
             } catch (Exception exception) {
                 return Result.failure(AdaptorErrorCode.UNAVAILABLE);
             }

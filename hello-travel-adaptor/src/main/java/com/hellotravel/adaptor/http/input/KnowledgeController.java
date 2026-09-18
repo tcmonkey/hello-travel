@@ -1,15 +1,11 @@
 package com.hellotravel.adaptor.http.input;
 
-import com.hellotravel.adaptor.http.support.ApiViews;
-import com.hellotravel.adaptor.http.support.HttpIdentity;
+import com.hellotravel.adaptor.http.assembler.KnowledgeInputAssembler;
 import com.hellotravel.adaptor.http.support.HttpResults;
-import com.hellotravel.application.knowledge.command.KnowledgeCommand;
 import com.hellotravel.application.knowledge.service.KnowledgeApplication;
 import com.hellotravel.client.knowledge.request.KnowledgeRequest;
 import com.hellotravel.client.knowledge.response.KnowledgeResponse;
 import com.hellotravel.common.result.Result;
-import com.hellotravel.domain.exception.DomainErrorCode;
-import com.hellotravel.domain.exception.DomainException;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -33,11 +29,12 @@ public final class KnowledgeController {
 
     private final KnowledgeApplication application;
 
-    private final ApiViews views;
+    private final KnowledgeInputAssembler knowledgeInputAssembler;
 
-    public KnowledgeController(KnowledgeApplication application, ApiViews views) {
+    public KnowledgeController(
+            KnowledgeApplication application, KnowledgeInputAssembler knowledgeInputAssembler) {
         this.application = application;
-        this.views = views;
+        this.knowledgeInputAssembler = knowledgeInputAssembler;
     }
 
     /**
@@ -55,25 +52,15 @@ public final class KnowledgeController {
             @RequestParam(required = false) String sourceUrl,
             HttpServletRequest httpServletRequest) {
         try {
-            // 1. 核对输入或读取结果的存在性，失败中止当前处理。
-            if (file.isEmpty() || file.getSize() > 10485760) {
-                throw new DomainException(DomainErrorCode.INVALID);
+            // 1. 检查有界上传输入并转换用例命令。
+            var command = knowledgeInputAssembler.upload(file, sourceUrl, httpServletRequest);
+            // 2. 提交资料用例并保留下层失败分类。
+            var result = application.manage(command);
+            if (!result.success()) {
+                return HttpResults.failure(result);
             }
-            // 2. 取得本段结果并准备本层转换，随后显式核对成功状态。
-            var result =
-                    application.manage(
-                            new KnowledgeCommand(
-                                    "UPLOAD",
-                                    HttpIdentity.user(httpServletRequest),
-                                    null,
-                                    file.getOriginalFilename(),
-                                    file.getBytes(),
-                                    sourceUrl,
-                                    null,
-                                    0,
-                                    100));
-            // 3. 返回本段实际处理结果，保持本层输出契约。
-            return views.respond(result, KnowledgeResponse.class);
+            // 3. 投影公开资料结果。
+            return Result.success(knowledgeInputAssembler.toResponse(result.data()));
         } catch (Exception exception) {
             return HttpResults.capture(exception);
         }
@@ -94,31 +81,16 @@ public final class KnowledgeController {
             @Valid @RequestBody KnowledgeRequest knowledgeRequest,
             HttpServletRequest httpServletRequest) {
         try {
-            // 1. 取得候选任务快照，领取时再次核验，供本段后续处理使用。
-            String selected =
-                    switch (action) {
-                        case "list" -> "LIST";
-                        case "read" -> "READ";
-                        case "retry" -> "RETRY";
-                        case "delete" -> "DELETE";
-                        default -> throw new DomainException(DomainErrorCode.NOT_FOUND);
-                    };
-            var result =
-                    application.manage(
-                            new KnowledgeCommand(
-                                    selected,
-                                    HttpIdentity.user(httpServletRequest),
-                                    knowledgeRequest.documentId(),
-                                    null,
-                                    null,
-                                    null,
-                                    knowledgeRequest.expectedVersion(),
-                                    knowledgeRequest.after() == null ? 0 : knowledgeRequest.after(),
-                                    knowledgeRequest.limit() == null
-                                            ? 100
-                                            : knowledgeRequest.limit()));
-            // 2. 返回本段实际处理结果，保持本层输出契约。
-            return views.respond(result, KnowledgeResponse.class);
+            // 1. 将协议路由和完整请求转换为具有可信身份的用例命令。
+            var command =
+                    knowledgeInputAssembler.toCommand(action, knowledgeRequest, httpServletRequest);
+            // 2. 执行应用入口，保留失败分类且不向外暴露内部载荷。
+            var result = application.manage(command);
+            if (!result.success()) {
+                return HttpResults.failure(result);
+            }
+            // 3. 通过本层assembler投影公开响应。
+            return Result.success(knowledgeInputAssembler.toResponse(result.data()));
         } catch (Exception exception) {
             return HttpResults.capture(exception);
         }

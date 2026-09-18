@@ -20,3 +20,7 @@ boundary-*及entry-audit.csv是当前10条离线检查/50入口审计/HTTP分类
 ## 当前业务质量整改证据（2026-09-18）
 
 quality-*为当前规范1.8/快照1.6的源码业务质量扫描、全方法清单、入口异常审计、针对性回归、独立安装消费者与构建证据；solo-quality-*为门禁/流程/启动/安装回归。历史summary/boundary-*保留原日期与哈希，不拿旧摘要证明当前源码。质量清单的自动分类有明确限界：编号、规模和有限领域结构不证明注释正确、真实对象职责或完整业务/生产验收。当前权威结果见quality-summary.json与05交付记录。
+
+## 2026-09-18当前映射与异常归属证据
+
+mapping-summary.json为本轮范围与统计；mapping-*.log为实际构建/回归；mapping-junit保留全部模块JUnit原始结果；mapping-sha256.json核对日志/清单。hello-travel的mapping-class/constructor/method-inventory.csv及mapping-entry-audit.csv提供全量位置导航；DDD mapping-entry-audit.csv提供14主入口结构检查。旧quality-/boundary-文件保留历史证据，不将旧执行重复计入本轮。

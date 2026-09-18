@@ -3,10 +3,10 @@ package com.hellotravel.infrastructure.chat.repository;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.hellotravel.domain.chat.model.aggregate.ModelInvocationAggregate;
-import com.hellotravel.domain.chat.model.entity.ModelInvocationEntity;
 import com.hellotravel.domain.chat.repository.ModelInvocationRepository;
 import com.hellotravel.domain.query.model.value.QueryValue;
 import com.hellotravel.infrastructure.TravelBaseRepository;
+import com.hellotravel.infrastructure.chat.converter.ModelInvocationPersistenceConverter;
 import com.hellotravel.infrastructure.chat.mysql.mapper.ModelInvocationMapper;
 import com.hellotravel.infrastructure.chat.mysql.pojo.ModelInvocationPO;
 import com.hellotravel.infrastructure.exception.InfrastructureErrorCode;
@@ -27,6 +27,8 @@ public class ModelInvocationRepositoryImpl
         extends TravelBaseRepository<ModelInvocationMapper, ModelInvocationPO>
         implements ModelInvocationRepository {
 
+    private final ModelInvocationPersistenceConverter modelInvocationPersistenceConverter;
+
     /**
      * 按内部主键恢复完整聚合；不存在时返回空值。
      *
@@ -38,7 +40,7 @@ public class ModelInvocationRepositoryImpl
         // 1. 转换完整聚合为本仓储PO，映射与状态决策分开。
         ModelInvocationPO po = getById(id);
         // 2. 显式处理不存在的记录，并恢复聚合快照。
-        return po == null ? null : restore(po);
+        return po == null ? null : modelInvocationPersistenceConverter.restore(po);
     }
 
     /**
@@ -78,7 +80,9 @@ public class ModelInvocationRepositoryImpl
                                 "version"));
         Page<ModelInvocationPO> page = new Page<>(1, queryValue.limit(), false);
         // 2. 读取有界PO集合并恢复完整聚合，不向上暴露ORM对象。
-        return page(page, wrapper).getRecords().stream().map(this::restore).toList();
+        return page(page, wrapper).getRecords().stream()
+                .map(modelInvocationPersistenceConverter::restore)
+                .toList();
     }
 
     /**
@@ -91,7 +95,7 @@ public class ModelInvocationRepositoryImpl
     public Boolean save(ModelInvocationAggregate aggregate) {
         try {
             // 1. 转换完整聚合为本仓储PO，映射与状态决策分开。
-            ModelInvocationPO po = toPersistence(aggregate);
+            ModelInvocationPO po = modelInvocationPersistenceConverter.toPersistence(aggregate);
             // 2. 区分新快照新增与已保存快照的版本CAS更新。
             if (po.getId() == null) {
                 return super.save(po);
@@ -124,68 +128,8 @@ public class ModelInvocationRepositoryImpl
         return super.removeById(id);
     }
 
-    private ModelInvocationAggregate restore(ModelInvocationPO po) {
-        return new ModelInvocationAggregate(
-                new ModelInvocationEntity(
-                        po.getId(),
-                        po.getPublicId(),
-                        po.getUserId(),
-                        po.getConversationId(),
-                        po.getRunId(),
-                        po.getStage(),
-                        po.getRunAttemptNo(),
-                        po.getAttemptNo(),
-                        po.getModelName(),
-                        po.getPromptRevision(),
-                        po.getEstimatedInputTokens(),
-                        po.getEstimatorVersion(),
-                        po.getActualInputTokens(),
-                        po.getActualOutputTokens(),
-                        po.getLatencyMs(),
-                        po.getProviderRequestId(),
-                        po.getStatus(),
-                        po.getErrorCode(),
-                        po.getCompletedAt(),
-                        po.getCreatedAt(),
-                        po.getUpdatedAt(),
-                        po.getVersion()));
-    }
-
-    private
-    /**
-     * 将完整聚合快照转换为本仓储PO，映射不参与业务状态决策。
-     *
-     * @param aggregate 待保存聚合
-     * @return 数据库存储快照
-     * @author AIGenerator
-     */
-    ModelInvocationPO toPersistence(ModelInvocationAggregate aggregate) {
-        // 1. 转换完整聚合为本仓储PO，映射与状态决策分开。
-        ModelInvocationPO po = new ModelInvocationPO();
-        // 2. 映射本段快照字段，业务状态规则不放入PO赋值。
-        po.setId(aggregate.entity().id());
-        po.setPublicId(aggregate.entity().publicId());
-        po.setUserId(aggregate.entity().userId());
-        po.setConversationId(aggregate.entity().conversationId());
-        po.setRunId(aggregate.entity().runId());
-        po.setStage(aggregate.entity().stage());
-        po.setRunAttemptNo(aggregate.entity().runAttemptNo());
-        po.setAttemptNo(aggregate.entity().attemptNo());
-        po.setModelName(aggregate.entity().modelName());
-        po.setPromptRevision(aggregate.entity().promptRevision());
-        po.setEstimatedInputTokens(aggregate.entity().estimatedInputTokens());
-        po.setEstimatorVersion(aggregate.entity().estimatorVersion());
-        po.setActualInputTokens(aggregate.entity().actualInputTokens());
-        po.setActualOutputTokens(aggregate.entity().actualOutputTokens());
-        po.setLatencyMs(aggregate.entity().latencyMs());
-        po.setProviderRequestId(aggregate.entity().providerRequestId());
-        po.setStatus(aggregate.entity().status());
-        po.setErrorCode(aggregate.entity().errorCode());
-        po.setCompletedAt(aggregate.entity().completedAt());
-        po.setCreatedAt(aggregate.entity().createdAt());
-        po.setUpdatedAt(aggregate.entity().updatedAt());
-        po.setVersion(aggregate.entity().version());
-        // 3. 返回完整存储快照，由保存步骤决定新增或版本CAS更新。
-        return po;
+    public ModelInvocationRepositoryImpl(
+            ModelInvocationPersistenceConverter modelInvocationPersistenceConverter) {
+        this.modelInvocationPersistenceConverter = modelInvocationPersistenceConverter;
     }
 }

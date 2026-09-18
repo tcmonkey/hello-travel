@@ -4,11 +4,11 @@ import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.hellotravel.domain.query.model.value.QueryValue;
 import com.hellotravel.domain.sync.model.aggregate.SyncEventAggregate;
-import com.hellotravel.domain.sync.model.entity.SyncEventEntity;
 import com.hellotravel.domain.sync.repository.SyncEventRepository;
 import com.hellotravel.infrastructure.TravelBaseRepository;
 import com.hellotravel.infrastructure.exception.InfrastructureErrorCode;
 import com.hellotravel.infrastructure.exception.InfrastructureException;
+import com.hellotravel.infrastructure.sync.converter.SyncEventPersistenceConverter;
 import com.hellotravel.infrastructure.sync.mysql.mapper.SyncEventMapper;
 import com.hellotravel.infrastructure.sync.mysql.pojo.SyncEventPO;
 
@@ -26,6 +26,8 @@ import java.util.Set;
 public class SyncEventRepositoryImpl extends TravelBaseRepository<SyncEventMapper, SyncEventPO>
         implements SyncEventRepository {
 
+    private final SyncEventPersistenceConverter syncEventPersistenceConverter;
+
     /**
      * 按内部主键恢复完整聚合；不存在时返回空值。
      *
@@ -37,7 +39,7 @@ public class SyncEventRepositoryImpl extends TravelBaseRepository<SyncEventMappe
         // 1. 转换完整聚合为本仓储PO，映射与状态决策分开。
         SyncEventPO po = getById(id);
         // 2. 显式处理不存在的记录，并恢复聚合快照。
-        return po == null ? null : restore(po);
+        return po == null ? null : syncEventPersistenceConverter.restore(po);
     }
 
     /**
@@ -65,7 +67,9 @@ public class SyncEventRepositoryImpl extends TravelBaseRepository<SyncEventMappe
                                 "expires_at"));
         Page<SyncEventPO> page = new Page<>(1, queryValue.limit(), false);
         // 2. 读取有界PO集合并恢复完整聚合，不向上暴露ORM对象。
-        return page(page, wrapper).getRecords().stream().map(this::restore).toList();
+        return page(page, wrapper).getRecords().stream()
+                .map(syncEventPersistenceConverter::restore)
+                .toList();
     }
 
     /**
@@ -78,7 +82,7 @@ public class SyncEventRepositoryImpl extends TravelBaseRepository<SyncEventMappe
     public Boolean save(SyncEventAggregate aggregate) {
         try {
             // 1. 转换完整聚合为本仓储PO，映射与状态决策分开。
-            SyncEventPO po = toPersistence(aggregate);
+            SyncEventPO po = syncEventPersistenceConverter.toPersistence(aggregate);
             // 2. 区分新快照新增与已保存快照的版本CAS更新。
             if (po.getId() == null) {
                 return super.save(po);
@@ -104,44 +108,7 @@ public class SyncEventRepositoryImpl extends TravelBaseRepository<SyncEventMappe
         return super.removeById(id);
     }
 
-    private SyncEventAggregate restore(SyncEventPO po) {
-        return new SyncEventAggregate(
-                new SyncEventEntity(
-                        po.getId(),
-                        po.getUserId(),
-                        po.getEventSeq(),
-                        po.getEventType(),
-                        po.getAggregatePublicId(),
-                        po.getAggregateVersion(),
-                        po.getTargetSessionPublicId(),
-                        po.getPayloadJson(),
-                        po.getCreatedAt(),
-                        po.getExpiresAt()));
-    }
-
-    private
-    /**
-     * 将完整聚合快照转换为本仓储PO，映射不参与业务状态决策。
-     *
-     * @param aggregate 待保存聚合
-     * @return 数据库存储快照
-     * @author AIGenerator
-     */
-    SyncEventPO toPersistence(SyncEventAggregate aggregate) {
-        // 1. 转换完整聚合为本仓储PO，映射与状态决策分开。
-        SyncEventPO po = new SyncEventPO();
-        // 2. 映射本段快照字段，业务状态规则不放入PO赋值。
-        po.setId(aggregate.entity().id());
-        po.setUserId(aggregate.entity().userId());
-        po.setEventSeq(aggregate.entity().eventSeq());
-        po.setEventType(aggregate.entity().eventType());
-        po.setAggregatePublicId(aggregate.entity().aggregatePublicId());
-        po.setAggregateVersion(aggregate.entity().aggregateVersion());
-        po.setTargetSessionPublicId(aggregate.entity().targetSessionPublicId());
-        po.setPayloadJson(aggregate.entity().payloadJson());
-        po.setCreatedAt(aggregate.entity().createdAt());
-        po.setExpiresAt(aggregate.entity().expiresAt());
-        // 3. 返回完整存储快照，由保存步骤决定新增或版本CAS更新。
-        return po;
+    public SyncEventRepositoryImpl(SyncEventPersistenceConverter syncEventPersistenceConverter) {
+        this.syncEventPersistenceConverter = syncEventPersistenceConverter;
     }
 }

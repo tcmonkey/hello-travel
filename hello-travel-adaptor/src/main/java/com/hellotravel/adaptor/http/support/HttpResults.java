@@ -1,9 +1,9 @@
 package com.hellotravel.adaptor.http.support;
 
-import com.hellotravel.application.support.ApplicationFailures;
+import com.hellotravel.adaptor.exception.AdaptorErrorCode;
+import com.hellotravel.adaptor.exception.AdaptorException;
+import com.hellotravel.common.error.Failures;
 import com.hellotravel.common.result.Result;
-import com.hellotravel.domain.exception.DomainErrorCode;
-import com.hellotravel.domain.exception.DomainException;
 
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
@@ -21,7 +21,7 @@ public final class HttpResults {
      * @author AIGenerator
      */
     private HttpResults() {
-}
+    }
 
     /**
      * 捕获异常后构建安全失败响应，同时设置对应HTTP失败状态。
@@ -32,7 +32,12 @@ public final class HttpResults {
      * @author AIGenerator
      */
     public static <T> Result<T> capture(Exception exception) {
-        return failure(ApplicationFailures.capture(exception));
+        return failure(
+                Failures.capture(
+                        exception,
+                        exception instanceof IllegalArgumentException
+                                ? AdaptorErrorCode.INVALID
+                                : AdaptorErrorCode.FAILED));
     }
 
     /**
@@ -44,8 +49,8 @@ public final class HttpResults {
      * @author AIGenerator
      */
     public static <T> Result<T> failure(Result<?> result) {
-        // 1. 取得当前用途的验证码，供本段后续处理使用。
-        DomainErrorCode code = classification(result.code());
+        // 1. 用协议层错误目录解析HTTP状态，保留下层公开错误码。
+        AdaptorErrorCode code = classification(result.code());
         // 2. 仅在HTTP响应未提交时设置失败状态，非HTTP调用仍返回标准失败结果。
         if (RequestContextHolder.getRequestAttributes()
                 instanceof ServletRequestAttributes attributes) {
@@ -69,17 +74,17 @@ public final class HttpResults {
     public static <T> T required(Result<T> result) {
         // 1. 依据下层标准结果的成功状态处理分支，避免继续使用无效数据。
         if (!result.success()) {
-            throw new DomainException(classification(result.code()));
+            throw new AdaptorException(classification(result.code()));
         }
         // 2. 返回本段实际处理结果，保持本层输出契约。
         return result.data();
     }
 
-    private static DomainErrorCode classification(String code) {
+    private static AdaptorErrorCode classification(String code) {
         try {
-            return DomainErrorCode.valueOf(code);
+            return AdaptorErrorCode.valueOf(code);
         } catch (IllegalArgumentException exception) {
-            return DomainErrorCode.FAILED;
+            return AdaptorErrorCode.FAILED;
         }
     }
 }

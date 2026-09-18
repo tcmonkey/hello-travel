@@ -6,9 +6,8 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.hellotravel.adaptor.http.assembler.KnowledgeInputAssembler;
 import com.hellotravel.adaptor.http.input.KnowledgeController;
-import com.hellotravel.adaptor.http.support.ApiViews;
 import com.hellotravel.application.auth.service.AuthApplication;
 import com.hellotravel.application.chat.service.ChatApplication;
 import com.hellotravel.application.knowledge.service.KnowledgeApplication;
@@ -35,6 +34,7 @@ import java.util.List;
  * @author AIGenerator
  */
 class BoundaryFailureTest {
+
     @AfterEach
     void clearRequest() {
         RequestContextHolder.resetRequestAttributes();
@@ -49,7 +49,7 @@ class BoundaryFailureTest {
         when(file.getBytes()).thenThrow(new IOException("private-storage-path"));
         var controller =
                 new KnowledgeController(
-                        mock(KnowledgeApplication.class), new ApiViews(new ObjectMapper()));
+                        mock(KnowledgeApplication.class), new KnowledgeInputAssembler());
         var result = assertDoesNotThrow(() -> controller.upload(file, null, request));
         assertFalse(result.success());
         assertEquals("FAILED", result.code());
@@ -66,7 +66,7 @@ class BoundaryFailureTest {
         when(file.isEmpty()).thenReturn(true);
         var controller =
                 new KnowledgeController(
-                        mock(KnowledgeApplication.class), new ApiViews(new ObjectMapper()));
+                        mock(KnowledgeApplication.class), new KnowledgeInputAssembler());
         var result = assertDoesNotThrow(() -> controller.upload(file, null, request));
         assertEquals("INVALID", result.code());
         assertEquals(400, response.getStatus());

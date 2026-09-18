@@ -1,9 +1,8 @@
 package com.hellotravel.adaptor.http.input;
 
-import com.hellotravel.adaptor.http.support.ApiViews;
+import com.hellotravel.adaptor.http.assembler.SyncInputAssembler;
 import com.hellotravel.adaptor.http.support.HttpIdentity;
 import com.hellotravel.adaptor.http.support.HttpResults;
-import com.hellotravel.application.sync.command.SyncCommand;
 import com.hellotravel.application.sync.service.SyncApplication;
 import com.hellotravel.client.sync.response.SyncResponse;
 import com.hellotravel.common.result.Result;
@@ -24,11 +23,11 @@ public final class SyncController {
 
     private final SyncApplication application;
 
-    private final ApiViews views;
+    private final SyncInputAssembler syncInputAssembler;
 
-    public SyncController(SyncApplication application, ApiViews views) {
+    public SyncController(SyncApplication application, SyncInputAssembler syncInputAssembler) {
         this.application = application;
-        this.views = views;
+        this.syncInputAssembler = syncInputAssembler;
     }
 
     /**
@@ -43,10 +42,16 @@ public final class SyncController {
     public Result<SyncResponse> synchronize(
             @RequestParam long after, HttpServletRequest httpServletRequest) {
         try {
-            return views.respond(
-                    application.synchronize(
-                            new SyncCommand(HttpIdentity.user(httpServletRequest), after, 100)),
-                    SyncResponse.class);
+            // 1. 将可信用户身份和补齐游标转换为同步命令。
+            var command =
+                    syncInputAssembler.toCommand(HttpIdentity.user(httpServletRequest), after);
+            // 2. 读取持久事件补齐结果，失败时保留稳定分类。
+            var result = application.synchronize(command);
+            if (!result.success()) {
+                return HttpResults.failure(result);
+            }
+            // 3. 投影公开事件与高水位。
+            return Result.success(syncInputAssembler.toResponse(result.data()));
         } catch (Exception exception) {
             return HttpResults.capture(exception);
         }

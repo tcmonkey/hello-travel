@@ -15,7 +15,7 @@ public final class HttpIdentity {
      * @author AIGenerator
      */
     private HttpIdentity() {
-}
+    }
 
     /**
      * 读取认证过滤器提供的账号主键。

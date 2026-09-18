@@ -1,5 +1,7 @@
 package com.hellotravel.application.travel.workflow;
 
+import com.hellotravel.application.exception.ApplicationErrorCode;
+import com.hellotravel.application.exception.ApplicationException;
 import com.hellotravel.application.persistence.DomainWrites;
 import com.hellotravel.application.persistence.TravelRepositories;
 import com.hellotravel.application.support.Json;
@@ -13,8 +15,6 @@ import com.hellotravel.domain.chat.model.entity.ChatRunEntity;
 import com.hellotravel.domain.chat.model.entity.ConversationEntity;
 import com.hellotravel.domain.chat.model.entity.MessageEntity;
 import com.hellotravel.domain.chat.model.entity.ModelInvocationEntity;
-import com.hellotravel.domain.exception.DomainErrorCode;
-import com.hellotravel.domain.exception.DomainException;
 import com.hellotravel.domain.query.model.value.QueryValue;
 import com.hellotravel.model.travel.ModelDO;
 
@@ -63,7 +63,7 @@ public final class RunCoordinator {
         var rows = repositories.chatRun.query(QueryValue.all("id", 1).where("public_id", "EQ", id));
         // 2. 候选生成任务不存在时拒绝领取，不创建虚假的执行实例。
         if (rows.isEmpty()) {
-            throw new DomainException(DomainErrorCode.NOT_FOUND);
+            throw new ApplicationException(ApplicationErrorCode.NOT_FOUND);
         }
         // 3. 取得候选任务快照，领取时再次核验，供本段后续处理使用。
         ChatRunEntity selected = rows.get(0).entity();
@@ -78,11 +78,11 @@ public final class RunCoordinator {
                     // 2. 核对历史或记忆代次，分页与派生记忆不能跨删除边界使用。
                     if (c.deletedAt() != null
                             || !c.memoryEpoch().equals(current.memoryEpochAtStart())) {
-                        throw new DomainException(DomainErrorCode.CONFLICT);
+                        throw new ApplicationException(ApplicationErrorCode.CONFLICT);
                     }
                     // 3. 核对实体当前状态与允许的操作，失败中止当前处理。
                     if (!"ACCEPTED".equals(current.status())) {
-                        throw new DomainException(DomainErrorCode.CONFLICT);
+                        throw new ApplicationException(ApplicationErrorCode.CONFLICT);
                     }
                     // 4. 通过领域聚合语义准备业务快照，固定状态由实体封装。
                     ChatRunEntity next = new ChatRunAggregate(current).claim(Ids.next()).entity();
@@ -129,7 +129,7 @@ public final class RunCoordinator {
                 || !current.attemptCount().equals(expected.attemptCount())
                 || c.deletedAt() != null
                 || !c.memoryEpoch().equals(expected.memoryEpochAtStart())) {
-            throw new DomainException(DomainErrorCode.CONFLICT);
+            throw new ApplicationException(ApplicationErrorCode.CONFLICT);
         }
         // 3. 返回本段实际处理结果，保持本层输出契约。
         return current;
@@ -235,7 +235,7 @@ public final class RunCoordinator {
                     });
             // 2. 返回本段实际处理结果，保持本层输出契约。
             return true;
-        } catch (DomainException exception) {
+        } catch (ApplicationException exception) {
             return false;
         }
     }

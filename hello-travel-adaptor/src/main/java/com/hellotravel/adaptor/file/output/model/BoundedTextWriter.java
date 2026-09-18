@@ -37,7 +37,7 @@ public final class BoundedTextWriter extends java.io.Writer {
      * @author AIGenerator
      */
     public void flush() {
-}
+    }
 
     /**
      * 释放写入契约，内存内容不访问外部资源。
@@ -45,7 +45,7 @@ public final class BoundedTextWriter extends java.io.Writer {
      * @author AIGenerator
      */
     public void close() {
-}
+    }
 
     /**
      * 返回已提取的有界明文。

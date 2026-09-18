@@ -1,12 +1,12 @@
 package com.hellotravel.application.knowledge.workflow;
 
+import com.hellotravel.application.exception.ApplicationErrorCode;
+import com.hellotravel.application.exception.ApplicationException;
 import com.hellotravel.application.knowledge.adaptor.VectorOutAdaptor;
-import com.hellotravel.application.knowledge.command.VectorCommand;
+import com.hellotravel.application.knowledge.assembler.VectorCommandAssembler;
 import com.hellotravel.application.model.adaptor.ModelOutAdaptor;
-import com.hellotravel.application.model.command.ModelCommand;
+import com.hellotravel.application.model.assembler.ModelCommandAssembler;
 import com.hellotravel.application.persistence.TravelRepositories;
-import com.hellotravel.domain.exception.DomainErrorCode;
-import com.hellotravel.domain.exception.DomainException;
 import com.hellotravel.domain.query.model.value.QueryValue;
 
 import org.springframework.stereotype.Component;
@@ -28,11 +28,21 @@ public final class RagFlow {
 
     private final VectorOutAdaptor vectors;
 
+    private final ModelCommandAssembler modelCommandAssembler;
+
+    private final VectorCommandAssembler vectorCommandAssembler;
+
     public RagFlow(
-            TravelRepositories repositories, ModelOutAdaptor model, VectorOutAdaptor vectors) {
+            TravelRepositories repositories,
+            ModelOutAdaptor model,
+            VectorOutAdaptor vectors,
+            ModelCommandAssembler modelCommandAssembler,
+            VectorCommandAssembler vectorCommandAssembler) {
         this.repositories = repositories;
         this.model = model;
         this.vectors = vectors;
+        this.modelCommandAssembler = modelCommandAssembler;
+        this.vectorCommandAssembler = vectorCommandAssembler;
     }
 
     /**
@@ -57,26 +67,19 @@ public final class RagFlow {
             return List.of();
         }
         // 2. 取得本次请求的嵌入结果，供本段后续处理使用。
-        var embedding =
-                model.generate(new ModelCommand("EMBED", null, List.of(), List.of(query), null));
+        var embedding = model.generate(modelCommandAssembler.embed(List.of(query)));
         // 3. 核对嵌入结果数量与输入批次一致，缺失结果不得继续写索引。
         if (!embedding.success() || embedding.data().vectors().isEmpty()) {
-            throw new DomainException(DomainErrorCode.UNAVAILABLE);
+            throw new ApplicationException(ApplicationErrorCode.UNAVAILABLE);
         }
         // 4. 按可信内部标识读取账号当前快照。
         String owner = repositories.userAccount.findById(userId).entity().publicId();
         var result =
                 vectors.index(
-                        new VectorCommand(
-                                "SEARCH",
-                                owner,
-                                null,
-                                0L,
-                                List.of(),
-                                embedding.data().vectors().get(0)));
+                        vectorCommandAssembler.search(owner, embedding.data().vectors().get(0)));
         // 5. 核对下层标准结果的成功状态，失败中止当前处理。
         if (!result.success()) {
-            throw new DomainException(DomainErrorCode.UNAVAILABLE);
+            throw new ApplicationException(ApplicationErrorCode.UNAVAILABLE);
         }
         // 6. 取得本次知识检索的候选集合，供本段后续处理使用。
         List<Map<String, String>> matches = new java.util.ArrayList<>();

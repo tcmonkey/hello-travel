@@ -1,10 +1,10 @@
 package com.hellotravel.adaptor.file.output;
 
 import com.hellotravel.adaptor.exception.AdaptorErrorCode;
+import com.hellotravel.adaptor.file.output.converter.FileOutputConverter;
 import com.hellotravel.adaptor.file.output.model.BoundedTextWriter;
 import com.hellotravel.application.file.adaptor.FileOutAdaptor;
 import com.hellotravel.application.file.command.FileCommand;
-import com.hellotravel.application.support.Json;
 import com.hellotravel.common.error.Failures;
 import com.hellotravel.common.identity.Ids;
 import com.hellotravel.common.result.Result;
@@ -41,8 +41,11 @@ public final class FileOutAdaptorImpl implements FileOutAdaptor {
      */
     private final java.util.concurrent.Semaphore parsing = new java.util.concurrent.Semaphore(2);
 
-    public FileOutAdaptorImpl(Environment environment) {
+    private final FileOutputConverter fileOutputConverter;
+
+    public FileOutAdaptorImpl(Environment environment, FileOutputConverter fileOutputConverter) {
         this.environment = environment;
+        this.fileOutputConverter = fileOutputConverter;
     }
 
     /**
@@ -78,7 +81,7 @@ public final class FileOutAdaptorImpl implements FileOutAdaptor {
                         return Result.failure(AdaptorErrorCode.INVALID);
                     }
                     Files.deleteIfExists(root.resolve(fileCommand.storageKey()));
-                    return Result.success(new FileDO(null, null, null, null));
+                    return Result.success(fileOutputConverter.deleted());
                 }
                 // 5. 取得待校验的上传文件字节，供本段后续处理使用。
                 byte[] bytes = fileCommand.bytes();
@@ -107,14 +110,9 @@ public final class FileOutAdaptorImpl implements FileOutAdaptor {
                     Files.deleteIfExists(temporary);
                 }
                 // 9. 将本层成功数据封装为标准结果，保持对外模型隔离。
-                return Result.success(
-                        new FileDO(
-                                key,
-                                mime,
-                                java.security.MessageDigest.getInstance("SHA-256").digest(bytes),
-                                text));
+                return Result.success(fileOutputConverter.stored(fileCommand, key, mime, text));
             } catch (Exception exception) {
-                return Result.failure(AdaptorErrorCode.INVALID);
+                return Failures.capture(exception, AdaptorErrorCode.INVALID);
             } finally {
                 parsing.release();
             }
@@ -154,7 +152,7 @@ public final class FileOutAdaptorImpl implements FileOutAdaptor {
             }
         }
         // 3. 将本层成功数据封装为标准结果，保持对外模型隔离。
-        return Result.success(new FileDO(null, null, null, Json.encode(entries)));
+        return Result.success(fileOutputConverter.scanned(entries));
     }
 
     private ParsedFile parse(byte[] bytes, String name) throws java.io.IOException {
@@ -204,5 +202,5 @@ public final class FileOutAdaptorImpl implements FileOutAdaptor {
     }
 
     private record ParsedFile(String text, String mime) {
-}
+    }
 }

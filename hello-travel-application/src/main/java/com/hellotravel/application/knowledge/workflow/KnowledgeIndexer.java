@@ -1,20 +1,20 @@
 package com.hellotravel.application.knowledge.workflow;
 
+import com.hellotravel.application.exception.ApplicationErrorCode;
+import com.hellotravel.application.exception.ApplicationException;
 import com.hellotravel.application.file.adaptor.FileOutAdaptor;
-import com.hellotravel.application.file.command.FileCommand;
+import com.hellotravel.application.file.assembler.FileCommandAssembler;
 import com.hellotravel.application.knowledge.adaptor.VectorOutAdaptor;
-import com.hellotravel.application.knowledge.command.VectorCommand;
+import com.hellotravel.application.knowledge.assembler.VectorCommandAssembler;
 import com.hellotravel.application.knowledge.command.VectorItemCommand;
 import com.hellotravel.application.model.adaptor.ModelOutAdaptor;
-import com.hellotravel.application.model.command.ModelCommand;
+import com.hellotravel.application.model.assembler.ModelCommandAssembler;
 import com.hellotravel.application.persistence.DomainWrites;
 import com.hellotravel.application.persistence.TravelRepositories;
 import com.hellotravel.application.support.Json;
 import com.hellotravel.application.sync.workflow.SyncEvents;
 import com.hellotravel.application.tx.Transactions;
 import com.hellotravel.common.identity.Ids;
-import com.hellotravel.domain.exception.DomainErrorCode;
-import com.hellotravel.domain.exception.DomainException;
 import com.hellotravel.domain.knowledge.model.aggregate.IndexJobAggregate;
 import com.hellotravel.domain.knowledge.model.aggregate.KnowledgeChunkAggregate;
 import com.hellotravel.domain.knowledge.model.aggregate.KnowledgeDocumentAggregate;
@@ -67,6 +67,12 @@ public final class KnowledgeIndexer {
     private final java.util.concurrent.atomic.AtomicLong reconcileCursor =
             new java.util.concurrent.atomic.AtomicLong();
 
+    private final FileCommandAssembler fileCommandAssembler;
+
+    private final ModelCommandAssembler modelCommandAssembler;
+
+    private final VectorCommandAssembler vectorCommandAssembler;
+
     public KnowledgeIndexer(
             DomainWrites writes,
             TravelRepositories repositories,
@@ -74,7 +80,10 @@ public final class KnowledgeIndexer {
             SyncEvents events,
             ModelOutAdaptor model,
             VectorOutAdaptor vectors,
-            FileOutAdaptor files) {
+            FileOutAdaptor files,
+            FileCommandAssembler fileCommandAssembler,
+            ModelCommandAssembler modelCommandAssembler,
+            VectorCommandAssembler vectorCommandAssembler) {
         this.writes = writes;
         this.repositories = repositories;
         this.transactions = transactions;
@@ -82,6 +91,9 @@ public final class KnowledgeIndexer {
         this.model = model;
         this.vectors = vectors;
         this.files = files;
+        this.fileCommandAssembler = fileCommandAssembler;
+        this.modelCommandAssembler = modelCommandAssembler;
+        this.vectorCommandAssembler = vectorCommandAssembler;
     }
 
     /**
@@ -114,7 +126,7 @@ public final class KnowledgeIndexer {
             var text = document.extractedText();
             // 5. 核对输入或读取结果的存在性，失败中止当前处理。
             if (text == null || text.isBlank()) {
-                throw new DomainException(DomainErrorCode.INVALID);
+                throw new ApplicationException(ApplicationErrorCode.INVALID);
             }
             // 6. 按Unicode码点切块，防止拆断字符及无上限分块。
             List<String> pieces = split(text);
@@ -128,13 +140,8 @@ public final class KnowledgeIndexer {
             // 9. 执行require职责步骤，并把失败交给所属事务或入口处理。
             require(
                     vectors.index(
-                                    new VectorCommand(
-                                            "RECONCILE",
-                                            owner,
-                                            document.publicId(),
-                                            job.indexGeneration(),
-                                            List.of(),
-                                            null))
+                                    vectorCommandAssembler.reconcile(
+                                            owner, document, job.indexGeneration()))
                             .success());
             // 10. 以当前租约栅栏完成任务并记录稳定终态。
             finish(job, true, null);
@@ -150,7 +157,7 @@ public final class KnowledgeIndexer {
         // 2. 逐项处理当前数据窗口，并在循环中核对可用状态与停止条件。
         for (int offset = 0; offset < points.length; offset += 448) {
             if (pieces.size() >= 256) {
-                throw new DomainException(DomainErrorCode.INVALID);
+                throw new ApplicationException(ApplicationErrorCode.INVALID);
             }
             pieces.add(new String(points, offset, Math.min(512, points.length - offset)));
         }
@@ -168,7 +175,7 @@ public final class KnowledgeIndexer {
                 || job.leaseUntil().isBefore(now())
                 || doc.deletedAt() != null
                 || !doc.indexGeneration().equals(job.indexGeneration())) {
-            throw new DomainException(DomainErrorCode.CONFLICT);
+            throw new ApplicationException(ApplicationErrorCode.CONFLICT);
         }
     }
 
@@ -272,19 +279,11 @@ public final class KnowledgeIndexer {
             var doc = row.entity();
             String owner = repositories.userAccount.findById(doc.userId()).entity().publicId();
             if (doc.deletedAt() != null) {
-                var reconciled =
-                        vectors.index(
-                                new VectorCommand(
-                                        "DELETE",
-                                        owner,
-                                        doc.publicId(),
-                                        doc.indexGeneration(),
-                                        List.of(),
-                                        null));
+                var reconciled = vectors.index(vectorCommandAssembler.delete(owner, doc));
                 if (!reconciled.success()) {
                     return;
                 }
-                var erased = files.store(new FileCommand("DELETE", null, null, doc.storageKey()));
+                var erased = files.store(fileCommandAssembler.delete(doc.storageKey()));
                 if (!erased.success()) {
                     return;
                 }
@@ -329,13 +328,8 @@ public final class KnowledgeIndexer {
             } else {
                 var reconciled =
                         vectors.index(
-                                new VectorCommand(
-                                        "RECONCILE",
-                                        owner,
-                                        doc.publicId(),
-                                        doc.indexGeneration(),
-                                        List.of(),
-                                        null));
+                                vectorCommandAssembler.reconcile(
+                                        owner, doc, doc.indexGeneration()));
                 if (!reconciled.success()) {
                     return;
                 }
@@ -345,7 +339,7 @@ public final class KnowledgeIndexer {
 
     private void sweepOrphans() {
         // 1. 取得本段结果并准备本层转换，随后显式核对成功状态。
-        var result = files.store(new FileCommand("SCAN", null, null, fileCursor.get()));
+        var result = files.store(fileCommandAssembler.scan(fileCursor.get()));
         // 2. 依据下层标准结果的成功状态处理分支，避免继续使用无效数据。
         if (!result.success()) {
             return;
@@ -367,7 +361,7 @@ public final class KnowledgeIndexer {
                     .knowledgeDocument
                     .query(QueryValue.all("id", 1).where("storage_key", "EQ", key))
                     .isEmpty()) {
-                files.store(new FileCommand("DELETE", null, null, key));
+                files.store(fileCommandAssembler.delete(key));
             }
         }
     }
@@ -375,7 +369,7 @@ public final class KnowledgeIndexer {
     private static void require(boolean success) {
         // 1. 索引下层失败必须中止当前任务，不以正常状态提交半成品。
         if (!success) {
-            throw new DomainException(DomainErrorCode.UNAVAILABLE);
+            throw new ApplicationException(ApplicationErrorCode.UNAVAILABLE);
         }
     }
 
@@ -410,20 +404,9 @@ public final class KnowledgeIndexer {
         // 1. 按可信内部标识读取账号当前快照。
         String owner = repositories.userAccount.findById(job.userId()).entity().publicId();
         // 2. 执行require职责步骤，并把失败交给所属事务或入口处理。
-        require(
-                vectors.index(
-                                new VectorCommand(
-                                        "DELETE",
-                                        owner,
-                                        document.publicId(),
-                                        document.indexGeneration(),
-                                        List.of(),
-                                        null))
-                        .success());
+        require(vectors.index(vectorCommandAssembler.delete(owner, document)).success());
         // 3. 执行require职责步骤，并把失败交给所属事务或入口处理。
-        require(
-                files.store(new FileCommand("DELETE", null, null, document.storageKey()))
-                        .success());
+        require(files.store(fileCommandAssembler.delete(document.storageKey())).success());
         // 4. 以当前租约栅栏完成任务并记录稳定终态。
         finish(job, true, null);
         // 5. 返回本段实际处理结果，保持本层输出契约。
@@ -440,12 +423,12 @@ public final class KnowledgeIndexer {
         current(job);
         // 2. 截取当前有界批次，外部调用保持在数据库事务之外。
         List<String> batch = pieces.subList(offset, Math.min(pieces.size(), offset + 16));
-        var embedded = model.generate(new ModelCommand("EMBED", null, List.of(), batch, null));
+        var embedded = model.generate(modelCommandAssembler.embed(batch));
         // 3. 执行require职责步骤，并把失败交给所属事务或入口处理。
         require(embedded.success());
         // 4. 核对嵌入结果数量与输入批次一致，缺失结果不得继续写索引。
         if (embedded.data().vectors() == null || embedded.data().vectors().size() != batch.size()) {
-            throw new DomainException(DomainErrorCode.FAILED);
+            throw new ApplicationException(ApplicationErrorCode.FAILED);
         }
         // 5. 准备当前批次的向量条目，SQL正文与向量键保持一致。
         List<VectorItemCommand> items = new java.util.ArrayList<>();
@@ -477,26 +460,13 @@ public final class KnowledgeIndexer {
                                 return entity;
                             });
             items.add(
-                    new VectorItemCommand(
-                            chunk.vectorKey(),
-                            document.publicId(),
-                            job.indexGeneration(),
-                            number,
-                            java.util.HexFormat.of().formatHex(hash),
-                            embedded.data().vectors().get(i)));
+                    vectorCommandAssembler.item(chunk, document, embedded.data().vectors().get(i)));
         }
         // 7. 重新核对任务代次、租约与删除状态，阻止旧执行者写回。
         current(job);
         // 8. 执行require职责步骤，并把失败交给所属事务或入口处理。
         require(
-                vectors.index(
-                                new VectorCommand(
-                                        "UPSERT",
-                                        owner,
-                                        document.publicId(),
-                                        job.indexGeneration(),
-                                        items,
-                                        null))
+                vectors.index(vectorCommandAssembler.upsert(owner, document, job, items))
                         .success());
         // 9. 进入受控事务处理，结果与回滚责任保持清晰。
         transactions.plain(

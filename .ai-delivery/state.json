@@ -7,7 +7,7 @@
   "delivery_mode": "full",
   "execution_goal": "auto",
   "interaction_mode": "guided",
-  "revision": 6,
+  "revision": 8,
   "current_phase": "development",
   "phases": {
     "intake": {
@@ -50,7 +50,7 @@
       "status": "complete",
       "required": true,
       "approved_at": null,
-      "note": "SRC-023全业务方法质量整改完成，规范1.8、652方法/构造器清单、345流程块、实体/聚合职责与长流程重构；16后端/2前端回归通过，终点05，完整自测与独立CR未开始"
+      "note": "SRC-025/026异常归属与实际映射职责整改完成；292类/816方法构造器/399流程块，35后端/4前端，规范1.9；当前终点05，完整06及独立CR未开始；SRC-027仅整理公共规范适用范围，当前规范1.10/快照说明1.8，业务代码及此前回归证据不变"
     },
     "developer_self_test": {
       "status": "not_started",
@@ -135,13 +135,13 @@
   "last_actor": {
     "platform": "codex",
     "model": "unknown",
-    "updated_at": "2026-09-18T11:17:49+08:00"
+    "updated_at": "2026-09-18T16:37:54+08:00"
   },
   "handoff": {
-    "summary": "SRC-023全源码业务质量整改完成：652方法含构造器、345流程块、对象职责与长流程修订；16后端/2前端回归通过，规范1.8/快照1.6及发行同步",
-    "next_action": "本轮05编码终点已完成，审阅当前04技术0.5、05开发0.3及业务方法复核记录；完整06/独立CR尚未开始"
+    "summary": "SRC-027公共规范1.10明确适用于所有匹配技术栈项目，项目名/SRC来源从通用规范移到项目记录，规则ID索引；三宿主/portable及19副本同步，流程10/安装16通过，业务源码与门禁未变化",
+    "next_action": "按05终点保留编码交付暂停；阅读当前通用规范1.10和开发记录0.5的文档修订说明，此前业务回归与完整06/独立CR未开始事实保持"
   },
-  "last_updated": "2026-09-18T11:17:49+08:00",
+  "last_updated": "2026-09-18T16:37:54+08:00",
   "execution_goal_detail": {
     "type": "custom",
     "original_request": "本次仅做到代码生成完，审阅方案文档和代码质量",
@@ -177,6 +177,13 @@
       "actor": "user",
       "scope": "全面检查hello-travel业务方法注释/面向对象/迭代整体质量，反省并落实既有规范；依据既有同步授权修订相关solo/ddd和快照，执行合理针对性开发回归",
       "executed": "已完成；当前终点仍05，不执行完整06/独立CR/部署/外部消息/计费调用"
+    },
+    {
+      "id": "AUTH-MAPPING-001",
+      "source": "SRC-025",
+      "actor": "user",
+      "scope": "全面检查并修正hello-travel异常归属、assembler/converter和OO职责；依据既有授权同步相关solo/ddd规范、门禁、模板，执行合理针对性编码回归",
+      "executed": "完成，终点05；没有完整06/独立CR/部署/计费调用/邮件或业务数据库写入"
     }
   ]
 }
