@@ -25,7 +25,7 @@ import java.util.List;
  *
  * @author AIGenerator
  */
-@Component()
+@Component
 public final class ModelOutputConverter {
 
     /**

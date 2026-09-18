@@ -29,37 +29,21 @@ import org.springframework.stereotype.Component;
 public final class TravelRepositories {
 
     public final RefreshReceiptRepository refreshReceipt;
-
     public final UserAccountRepository userAccount;
-
     public final DeviceRepository device;
-
     public final LoginSessionRepository loginSession;
-
     public final EmailChallengeRepository emailChallenge;
-
     public final ConversationRepository conversation;
-
     public final MessageRepository message;
-
     public final ChatRunRepository chatRun;
-
     public final MemorySummaryRepository memorySummary;
-
     public final MemoryFactRepository memoryFact;
-
     public final MemoryFactSourceRepository memoryFactSource;
-
     public final KnowledgeDocumentRepository knowledgeDocument;
-
     public final KnowledgeChunkRepository knowledgeChunk;
-
     public final IndexJobRepository indexJob;
-
     public final SyncEventRepository syncEvent;
-
     public final OutboxEventRepository outboxEvent;
-
     public final ModelInvocationRepository modelInvocation;
 
     public TravelRepositories(

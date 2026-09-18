@@ -33,11 +33,8 @@ import java.util.Map;
 public final class RunCoordinator {
 
     private final TravelRepositories repositories;
-
     private final DomainWrites writes;
-
     private final Transactions transactions;
-
     private final SyncEvents events;
 
     public RunCoordinator(

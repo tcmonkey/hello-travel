@@ -47,17 +47,11 @@ import java.util.Set;
 public final class AuthFlow {
 
     private final TravelRepositories repositories;
-
     private final DomainWrites writes;
-
     private final Transactions transactions;
-
     private final SyncEvents events;
-
     private final SecurityOutAdaptor security;
-
     private final AuthApplicationAssembler authApplicationAssembler;
-
     private final SecurityCommandAssembler securityCommandAssembler;
 
     public AuthFlow(

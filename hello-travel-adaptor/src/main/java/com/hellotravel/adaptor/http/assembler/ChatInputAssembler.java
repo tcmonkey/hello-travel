@@ -24,7 +24,7 @@ import org.springframework.stereotype.Component;
  *
  * @author AIGenerator
  */
-@Component()
+@Component
 public final class ChatInputAssembler {
 
     /**

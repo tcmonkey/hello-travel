@@ -23,7 +23,7 @@ import java.io.IOException;
  *
  * @author AIGenerator
  */
-@Component()
+@Component
 public final class KnowledgeInputAssembler {
 
     /**

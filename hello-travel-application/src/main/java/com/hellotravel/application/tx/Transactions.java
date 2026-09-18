@@ -24,9 +24,7 @@ import java.util.function.Supplier;
 public final class Transactions {
 
     private final PlatformTransactionManager manager;
-
     private final TravelRepositories repositories;
-
     private final DomainWrites writes;
 
     public Transactions(

@@ -35,23 +35,14 @@ import java.time.ZoneOffset;
 public final class BackgroundJobs {
 
     private final TravelRepositories repositories;
-
     private final DomainWrites writes;
-
     private final Transactions transactions;
-
     private final TravelGraph graph;
-
     private final MemoryFlow memory;
-
     private final PrivacyCleanup privacy;
-
     private final KnowledgeIndexer indexer;
-
     private final RunCoordinator coordinator;
-
     private final SecurityOutAdaptor security;
-
     private final MailOutAdaptor mail;
 
     /**
@@ -77,7 +68,6 @@ public final class BackgroundJobs {
                     new java.util.concurrent.ThreadPoolExecutor.AbortPolicy());
 
     private final MailCommandAssembler mailCommandAssembler;
-
     private final SecurityCommandAssembler securityCommandAssembler;
 
     public BackgroundJobs(

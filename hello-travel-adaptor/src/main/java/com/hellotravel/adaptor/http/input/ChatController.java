@@ -26,7 +26,6 @@ import org.springframework.web.bind.annotation.RestController;
 public final class ChatController {
 
     private final ChatApplication application;
-
     private final ChatInputAssembler chatInputAssembler;
 
     public ChatController(ChatApplication application, ChatInputAssembler chatInputAssembler) {

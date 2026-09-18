@@ -22,7 +22,6 @@ import org.springframework.web.bind.annotation.RestController;
 public final class SyncController {
 
     private final SyncApplication application;
-
     private final SyncInputAssembler syncInputAssembler;
 
     public SyncController(SyncApplication application, SyncInputAssembler syncInputAssembler) {

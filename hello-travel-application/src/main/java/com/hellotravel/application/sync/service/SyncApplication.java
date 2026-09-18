@@ -21,7 +21,6 @@ import org.springframework.stereotype.Service;
 public final class SyncApplication {
 
     private final TravelRepositories repositories;
-
     private final SyncApplicationAssembler syncApplicationAssembler;
 
     public SyncApplication(

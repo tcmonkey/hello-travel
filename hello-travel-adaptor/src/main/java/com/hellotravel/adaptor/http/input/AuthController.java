@@ -28,9 +28,7 @@ import org.springframework.web.bind.annotation.RestController;
 public final class AuthController {
 
     private final AuthApplication application;
-
     private final AuthCookies cookies;
-
     private final AuthInputAssembler authInputAssembler;
 
     public AuthController(

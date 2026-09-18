@@ -17,7 +17,7 @@ import java.util.Map;
  *
  * @author AIGenerator
  */
-@Component()
+@Component
 public final class TravelOutputConverter {
 
     /**

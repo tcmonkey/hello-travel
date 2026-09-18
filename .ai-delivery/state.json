@@ -7,7 +7,7 @@
   "delivery_mode": "full",
   "execution_goal": "auto",
   "interaction_mode": "guided",
-  "revision": 8,
+  "revision": 10,
   "current_phase": "development",
   "phases": {
     "intake": {
@@ -50,7 +50,7 @@
       "status": "complete",
       "required": true,
       "approved_at": null,
-      "note": "SRC-025/026异常归属与实际映射职责整改完成；292类/816方法构造器/399流程块，35后端/4前端，规范1.9；当前终点05，完整06及独立CR未开始；SRC-027仅整理公共规范适用范围，当前规范1.10/快照说明1.8，业务代码及此前回归证据不变"
+      "note": "SRC-025/026异常归属与实际映射职责整改完成；292类/816方法构造器/399流程块，35后端/4前端，规范1.9；当前终点05，完整06及独立CR未开始；SRC-027仅整理公共规范适用范围，当前规范1.10/快照说明1.8，业务代码及此前回归证据不变；SRC-028仅依赖字段空行整改，规范1.11/快照1.9，非空行内容不变；SRC-029无参数@Component省略括号，规范1.12，业务逻辑不变"
     },
     "developer_self_test": {
       "status": "not_started",
@@ -135,13 +135,13 @@
   "last_actor": {
     "platform": "codex",
     "model": "unknown",
-    "updated_at": "2026-09-18T16:37:54+08:00"
+    "updated_at": "2026-09-18T17:12:25+08:00"
   },
   "handoff": {
-    "summary": "SRC-027公共规范1.10明确适用于所有匹配技术栈项目，项目名/SRC来源从通用规范移到项目记录，规则ID索引；三宿主/portable及19副本同步，流程10/安装16通过，业务源码与门禁未变化",
-    "next_action": "按05终点保留编码交付暂停；阅读当前通用规范1.10和开发记录0.5的文档修订说明，此前业务回归与完整06/独立CR未开始事实保持"
+    "summary": "SRC-029无参@Component去空括号38处，FMT-007规范1.12与发行/19副本同步；默认validate、结构与流程10/安装16通过，业务逻辑和Bean命名不变",
+    "next_action": "保留05编码终点暂停；开发记录0.7记载风格修订，不把既有业务回归当此次执行，完整06与独立CR尚未开始"
   },
-  "last_updated": "2026-09-18T16:37:54+08:00",
+  "last_updated": "2026-09-18T17:12:25+08:00",
   "execution_goal_detail": {
     "type": "custom",
     "original_request": "本次仅做到代码生成完，审阅方案文档和代码质量",

@@ -28,17 +28,11 @@ import org.springframework.stereotype.Component;
 public final class KnowledgeFlow {
 
     private final TravelRepositories repositories;
-
     private final DomainWrites writes;
-
     private final Transactions transactions;
-
     private final SyncEvents events;
-
     private final FileOutAdaptor files;
-
     private final FileCommandAssembler fileCommandAssembler;
-
     private final KnowledgeApplicationAssembler knowledgeApplicationAssembler;
 
     public KnowledgeFlow(

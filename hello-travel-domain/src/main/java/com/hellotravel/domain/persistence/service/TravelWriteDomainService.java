@@ -67,37 +67,21 @@ import com.hellotravel.model.persistence.WriteDO;
 public final class TravelWriteDomainService {
 
     private final UserAccountRepository userAccount;
-
     private final DeviceRepository device;
-
     private final LoginSessionRepository loginSession;
-
     private final EmailChallengeRepository emailChallenge;
-
     private final ConversationRepository conversation;
-
     private final MessageRepository message;
-
     private final ChatRunRepository chatRun;
-
     private final MemorySummaryRepository memorySummary;
-
     private final MemoryFactRepository memoryFact;
-
     private final MemoryFactSourceRepository memoryFactSource;
-
     private final KnowledgeDocumentRepository knowledgeDocument;
-
     private final KnowledgeChunkRepository knowledgeChunk;
-
     private final IndexJobRepository indexJob;
-
     private final SyncEventRepository syncEvent;
-
     private final OutboxEventRepository outboxEvent;
-
     private final ModelInvocationRepository modelInvocation;
-
     private final RefreshReceiptRepository refreshReceipt;
 
     public TravelWriteDomainService(

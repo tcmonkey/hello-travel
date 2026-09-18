@@ -28,7 +28,6 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 public final class SyncStreamController {
 
     private final AuthApplication auth;
-
     private final SyncApplication sync;
 
     /**
@@ -62,7 +61,6 @@ public final class SyncStreamController {
             new java.util.concurrent.ConcurrentHashMap<>();
 
     private final AuthInputAssembler authInputAssembler;
-
     private final SyncInputAssembler syncInputAssembler;
 
     public SyncStreamController(

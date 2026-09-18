@@ -38,17 +38,11 @@ import java.util.List;
 public final class KnowledgeIndexer {
 
     private final TravelRepositories repositories;
-
     private final DomainWrites writes;
-
     private final Transactions transactions;
-
     private final SyncEvents events;
-
     private final ModelOutAdaptor model;
-
     private final VectorOutAdaptor vectors;
-
     private final FileOutAdaptor files;
 
     /**
@@ -68,9 +62,7 @@ public final class KnowledgeIndexer {
             new java.util.concurrent.atomic.AtomicLong();
 
     private final FileCommandAssembler fileCommandAssembler;
-
     private final ModelCommandAssembler modelCommandAssembler;
-
     private final VectorCommandAssembler vectorCommandAssembler;
 
     public KnowledgeIndexer(

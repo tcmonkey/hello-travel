@@ -35,7 +35,6 @@ import org.springframework.stereotype.Component;
 public final class DomainWrites {
 
     private final TravelWriteDomainService service;
-
     private final TravelWriteApplicationAssembler travelWriteApplicationAssembler;
 
     public DomainWrites(

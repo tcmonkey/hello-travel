@@ -35,9 +35,7 @@ import java.util.concurrent.atomic.AtomicReference;
 public final class ModelOutAdaptorImpl implements ModelOutAdaptor {
 
     private final Environment environment;
-
     private final ModelContextPolicy contextPolicy;
-
     private final ModelOutputConverter modelOutputConverter;
 
     public ModelOutAdaptorImpl(

@@ -35,9 +35,7 @@ import javax.crypto.spec.SecretKeySpec;
 public final class SecurityOutAdaptorImpl implements SecurityOutAdaptor {
 
     private final Environment environment;
-
     private final StringRedisTemplate redis;
-
     private final SecurityOutputConverter securityOutputConverter;
 
     public SecurityOutAdaptorImpl(

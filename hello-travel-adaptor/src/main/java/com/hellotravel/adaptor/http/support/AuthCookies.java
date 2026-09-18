@@ -24,9 +24,7 @@ import org.springframework.stereotype.Component;
 public final class AuthCookies {
 
     private final SecurityOutAdaptor security;
-
     private final Environment environment;
-
     private final SecurityCommandAssembler securityCommandAssembler;
 
     public AuthCookies(

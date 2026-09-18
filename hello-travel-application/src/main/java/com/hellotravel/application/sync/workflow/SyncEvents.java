@@ -21,7 +21,6 @@ import org.springframework.stereotype.Component;
 public final class SyncEvents {
 
     private final TravelRepositories repositories;
-
     private final DomainWrites writes;
 
     public SyncEvents(DomainWrites writes, TravelRepositories repositories) {

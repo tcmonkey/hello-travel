@@ -22,7 +22,6 @@ import org.springframework.stereotype.Component;
 public final class MailOutAdaptorImpl implements MailOutAdaptor {
 
     private final Environment environment;
-
     private final MailOutputConverter mailOutputConverter;
 
     public MailOutAdaptorImpl(Environment environment, MailOutputConverter mailOutputConverter) {

@@ -38,17 +38,11 @@ import java.util.UUID;
 public final class ChatFlow {
 
     private final TravelRepositories repositories;
-
     private final DomainWrites writes;
-
     private final Transactions transactions;
-
     private final SyncEvents events;
-
     private final ModelContextPolicy contextPolicy;
-
     private final ChatApplicationAssembler assembler;
-
     private final ContextApplicationAssembler contextApplicationAssembler;
 
     public ChatFlow(

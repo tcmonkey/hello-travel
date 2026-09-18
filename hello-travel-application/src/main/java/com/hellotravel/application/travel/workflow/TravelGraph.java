@@ -36,23 +36,14 @@ import java.util.Map;
 public final class TravelGraph {
 
     private final TravelRepositories repositories;
-
     private final RunCoordinator coordinator;
-
     private final MemoryFlow memory;
-
     private final RagFlow rag;
-
     private final ModelOutAdaptor model;
-
     private final TravelOutAdaptor tools;
-
     private final ModelContextPolicy contextPolicy;
-
     private final ContextApplicationAssembler contextApplicationAssembler;
-
     private final ModelCommandAssembler modelCommandAssembler;
-
     private final TravelCommandAssembler travelCommandAssembler;
 
     public TravelGraph(

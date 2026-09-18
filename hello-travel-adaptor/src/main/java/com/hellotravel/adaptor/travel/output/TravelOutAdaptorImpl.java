@@ -28,7 +28,6 @@ import java.util.Map;
 public final class TravelOutAdaptorImpl implements TravelOutAdaptor {
 
     private final Environment environment;
-
     private final TravelOutputConverter travelOutputConverter;
 
     public TravelOutAdaptorImpl(

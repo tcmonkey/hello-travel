@@ -33,11 +33,8 @@ import java.util.List;
 public final class SessionFilter extends OncePerRequestFilter {
 
     private final AuthApplication application;
-
     private final ObjectMapper mapper;
-
     private final Environment environment;
-
     private final AuthInputAssembler authInputAssembler;
 
     public SessionFilter(

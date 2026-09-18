@@ -28,7 +28,6 @@ import org.springframework.web.multipart.MultipartFile;
 public final class KnowledgeController {
 
     private final KnowledgeApplication application;
-
     private final KnowledgeInputAssembler knowledgeInputAssembler;
 
     public KnowledgeController(

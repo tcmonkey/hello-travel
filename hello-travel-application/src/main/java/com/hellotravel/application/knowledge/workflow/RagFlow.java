@@ -23,13 +23,9 @@ import java.util.Map;
 public final class RagFlow {
 
     private final TravelRepositories repositories;
-
     private final ModelOutAdaptor model;
-
     private final VectorOutAdaptor vectors;
-
     private final ModelCommandAssembler modelCommandAssembler;
-
     private final VectorCommandAssembler vectorCommandAssembler;
 
     public RagFlow(

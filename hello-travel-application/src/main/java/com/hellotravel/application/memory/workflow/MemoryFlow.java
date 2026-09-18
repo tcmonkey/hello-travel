@@ -45,17 +45,11 @@ import java.util.Map;
 public final class MemoryFlow {
 
     private final TravelRepositories repositories;
-
     private final DomainWrites writes;
-
     private final Transactions transactions;
-
     private final ModelOutAdaptor model;
-
     private final SyncEvents events;
-
     private final ModelContextPolicy contextPolicy;
-
     private final ModelCommandAssembler modelCommandAssembler;
 
     public MemoryFlow(
