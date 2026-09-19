@@ -2,9 +2,9 @@ package com.hellotravel.application.jobs.job;
 
 import com.hellotravel.application.auth.support.AuthRepositories;
 import com.hellotravel.application.auth.support.AuthWrites;
-import com.hellotravel.application.sync.support.SyncRepositories;
-import com.hellotravel.application.sync.support.SyncWrites;
-import com.hellotravel.application.sync.support.SyncEventPublisher;
+import com.hellotravel.application.chat.sync.support.SyncRepositories;
+import com.hellotravel.application.chat.sync.support.SyncWrites;
+import com.hellotravel.application.chat.sync.support.SyncEventPublisher;
 import com.hellotravel.application.tx.Transactions;
 import com.hellotravel.domain.auth.model.aggregate.EmailChallengeAggregate;
 import com.hellotravel.domain.auth.model.aggregate.LoginSessionAggregate;

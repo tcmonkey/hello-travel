@@ -3,6 +3,8 @@ package com.hellotravel.domain.chat.model.entity;
 import com.hellotravel.common.identity.Ids;
 import com.hellotravel.domain.exception.DomainErrorCode;
 import com.hellotravel.domain.exception.DomainException;
+import com.hellotravel.model.travel.TravelAiContract;
+import com.hellotravel.model.chat.ChatModelStage;
 
 /**
  * 持久化归属与状态快照；变更须经过语义方法和版本检查。
@@ -162,7 +164,7 @@ public record ModelInvocationEntity(
                 userId,
                 conversationId,
                 runId,
-                "MEMORY_EXTRACTION",
+                ChatModelStage.MEMORY_EXTRACTION.name(),
                 runAttemptNo,
                 1,
                 "configured-chat",
@@ -217,7 +219,7 @@ public record ModelInvocationEntity(
                 runAttemptNo,
                 attemptNo,
                 "configured-chat",
-                "travel-v1",
+                TravelAiContract.PROMPT_REVISION,
                 estimatedInputTokens,
                 "utf8-upper-v1",
                 null,

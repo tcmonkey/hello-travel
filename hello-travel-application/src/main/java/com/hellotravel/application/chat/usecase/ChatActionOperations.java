@@ -8,10 +8,10 @@ import com.hellotravel.application.chat.support.ChatRepositories;
 import com.hellotravel.application.chat.support.ChatWrites;
 import com.hellotravel.application.exception.ApplicationErrorCode;
 import com.hellotravel.application.exception.ApplicationException;
-import com.hellotravel.application.memory.assembler.ContextApplicationAssembler;
-import com.hellotravel.application.model.policy.ModelContextPolicy;
+import com.hellotravel.application.chat.memory.assembler.ContextApplicationAssembler;
+import com.hellotravel.application.chat.context.policy.ChatContextPolicy;
 import com.hellotravel.application.support.Json;
-import com.hellotravel.application.sync.support.SyncEventPublisher;
+import com.hellotravel.application.chat.sync.support.SyncEventPublisher;
 import com.hellotravel.application.tx.Transactions;
 import com.hellotravel.common.identity.Ids;
 import com.hellotravel.domain.chat.model.aggregate.ChatRunAggregate;
@@ -43,7 +43,7 @@ public final class ChatActionOperations {
     private final ChatWrites chatWrites;
     private final Transactions transactions;
     private final SyncEventPublisher events;
-    private final ModelContextPolicy contextPolicy;
+    private final ChatContextPolicy contextPolicy;
     private final ChatApplicationAssembler assembler;
     private final ContextApplicationAssembler contextApplicationAssembler;
 
@@ -54,7 +54,7 @@ public final class ChatActionOperations {
             Transactions transactions,
             SyncEventPublisher events,
             ChatApplicationAssembler assembler,
-            ModelContextPolicy contextPolicy,
+            ChatContextPolicy contextPolicy,
             ContextApplicationAssembler contextApplicationAssembler) {
         this.chatWrites = chatWrites;
         this.chatRepositories = chatRepositories;

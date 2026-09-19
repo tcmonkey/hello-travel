@@ -4,6 +4,7 @@ import com.hellotravel.common.identity.Ids;
 import com.hellotravel.domain.exception.DomainErrorCode;
 import com.hellotravel.domain.exception.DomainException;
 import com.hellotravel.domain.memory.model.value.ContextBudgetValue;
+import com.hellotravel.model.travel.TravelAiContract;
 
 /**
  * 持久化归属与状态快照；变更须经过语义方法和版本检查。
@@ -301,7 +302,7 @@ public record ChatRunEntity(
                 "ACCEPTED",
                 0,
                 null,
-                "travel-v1",
+                TravelAiContract.GRAPH_REVISION,
                 conversation.memoryEpoch(),
                 null,
                 null,

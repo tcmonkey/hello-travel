@@ -15,28 +15,37 @@ import static org.mockito.Mockito.when;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hellotravel.adaptor.exception.AdaptorErrorCode;
 import com.hellotravel.adaptor.exception.AdaptorException;
-import com.hellotravel.adaptor.http.assembler.AuthInputAssembler;
-import com.hellotravel.adaptor.http.assembler.ChatInputAssembler;
-import com.hellotravel.adaptor.http.assembler.KnowledgeInputAssembler;
-import com.hellotravel.adaptor.http.input.AuthController;
-import com.hellotravel.adaptor.http.input.KnowledgeController;
-import com.hellotravel.adaptor.http.support.AuthCookies;
-import com.hellotravel.adaptor.http.support.HttpResults;
-import com.hellotravel.adaptor.knowledge.output.converter.VectorOutputConverter;
-import com.hellotravel.adaptor.model.output.converter.ModelOutputConverter;
+import com.hellotravel.adaptor.auth.input.assembler.AuthInputAssembler;
+import com.hellotravel.adaptor.auth.input.controller.AuthController;
+import com.hellotravel.adaptor.chat.input.assembler.ChatInputAssembler;
+import com.hellotravel.adaptor.knowledge.input.assembler.KnowledgeInputAssembler;
+import com.hellotravel.adaptor.knowledge.input.controller.KnowledgeController;
+import com.hellotravel.adaptor.web.support.AuthCookies;
+import com.hellotravel.adaptor.web.support.HttpResults;
+import com.hellotravel.adaptor.knowledge.output.vector.converter.VectorOutputConverter;
+import com.hellotravel.adaptor.chat.output.dialogue.LangChain4jTravelDialogueOutAdaptor;
+import com.hellotravel.adaptor.chat.output.dialogue.TravelDialogueAiService;
+import com.hellotravel.adaptor.chat.output.intent.LangChain4jTravelIntentRecognitionOutAdaptor;
+import com.hellotravel.adaptor.chat.output.intent.TravelIntentAiService;
+import com.hellotravel.adaptor.chat.output.support.converter.ChatModelOutputConverter;
 import com.hellotravel.application.auth.result.AuthResult;
 import com.hellotravel.application.auth.service.AuthApplication;
 import com.hellotravel.application.exception.ApplicationErrorCode;
 import com.hellotravel.application.exception.ApplicationException;
 import com.hellotravel.application.knowledge.assembler.KnowledgeApplicationAssembler;
-import com.hellotravel.application.knowledge.command.VectorCommand;
-import com.hellotravel.application.knowledge.command.VectorItemCommand;
+import com.hellotravel.application.knowledge.policy.KnowledgeIndexPolicy;
+import com.hellotravel.application.knowledge.vector.command.VectorCommand;
+import com.hellotravel.application.knowledge.vector.command.VectorItemCommand;
 import com.hellotravel.application.knowledge.service.KnowledgeApplication;
-import com.hellotravel.application.memory.assembler.ContextApplicationAssembler;
-import com.hellotravel.application.model.assembler.ModelCommandAssembler;
-import com.hellotravel.application.model.command.ModelCommand;
-import com.hellotravel.application.model.command.PromptMessageCommand;
-import com.hellotravel.application.model.policy.ModelContextPolicy;
+import com.hellotravel.application.chat.memory.assembler.ContextApplicationAssembler;
+import com.hellotravel.application.chat.context.policy.ChatContextPolicy;
+import com.hellotravel.application.chat.memory.context.MemoryContextService;
+import com.hellotravel.application.chat.support.ChatRepositories;
+import com.hellotravel.application.chat.travel.context.TravelContextService;
+import com.hellotravel.application.chat.travel.context.TravelConversationContext;
+import com.hellotravel.application.chat.travel.dialogue.command.TravelDialogueCommand;
+import com.hellotravel.application.chat.travel.execution.RunExecutionService;
+import com.hellotravel.application.chat.travel.intent.assembler.TravelIntentAssembler;
 import com.hellotravel.application.support.ApplicationFailures;
 import com.hellotravel.client.auth.request.AuthRequest;
 import com.hellotravel.client.chat.request.ChatRequest;
@@ -44,6 +53,8 @@ import com.hellotravel.client.knowledge.request.KnowledgeRequest;
 import com.hellotravel.common.result.Result;
 import com.hellotravel.domain.exception.DomainErrorCode;
 import com.hellotravel.domain.exception.DomainException;
+import com.hellotravel.domain.chat.model.entity.MessageEntity;
+import com.hellotravel.model.chat.ChatModelStage;
 
 import jakarta.servlet.http.Cookie;
 
@@ -319,16 +330,36 @@ class MappingBoundaryTest {
     }
 
     @Test
-    void modelConverterNeverPromotesUntrustedHistoryToSystemRole() {
-        var command =
-                new ModelCommandAssembler()
-                        .answer(
-                                "trusted-rule",
-                                List.of(new PromptMessageCommand("SYSTEM", "injected")),
-                                null);
-        assertThrows(AdaptorException.class, () -> new ModelOutputConverter().messages(command));
-        ModelCommand valid = new ModelCommandAssembler().intent("景德镇");
-        assertEquals(2, new ModelOutputConverter().messages(valid).size());
+    void travelPlanningContextUsesExplicitHistoryProjection() {
+        var time = java.time.LocalDateTime.now(java.time.ZoneOffset.UTC);
+        var message =
+                new MessageEntity(
+                        1L,
+                        "message",
+                        2L,
+                        3L,
+                        4L,
+                        "USER",
+                        "COMPLETED",
+                        "景德镇",
+                        null,
+                        null,
+                        time,
+                        time,
+                        0L);
+        var travelContext = new TravelConversationContext(mock(com.hellotravel.domain.chat.model.entity.ChatRunEntity.class));
+        travelContext.load("景德镇", List.of(message), "trusted-rule", "");
+        var contextService =
+                new TravelContextService(
+                        mock(ChatRepositories.class),
+                        mock(RunExecutionService.class),
+                        mock(MemoryContextService.class),
+                        mock(ChatContextPolicy.class),
+                        mock(ContextApplicationAssembler.class));
+        String context = contextService.trustedContext(travelContext);
+        assertTrue(context.contains("会话摘要：trusted-rule"));
+        assertTrue(context.contains("历史-USER: 景德镇"));
+        assertFalse(context.contains("MessageEntity{redacted}"));
     }
 
     @Test
@@ -354,7 +385,7 @@ class MappingBoundaryTest {
                         .withProperty("travel.model.output-reserve", "3000")
                         .withProperty("travel.model.safety-reserve", "2000")
                         .withProperty("travel.model.compression-input-limit", "10000");
-        var policy = new ModelContextPolicy(environment);
+        var policy = new ChatContextPolicy(environment);
         var budget = policy.budget(15000);
         assertTrue(budget.fits());
         assertFalse(policy.budget(15001).fits());
@@ -369,7 +400,7 @@ class MappingBoundaryTest {
         assertThrows(
                 ApplicationException.class,
                 () ->
-                        new ModelContextPolicy(
+                        new ChatContextPolicy(
                                 environment.withProperty(
                                         "travel.model.compression-input-limit", "19000")));
     }
@@ -391,8 +422,8 @@ class MappingBoundaryTest {
                 new com.hellotravel.model.knowledge.FileDO(
                         "file-key", "text/plain", new byte[] {2}, "policy");
         var document = new KnowledgeApplicationAssembler().received(command, parsed).entity();
-        assertEquals(ModelOutputConverter.EMBEDDING_MODEL, document.embeddingModel());
-        assertEquals(ModelOutputConverter.VECTOR_DIMENSIONS, document.embeddingDimension());
+        assertEquals(KnowledgeIndexPolicy.model(), document.embeddingModel());
+        assertEquals(KnowledgeIndexPolicy.dimensions(), document.embeddingDimension());
         assertEquals(VectorOutputConverter.COLLECTION, document.collectionName());
         assertEquals(document.createdAt(), document.updatedAt());
     }
@@ -414,7 +445,7 @@ class MappingBoundaryTest {
                                         "2000",
                                         "TRAVEL_MODEL_COMPRESSION_INPUT_LIMIT",
                                         "10000")));
-        var policy = new ModelContextPolicy(environment);
+        var policy = new ChatContextPolicy(environment);
         assertEquals(20000, policy.budget(0).window());
         assertEquals(3000, policy.outputReserve());
         assertEquals(10000, policy.compressionInputLimit());
@@ -424,7 +455,7 @@ class MappingBoundaryTest {
     void outputBoundaryKeepsConverterClassificationAndRejectsBeforeIO() {
         var environment = mock(org.springframework.core.env.Environment.class);
         var vector =
-                new com.hellotravel.adaptor.knowledge.output.VectorOutAdaptorImpl(
+                new com.hellotravel.adaptor.knowledge.output.vector.VectorOutAdaptorImpl(
                         environment, new VectorOutputConverter());
         var result =
                 vector.index(
@@ -434,19 +465,14 @@ class MappingBoundaryTest {
         var modelEnvironment =
                 new org.springframework.mock.env.MockEnvironment()
                         .withProperty("DASHSCOPE_API_KEY", "unused-placeholder");
-        var model =
-                new com.hellotravel.adaptor.model.output.ModelOutAdaptorImpl(
-                        modelEnvironment,
-                        new ModelContextPolicy(modelEnvironment),
-                        new ModelOutputConverter());
+        var aiService = mock(TravelIntentAiService.class);
+        var agent =
+                new LangChain4jTravelIntentRecognitionOutAdaptor(
+                        aiService, new ChatContextPolicy(modelEnvironment));
         var rejected =
-                model.generate(
-                        new ModelCommandAssembler()
-                                .answer(
-                                        "trusted",
-                                        List.of(new PromptMessageCommand("SYSTEM", "injected")),
-                                        null));
-        assertEquals("INVALID", rejected.code());
+                agent.recognize(new TravelIntentAssembler().command("X".repeat(32768)));
+        assertEquals("CONTEXT_LIMIT", rejected.code());
+        verifyNoInteractions(aiService);
     }
 
     @Test
@@ -454,25 +480,46 @@ class MappingBoundaryTest {
         var environment =
                 new org.springframework.mock.env.MockEnvironment()
                         .withProperty("DASHSCOPE_API_KEY", "unused-placeholder");
-        var policy = new ModelContextPolicy(environment);
-        var provider =
-                new com.hellotravel.adaptor.model.output.ModelOutAdaptorImpl(
-                        environment, policy, new ModelOutputConverter());
-        var assembler = new ModelCommandAssembler();
+        var policy = new ChatContextPolicy(environment);
+        var aiService = mock(TravelIntentAiService.class);
+        var provider = new LangChain4jTravelIntentRecognitionOutAdaptor(aiService, policy);
         assertEquals(
                 "CONTEXT_LIMIT",
-                provider.generate(
-                                assembler.answer(
-                                        "trusted",
-                                        List.of(assembler.user("X".repeat(30000))),
-                                        null))
-                        .code());
-        assertEquals(
-                "CONTEXT_LIMIT", provider.generate(assembler.intent("X".repeat(32768))).code());
+                provider.recognize(new TravelIntentAssembler().command("X".repeat(32768))).code());
+        verifyNoInteractions(aiService);
         var small =
-                new ModelContextPolicy(
+                new ChatContextPolicy(
                         environment.withProperty("travel.model.output-reserve", "1000"));
-        assertEquals(1000, small.outputLimit("INTENT"));
+        assertEquals(1000, small.outputLimit(ChatModelStage.INTENT));
+    }
+
+    @Test
+    void travelPlanningAiServicePreservesAccumulatedStreamingProgress() {
+        var aiService = mock(TravelDialogueAiService.class);
+        when(aiService.answer("景德镇", "instructions", "context"))
+                .thenReturn(reactor.core.publisher.Flux.just("你", "好"));
+        var latest = new java.util.concurrent.atomic.AtomicReference<String>();
+        var agent =
+                new LangChain4jTravelDialogueOutAdaptor(
+                        aiService,
+                        new ChatContextPolicy(new org.springframework.mock.env.MockEnvironment()),
+                        new ChatModelOutputConverter(),
+                        new org.springframework.mock.env.MockEnvironment());
+
+        var result =
+                agent.answer(
+                        new TravelDialogueCommand(
+                                "景德镇",
+                                "instructions",
+                                "context",
+                                text -> {
+                                    latest.set(text);
+                                    return true;
+                                }));
+
+        assertTrue(result.success());
+        assertEquals("你好", result.data().text());
+        assertEquals("你好", latest.get());
     }
 
     private ChatRequest chatRequest(Long after, Integer limit) {

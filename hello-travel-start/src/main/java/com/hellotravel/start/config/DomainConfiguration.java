@@ -22,6 +22,7 @@ import com.hellotravel.domain.memory.service.MemoryDomainService;
 import com.hellotravel.domain.sync.repository.OutboxEventRepository;
 import com.hellotravel.domain.sync.repository.SyncEventRepository;
 import com.hellotravel.domain.sync.service.SyncDomainService;
+import com.hellotravel.domain.travel.service.TravelPlanDomainService;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -121,5 +122,16 @@ public class DomainConfiguration {
     public SyncDomainService syncDomainService(
             SyncEventRepository syncEvent, OutboxEventRepository outboxEvent) {
         return new SyncDomainService(syncEvent, outboxEvent);
+    }
+
+    /**
+     * 装配旅行规划确定性规则服务。
+     *
+     * @return 旅行规划领域服务
+     * @author AIGenerator
+     */
+    @Bean
+    public TravelPlanDomainService travelPlanDomainService() {
+        return new TravelPlanDomainService();
     }
 }

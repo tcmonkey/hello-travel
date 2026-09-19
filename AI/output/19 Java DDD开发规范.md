@@ -1,6 +1,6 @@
 # Java DDD 开发规范
 
-版本：1.15。作为 solo 的 Java DDD 默认开发约定，适用于采用 Java/Spring/Maven 与 DDD 分层的项目，不绑定具体业务应用。`ddd` 是随技能提供的参考工程，不是适用项目名单；其他技术栈按其实际架构采用相关通用原则。已有项目的明确规范和用户决定优先，本文件不宣称是行业统一标准。
+版本：1.17。作为 solo 的 Java DDD 默认开发约定，适用于采用 Java/Spring/Maven 与 DDD 分层的项目，不绑定具体业务应用。`ddd` 是随技能提供的参考工程，不是适用项目名单；其他技术栈按其实际架构采用相关通用原则。已有项目的明确规范和用户决定优先，本文件不宣称是行业统一标准。
 
 ## 1. 使用方式与规则优先级
 
@@ -22,7 +22,7 @@
 | MOD-005 | model 是内部稳定 DO 共享层，domain/application/adaptor/infrastructure 可依赖，client 禁止依赖；不放持久化映射、协议模型和领域行为。 | R |
 | MOD-006 | domain 只依赖 common/model/JDK，禁止 Spring、Jakarta、MyBatis 等框架。 | P：禁止常见框架 import；POM、全限定类型/传递依赖需评审 |
 | MOD-007 | application 依赖 domain/model/common；infrastructure 实现 domain 仓储端口；adaptor 依赖 application/client/model/common。start 只负责启动和装配，业务模块禁止反向依赖 start。 | R |
-| MOD-008 | 同一 adaptor module 区分 input/output：input 放协议入口及 assembler，output 放外部能力实现、converter 和私有第三方模型。 | R |
+| MOD-008 | 同一 adaptor module 区分 input/output。每个业务的 input 下必须建立同级 `controller` 与 `assembler` 子包：协议入口只放 `input.controller`，输入双向转换只放 `input.assembler`，禁止将 Controller 或 Assembler 直接平铺在 input 根包；listener、scheduler 等按真实职责建立同级子包。output 放外部能力实现、converter 和私有第三方模型。 | P：QUALITY-PACKAGE 检查输入类后缀与包位置；协议职责仍需评审 |
 | MOD-010 | 生成有前端的项目时，默认以用户项目名为服务端目录，自动创建同级`<项目名>-app`为独立前端项目，拥有自己的package.json、lockfile、源码、构建与README；禁止默认嵌套到服务端frontend/web目录。用户明确其他布局或已有仓库约定优先；目标已存在先检查保留，不覆盖。同步启动脚本、代理、文档和项目目录引用；不把服务端凭据复制到前端。 | R：目录与独立构建验证 |
 | MOD-009 | start 的 POM 是本服务的显式装配清单，直接声明实际随服务运行的内部模块，不仅依靠传递依赖。完整模板列出 common、client、model、domain、application、infrastructure、adaptor；真实项目按服务边界裁剪，不引入无用途、其他服务或仅工具用途的模块。测试专用依赖使用 test scope，运行专用依赖按需使用 runtime scope；所有依赖版本仍由根 POM 管理。业务模块不得反向依赖 start。 | R：核对 POM、有效依赖树和运行验证，Checkstyle 不检查 |
 
@@ -39,7 +39,7 @@ application  exception / <业务>.command / result / assembler / service / adapt
 infrastructure exception / 基础仓储与 Mapper
              <业务>.mysql.mapper / pojo / repository
 adaptor      exception / common
-             <业务>.input.assembler / 按需 listener、scheduler
+             <业务>.input.controller / assembler / 按需 listener、scheduler
              <业务>.output.converter / model
 start        Application / config / resources / 按需 aop
 ```
@@ -81,6 +81,8 @@ start        Application / config / resources / 按需 aop
 | DDD-011 | 参考DddWriteDomainService.write演示的是参考业务内的写模式，真实项目使用对应业务领域与动作命名；一个领域可按用例内聚性拥有多个DomainService，普通读/外部普通读无需为凑模式创建DomainService。文件数和服务数由业务职责决定，不能以模板类名推导全项目总服务。 | R：参考适用性与对象职责复核 |
 | DDD-012 | 真实业务的DomainService以业务职责命名，例如`AuthDomainService`；写入、读取、规则或计算等模式由用例、公开动作和Param表达，不以`Write`、`Read`或`Calculate`后缀替代领域身份。参考工程中带模式词的类名只用于标示教学链路。若同一领域存在多个服务，名称应区分实际职责，而非仅复述处理模式。 | R：对象名、职责、调用链和未来扩展反例复核 |
 | DDD-013 | `workflow`只用于有明确状态节点、转移、恢复或补偿语义的SOP/状态图。协议中的`action`选择必须由Application入口后的受控策略/注册表分派到命名明确的用例，未知动作拒绝；不得以泛化`Flow`/`Workflow`类承载动作`switch`，也不得为掩盖集中逻辑只增加空转发类。共享协作仅保留可复用校验、访问或基础设施边界，具体动作仍有可审阅的职责归属。 | R：检查动作映射、具体用例、状态图证据和扩展新动作反例 |
+
+| DDD-014 | AI、邮件、文件、安全、向量等技术能力先按用户任务确定业务所有者，再在所属业务内定义用途明确的端口与适配器；不得建立与业务域平级的`model`、`mail`、`file`、`security`等技术总包，也不得用动态`action`的万能模型端口混合问答、意图、记忆、嵌入等不同契约。框架高阶能力、命名模型、流式与降级装配归adaptor/start，Application只依赖业务语义端口；共享内部DO仍按MOD-005归具体业务包。 | R：从用户任务反推端口所有者，核对包树、命令/结果语义、装配位置、流式/治理能力和新增能力扩展反例 |
 
 ## 5. 仓储与数据访问
 

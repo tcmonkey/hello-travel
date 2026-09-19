@@ -6,12 +6,12 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-import com.hellotravel.adaptor.http.assembler.KnowledgeInputAssembler;
-import com.hellotravel.adaptor.http.input.KnowledgeController;
+import com.hellotravel.adaptor.knowledge.input.assembler.KnowledgeInputAssembler;
+import com.hellotravel.adaptor.knowledge.input.controller.KnowledgeController;
 import com.hellotravel.application.auth.service.AuthApplication;
 import com.hellotravel.application.chat.service.ChatApplication;
 import com.hellotravel.application.knowledge.service.KnowledgeApplication;
-import com.hellotravel.application.sync.service.SyncApplication;
+import com.hellotravel.application.chat.sync.service.SyncApplication;
 import com.hellotravel.common.result.Result;
 import com.hellotravel.domain.auth.service.AuthDomainService;
 import com.hellotravel.domain.chat.service.ChatDomainService;

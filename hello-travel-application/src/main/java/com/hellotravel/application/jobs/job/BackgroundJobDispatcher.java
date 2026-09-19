@@ -6,17 +6,19 @@ import com.hellotravel.application.exception.ApplicationErrorCode;
 import com.hellotravel.application.exception.ApplicationException;
 import com.hellotravel.application.knowledge.support.KnowledgeRepositories;
 import com.hellotravel.application.knowledge.job.KnowledgeIndexJob;
-import com.hellotravel.application.mail.adaptor.MailOutAdaptor;
-import com.hellotravel.application.mail.assembler.MailCommandAssembler;
-import com.hellotravel.application.memory.cleanup.PrivacyCleanupService;
-import com.hellotravel.application.memory.context.MemoryContextService;
-import com.hellotravel.application.security.adaptor.SecurityOutAdaptor;
-import com.hellotravel.application.security.assembler.SecurityCommandAssembler;
+import com.hellotravel.application.auth.email.adaptor.MailOutAdaptor;
+import com.hellotravel.application.auth.email.assembler.MailCommandAssembler;
+import com.hellotravel.application.chat.memory.cleanup.PrivacyCleanupService;
+import com.hellotravel.application.chat.memory.context.MemoryContextService;
+import com.hellotravel.application.auth.security.adaptor.SecurityOutAdaptor;
+import com.hellotravel.application.auth.security.assembler.SecurityCommandAssembler;
 import com.hellotravel.application.support.Json;
-import com.hellotravel.application.sync.support.SyncRepositories;
-import com.hellotravel.application.sync.support.SyncWrites;
-import com.hellotravel.application.travel.execution.RunExecutionService;
-import com.hellotravel.application.travel.workflow.TravelGraph;
+import com.hellotravel.application.support.ApplicationFailures;
+import com.hellotravel.application.chat.sync.support.SyncRepositories;
+import com.hellotravel.application.chat.sync.support.SyncWrites;
+import com.hellotravel.application.chat.travel.execution.RunExecutionService;
+import com.hellotravel.application.chat.travel.service.TravelApplication;
+import com.hellotravel.application.chat.travel.assembler.TravelApplicationAssembler;
 import com.hellotravel.application.tx.Transactions;
 import com.hellotravel.domain.auth.model.aggregate.EmailChallengeAggregate;
 import com.hellotravel.domain.query.model.value.QueryValue;
@@ -43,7 +45,8 @@ public final class BackgroundJobDispatcher {
     private final AuthWrites authWrites;
     private final SyncWrites syncWrites;
     private final Transactions transactions;
-    private final TravelGraph graph;
+    private final TravelApplication travelApplication;
+    private final TravelApplicationAssembler travelApplicationAssembler;
     private final MemoryContextService memory;
     private final PrivacyCleanupService privacy;
     private final KnowledgeIndexJob indexer;
@@ -83,7 +86,8 @@ public final class BackgroundJobDispatcher {
             KnowledgeRepositories knowledgeRepositories,
             SyncRepositories syncRepositories,
             Transactions transactions,
-            TravelGraph graph,
+            TravelApplication travelApplication,
+            TravelApplicationAssembler travelApplicationAssembler,
             MemoryContextService memory,
             PrivacyCleanupService privacy,
             KnowledgeIndexJob indexer,
@@ -98,7 +102,8 @@ public final class BackgroundJobDispatcher {
         this.knowledgeRepositories = knowledgeRepositories;
         this.syncRepositories = syncRepositories;
         this.transactions = transactions;
-        this.graph = graph;
+        this.travelApplication = travelApplication;
+        this.travelApplicationAssembler = travelApplicationAssembler;
         this.memory = memory;
         this.privacy = privacy;
         this.indexer = indexer;
@@ -182,7 +187,8 @@ public final class BackgroundJobDispatcher {
                 case "SYNC" -> {
                     /* SSE通过持久事件游标读取，发件箱确认不替代事件事实源。 */
                 }
-                case "GENERATE" -> graph.execute(payload.path("runId").asText());
+                case "GENERATE" -> ApplicationFailures.required(
+                        travelApplication.generate(travelApplicationAssembler.generate(payload)));
                 case "MEMORY_EXTRACT" -> memory.extract(payload.path("runId").asText());
                 case "MEMORY_REBUILD" -> privacy.execute(payload.path("conversationId").asLong());
                 case "EMAIL" -> email(payload.path("challengeId").asText());

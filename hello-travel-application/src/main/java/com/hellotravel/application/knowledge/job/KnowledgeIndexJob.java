@@ -3,17 +3,17 @@ package com.hellotravel.application.knowledge.job;
 import com.hellotravel.application.auth.support.AuthRepositories;
 import com.hellotravel.application.exception.ApplicationErrorCode;
 import com.hellotravel.application.exception.ApplicationException;
-import com.hellotravel.application.file.adaptor.FileOutAdaptor;
-import com.hellotravel.application.file.assembler.FileCommandAssembler;
-import com.hellotravel.application.knowledge.adaptor.VectorOutAdaptor;
-import com.hellotravel.application.knowledge.assembler.VectorCommandAssembler;
-import com.hellotravel.application.knowledge.command.VectorItemCommand;
+import com.hellotravel.application.knowledge.document.file.adaptor.FileOutAdaptor;
+import com.hellotravel.application.knowledge.document.file.assembler.FileCommandAssembler;
+import com.hellotravel.application.knowledge.vector.adaptor.VectorOutAdaptor;
+import com.hellotravel.application.knowledge.vector.assembler.KnowledgeEmbeddingAssembler;
+import com.hellotravel.application.knowledge.vector.assembler.VectorCommandAssembler;
+import com.hellotravel.application.knowledge.vector.command.VectorItemCommand;
+import com.hellotravel.application.knowledge.vector.embedding.KnowledgeEmbeddingAgent;
 import com.hellotravel.application.knowledge.support.KnowledgeRepositories;
 import com.hellotravel.application.knowledge.support.KnowledgeWrites;
-import com.hellotravel.application.model.adaptor.ModelOutAdaptor;
-import com.hellotravel.application.model.assembler.ModelCommandAssembler;
 import com.hellotravel.application.support.Json;
-import com.hellotravel.application.sync.support.SyncEventPublisher;
+import com.hellotravel.application.chat.sync.support.SyncEventPublisher;
 import com.hellotravel.application.tx.Transactions;
 import com.hellotravel.common.identity.Ids;
 import com.hellotravel.domain.knowledge.model.aggregate.IndexJobAggregate;
@@ -43,7 +43,7 @@ public final class KnowledgeIndexJob {
     private final KnowledgeWrites knowledgeWrites;
     private final Transactions transactions;
     private final SyncEventPublisher events;
-    private final ModelOutAdaptor model;
+    private final KnowledgeEmbeddingAgent embeddingAgent;
     private final VectorOutAdaptor vectors;
     private final FileOutAdaptor files;
 
@@ -64,7 +64,7 @@ public final class KnowledgeIndexJob {
             new java.util.concurrent.atomic.AtomicLong();
 
     private final FileCommandAssembler fileCommandAssembler;
-    private final ModelCommandAssembler modelCommandAssembler;
+    private final KnowledgeEmbeddingAssembler embeddingAssembler;
     private final VectorCommandAssembler vectorCommandAssembler;
 
     public KnowledgeIndexJob(
@@ -73,22 +73,22 @@ public final class KnowledgeIndexJob {
             AuthRepositories authRepositories,
             Transactions transactions,
             SyncEventPublisher events,
-            ModelOutAdaptor model,
+            KnowledgeEmbeddingAgent embeddingAgent,
             VectorOutAdaptor vectors,
             FileOutAdaptor files,
             FileCommandAssembler fileCommandAssembler,
-            ModelCommandAssembler modelCommandAssembler,
+            KnowledgeEmbeddingAssembler embeddingAssembler,
             VectorCommandAssembler vectorCommandAssembler) {
         this.knowledgeWrites = knowledgeWrites;
         this.knowledgeRepositories = knowledgeRepositories;
         this.authRepositories = authRepositories;
         this.transactions = transactions;
         this.events = events;
-        this.model = model;
+        this.embeddingAgent = embeddingAgent;
         this.vectors = vectors;
         this.files = files;
         this.fileCommandAssembler = fileCommandAssembler;
-        this.modelCommandAssembler = modelCommandAssembler;
+        this.embeddingAssembler = embeddingAssembler;
         this.vectorCommandAssembler = vectorCommandAssembler;
     }
 
@@ -432,7 +432,7 @@ public final class KnowledgeIndexJob {
         current(job);
         // 2. 截取当前有界批次，外部调用保持在数据库事务之外。
         List<String> batch = pieces.subList(offset, Math.min(pieces.size(), offset + 16));
-        var embedded = model.generate(modelCommandAssembler.embed(batch));
+        var embedded = embeddingAgent.embed(embeddingAssembler.command(batch));
         // 3. 执行require职责步骤，并把失败交给所属事务或入口处理。
         require(embedded.success());
         // 4. 核对嵌入结果数量与输入批次一致，缺失结果不得继续写索引。

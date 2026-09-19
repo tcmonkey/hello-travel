@@ -7,7 +7,7 @@
   "delivery_mode": "full",
   "execution_goal": "auto",
   "interaction_mode": "guided",
-  "revision": 12,
+  "revision": 16,
   "current_phase": "development",
   "phases": {
     "intake": {
@@ -135,13 +135,13 @@
   "last_actor": {
     "platform": "codex",
     "model": "unknown",
-    "updated_at": "2026-09-18T18:09:11+08:00"
+    "updated_at": "2026-09-19T22:09:11+08:00"
   },
   "handoff": {
-    "summary": "SRC-050：五个真实领域服务改为业务职责名，写入语义保留在用例与公开动作；规范1.14、参考说明、项目副本及回归同步。39项后端、36入口审计、DDD根与快照各7项、流程10和安装16通过。",
-    "next_action": "按用户05编码终点暂停；审阅领域服务命名与规范1.14，完整06、独立CR、真实外部联调和发布仍未开始"
+    "summary": "SRC-058代码完成度整改完成：三路意图、模型阶段、Graph节点及AI契约版本已类型化；错误分类贯穿run终态；领域新增日期覆盖、交通间隔、费用、来源和待核实规则；高德响应改为有界事实投影。52项JUnit、离线Spring装配及360类/916方法/413流程块零违规通过。公共DDD+AI规范未修改。",
+    "next_action": "用户按TravelApplication到Dialogue/Fact/Planning Graph、Domain及OutAdaptor的真实调用链推演代码；推演认可后再单独决定是否沉淀solo/DDD公共AI规范。真实供应商联调、完整06、独立CR和发布仍未开始。"
   },
-  "last_updated": "2026-09-18T18:09:11+08:00",
+  "last_updated": "2026-09-19T22:09:11+08:00",
   "execution_goal_detail": {
     "type": "custom",
     "original_request": "本次仅做到代码生成完，审阅方案文档和代码质量",

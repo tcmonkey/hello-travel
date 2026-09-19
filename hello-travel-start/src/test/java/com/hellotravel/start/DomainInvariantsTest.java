@@ -10,6 +10,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.hellotravel.common.identity.Ids;
 import com.hellotravel.domain.auth.model.entity.LoginSessionEntity;
 import com.hellotravel.domain.chat.model.entity.ChatRunEntity;
+import com.hellotravel.model.travel.TravelAiContract;
 import com.hellotravel.domain.chat.model.entity.ConversationEntity;
 import com.hellotravel.domain.memory.model.value.ContextBudgetValue;
 
@@ -77,7 +78,7 @@ class DomainInvariantsTest {
                         "FAILED",
                         1,
                         null,
-                        "travel-v1",
+                        TravelAiContract.GRAPH_REVISION,
                         7L,
                         null,
                         null,

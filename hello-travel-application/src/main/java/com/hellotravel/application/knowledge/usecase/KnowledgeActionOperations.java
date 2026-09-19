@@ -2,14 +2,14 @@ package com.hellotravel.application.knowledge.usecase;
 
 import com.hellotravel.application.exception.ApplicationErrorCode;
 import com.hellotravel.application.exception.ApplicationException;
-import com.hellotravel.application.file.adaptor.FileOutAdaptor;
-import com.hellotravel.application.file.assembler.FileCommandAssembler;
+import com.hellotravel.application.knowledge.document.file.adaptor.FileOutAdaptor;
+import com.hellotravel.application.knowledge.document.file.assembler.FileCommandAssembler;
 import com.hellotravel.application.knowledge.assembler.KnowledgeApplicationAssembler;
 import com.hellotravel.application.knowledge.command.KnowledgeCommand;
 import com.hellotravel.application.knowledge.result.KnowledgeResult;
 import com.hellotravel.application.knowledge.support.KnowledgeRepositories;
 import com.hellotravel.application.knowledge.support.KnowledgeWrites;
-import com.hellotravel.application.sync.support.SyncEventPublisher;
+import com.hellotravel.application.chat.sync.support.SyncEventPublisher;
 import com.hellotravel.application.tx.Transactions;
 import com.hellotravel.domain.knowledge.model.aggregate.IndexJobAggregate;
 import com.hellotravel.domain.knowledge.model.aggregate.KnowledgeDocumentAggregate;

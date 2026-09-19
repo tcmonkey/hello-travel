@@ -18,7 +18,8 @@
         <java.version>17</java.version>
         <flyway.version>11.20.3</flyway.version>
         <jackson-bom.version>2.22.1</jackson-bom.version>
-        <langchain4j.version>1.20.0</langchain4j.version>
+        <langchain4j.version>1.19.0</langchain4j.version>
+        <langchain4j.spring.version>1.19.0-beta29</langchain4j.spring.version>
         <langgraph4j.version>1.8.27</langgraph4j.version>
         <milvus.version>3.0.5</milvus.version>
         <lombok.version>1.18.42</lombok.version>
@@ -86,6 +87,16 @@
                 <groupId>dev.langchain4j</groupId>
                 <artifactId>langchain4j-open-ai</artifactId>
                 <version>${langchain4j.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>dev.langchain4j</groupId>
+                <artifactId>langchain4j-spring-boot-starter</artifactId>
+                <version>${langchain4j.spring.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>dev.langchain4j</groupId>
+                <artifactId>langchain4j-reactor</artifactId>
+                <version>${langchain4j.spring.version}</version>
             </dependency>
             <dependency>
                 <groupId>org.bsc.langgraph4j</groupId>

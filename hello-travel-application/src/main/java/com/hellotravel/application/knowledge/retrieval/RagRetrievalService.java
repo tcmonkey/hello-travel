@@ -3,11 +3,11 @@ package com.hellotravel.application.knowledge.retrieval;
 import com.hellotravel.application.auth.support.AuthRepositories;
 import com.hellotravel.application.exception.ApplicationErrorCode;
 import com.hellotravel.application.exception.ApplicationException;
-import com.hellotravel.application.knowledge.adaptor.VectorOutAdaptor;
-import com.hellotravel.application.knowledge.assembler.VectorCommandAssembler;
+import com.hellotravel.application.knowledge.vector.adaptor.VectorOutAdaptor;
+import com.hellotravel.application.knowledge.vector.assembler.KnowledgeEmbeddingAssembler;
+import com.hellotravel.application.knowledge.vector.assembler.VectorCommandAssembler;
+import com.hellotravel.application.knowledge.vector.embedding.KnowledgeEmbeddingAgent;
 import com.hellotravel.application.knowledge.support.KnowledgeRepositories;
-import com.hellotravel.application.model.adaptor.ModelOutAdaptor;
-import com.hellotravel.application.model.assembler.ModelCommandAssembler;
 import com.hellotravel.domain.query.model.value.QueryValue;
 
 import org.springframework.stereotype.Component;
@@ -25,23 +25,23 @@ public final class RagRetrievalService {
 
     private final KnowledgeRepositories knowledgeRepositories;
     private final AuthRepositories authRepositories;
-    private final ModelOutAdaptor model;
+    private final KnowledgeEmbeddingAgent embeddingAgent;
     private final VectorOutAdaptor vectors;
-    private final ModelCommandAssembler modelCommandAssembler;
+    private final KnowledgeEmbeddingAssembler embeddingAssembler;
     private final VectorCommandAssembler vectorCommandAssembler;
 
     public RagRetrievalService(
             KnowledgeRepositories knowledgeRepositories,
             AuthRepositories authRepositories,
-            ModelOutAdaptor model,
+            KnowledgeEmbeddingAgent embeddingAgent,
             VectorOutAdaptor vectors,
-            ModelCommandAssembler modelCommandAssembler,
+            KnowledgeEmbeddingAssembler embeddingAssembler,
             VectorCommandAssembler vectorCommandAssembler) {
         this.knowledgeRepositories = knowledgeRepositories;
         this.authRepositories = authRepositories;
-        this.model = model;
+        this.embeddingAgent = embeddingAgent;
         this.vectors = vectors;
-        this.modelCommandAssembler = modelCommandAssembler;
+        this.embeddingAssembler = embeddingAssembler;
         this.vectorCommandAssembler = vectorCommandAssembler;
     }
 
@@ -67,7 +67,7 @@ public final class RagRetrievalService {
             return List.of();
         }
         // 2. 取得本次请求的嵌入结果，供本段后续处理使用。
-        var embedding = model.generate(modelCommandAssembler.embed(List.of(query)));
+        var embedding = embeddingAgent.embed(embeddingAssembler.command(List.of(query)));
         // 3. 核对嵌入结果数量与输入批次一致，缺失结果不得继续写索引。
         if (!embedding.success() || embedding.data().vectors().isEmpty()) {
             throw new ApplicationException(ApplicationErrorCode.UNAVAILABLE);
