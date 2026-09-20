@@ -85,13 +85,23 @@ public final class JavaBusinessQuality {
                     public Void visitClass(ClassTree type, Void ignored) {
                         String packageName = unit.getPackageName().toString();
                         String typeName = type.getSimpleName().toString();
+                        if (packageName.contains(".application.")
+                                && typeName.endsWith("Repositories")) {
+                            fail(
+                                    "QUALITY-REPOSITORY-AGGREGATE",
+                                    unit.getLineMap()
+                                            .getLineNumber(
+                                                    positions.getStartPosition(unit, type)),
+                                    "application collaborators must inject the exact Repository"
+                                            + " ports they use");
+                        }
                         boolean inputAdapter =
                                 packageName.matches(".*\\.adaptor\\..+\\.input(\\..*)?");
                         boolean misplacedController =
                                 inputAdapter
                                         && typeName.endsWith("Controller")
                                         && !packageName.matches(
-                                                ".*\\.input\\.controller(\\..*)?");
+                                                ".*\\.input");
                         boolean misplacedAssembler =
                                 inputAdapter
                                         && typeName.endsWith("Assembler")
@@ -103,8 +113,8 @@ public final class JavaBusinessQuality {
                                     unit.getLineMap()
                                             .getLineNumber(
                                                     positions.getStartPosition(unit, type)),
-                                    "input Controller and Assembler must use sibling"
-                                            + " input.controller/input.assembler packages");
+                                    "input Controller must stay in the input package and"
+                                            + " Assembler in its input.assembler subpackage");
                         }
                         return super.visitClass(type, ignored);
                     }

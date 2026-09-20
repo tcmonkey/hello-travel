@@ -1,14 +1,17 @@
 package com.hellotravel.application.jobs.job;
 
-import com.hellotravel.application.auth.support.AuthRepositories;
-import com.hellotravel.application.auth.support.AuthWrites;
-import com.hellotravel.application.chat.sync.support.SyncRepositories;
-import com.hellotravel.application.chat.sync.support.SyncWrites;
-import com.hellotravel.application.chat.sync.support.SyncEventPublisher;
+import com.hellotravel.application.auth.AuthWriteAppService;
+import com.hellotravel.application.chat.support.SyncWrites;
+import com.hellotravel.application.chat.support.SyncEventPublisher;
 import com.hellotravel.application.tx.Transactions;
 import com.hellotravel.domain.auth.model.aggregate.EmailChallengeAggregate;
 import com.hellotravel.domain.auth.model.aggregate.LoginSessionAggregate;
+import com.hellotravel.domain.auth.repository.EmailChallengeRepository;
+import com.hellotravel.domain.auth.repository.LoginSessionRepository;
+import com.hellotravel.domain.auth.repository.RefreshReceiptRepository;
+import com.hellotravel.domain.auth.repository.UserAccountRepository;
 import com.hellotravel.domain.query.model.value.QueryValue;
+import com.hellotravel.domain.sync.repository.SyncEventRepository;
 
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -24,23 +27,32 @@ import java.time.ZoneOffset;
 @Component
 public final class RetentionJob {
 
-    private final AuthRepositories authRepositories;
-    private final SyncRepositories syncRepositories;
-    private final AuthWrites authWrites;
+    private final UserAccountRepository userAccountRepository;
+    private final LoginSessionRepository loginSessionRepository;
+    private final EmailChallengeRepository emailChallengeRepository;
+    private final RefreshReceiptRepository refreshReceiptRepository;
+    private final SyncEventRepository syncEventRepository;
+    private final AuthWriteAppService authWriteAppService;
     private final SyncWrites syncWrites;
     private final Transactions transactions;
     private final SyncEventPublisher events;
 
     public RetentionJob(
-            AuthRepositories authRepositories,
-            SyncRepositories syncRepositories,
-            AuthWrites authWrites,
+            UserAccountRepository userAccountRepository,
+            LoginSessionRepository loginSessionRepository,
+            EmailChallengeRepository emailChallengeRepository,
+            RefreshReceiptRepository refreshReceiptRepository,
+            SyncEventRepository syncEventRepository,
+            AuthWriteAppService authWriteAppService,
             SyncWrites syncWrites,
             Transactions transactions,
             SyncEventPublisher events) {
-        this.authRepositories = authRepositories;
-        this.syncRepositories = syncRepositories;
-        this.authWrites = authWrites;
+        this.userAccountRepository = userAccountRepository;
+        this.loginSessionRepository = loginSessionRepository;
+        this.emailChallengeRepository = emailChallengeRepository;
+        this.refreshReceiptRepository = refreshReceiptRepository;
+        this.syncEventRepository = syncEventRepository;
+        this.authWriteAppService = authWriteAppService;
         this.syncWrites = syncWrites;
         this.transactions = transactions;
         this.events = events;
@@ -57,13 +69,13 @@ public final class RetentionJob {
                 () -> {
                     // 1. 逐项处理当前数据窗口，并在循环中核对可用状态与停止条件。
                     for (var row :
-                            authRepositories.refreshReceipt.query(
+                            refreshReceiptRepository.query(
                                     QueryValue.all("id", 200).where("expires_at", "LT", now()))) {
-                        Transactions.require(authWrites.removeRefreshReceipt(row.entity().id()));
+                        Transactions.require(authWriteAppService.removeRefreshReceipt(row.entity().id()));
                     }
                     // 2. 逐项处理当前数据窗口，并在循环中核对可用状态与停止条件。
                     for (var row :
-                            syncRepositories.syncEvent.query(
+                            syncEventRepository.query(
                                     QueryValue.all("id", 200).where("expires_at", "LT", now()))) {
                         Transactions.require(syncWrites.removeSyncEvent(row.entity().id()));
                     }
@@ -84,7 +96,7 @@ public final class RetentionJob {
                 () -> {
                     // 1. 逐项处理当前数据窗口，并在循环中核对可用状态与停止条件。
                     for (var row :
-                            authRepositories.emailChallenge.query(
+                            emailChallengeRepository.query(
                                     QueryValue.all("id", 100)
                                             .where(
                                                     "status",
@@ -92,7 +104,7 @@ public final class RetentionJob {
                                                     java.util.List.of("PENDING_SEND", "ISSUED"))
                                             .where("expires_at", "LT", now()))) {
                         Transactions.require(
-                                authWrites.saveEmailChallenge(
+                                authWriteAppService.saveEmailChallenge(
                                         new EmailChallengeAggregate(row.entity())
                                                 .delivery("EXPIRED")));
                     }
@@ -101,14 +113,13 @@ public final class RetentionJob {
                 });
         // 2. 逐项处理当前数据窗口，并在循环中核对可用状态与停止条件。
         for (var row :
-                authRepositories.loginSession.query(
+                loginSessionRepository.query(
                         QueryValue.all("id", 50)
                                 .where("status", "EQ", "ACTIVE")
                                 .where("refresh_expires_at", "LT", now()))) {
             if (!"ACTIVE"
                     .equals(
-                            authRepositories
-                                    .userAccount
+                            userAccountRepository
                                     .findById(row.entity().userId())
                                     .entity()
                                     .status())) {
@@ -119,12 +130,12 @@ public final class RetentionJob {
                     account -> {
                         // 1. 按可信内部标识读取登录会话当前快照。
                         var current =
-                                authRepositories.loginSession.findById(row.entity().id()).entity();
+                                loginSessionRepository.findById(row.entity().id()).entity();
                         // 2. 依据实体当前状态与允许的操作处理分支，避免继续使用无效数据。
                         if ("ACTIVE".equals(current.status())
                                 && current.refreshExpiresAt().isBefore(now())) {
                             Transactions.require(
-                                    authWrites.saveLoginSession(
+                                    authWriteAppService.saveLoginSession(
                                             new LoginSessionAggregate(current).revoke("EXPIRED")));
                         }
                         // 3. 同事务记录用户提交序号与同步事件，推送不能代替持久化。

@@ -13,12 +13,11 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.hellotravel.application.auth.assembler.AuthWriteApplicationAssembler;
-import com.hellotravel.application.auth.support.AuthRepositories;
-import com.hellotravel.application.auth.support.AuthWrites;
+import com.hellotravel.application.auth.assembler.AuthWriteAppAssembler;
+import com.hellotravel.application.auth.AuthWriteAppService;
 import com.hellotravel.application.exception.ApplicationException;
-import com.hellotravel.application.chat.sync.assembler.SyncWriteApplicationAssembler;
-import com.hellotravel.application.chat.sync.support.SyncWrites;
+import com.hellotravel.application.chat.assembler.SyncWriteAppAssembler;
+import com.hellotravel.application.chat.support.SyncWrites;
 import com.hellotravel.application.tx.Transactions;
 import com.hellotravel.common.result.Result;
 import com.hellotravel.domain.auth.model.aggregate.UserAccountAggregate;
@@ -167,22 +166,18 @@ class VerticalDomainWriteTest {
         var eventRepository = mock(SyncEventRepository.class);
         var outbox = mock(OutboxEventRepository.class);
         var authWrites =
-                new AuthWrites(
+                new AuthWriteAppService(
                         new AuthDomainService(
                                 accountRepository, device, session, challenge, refresh),
-                        new AuthWriteApplicationAssembler());
+                        new AuthWriteAppAssembler());
         var syncWrites =
                 new SyncWrites(
                         new SyncDomainService(eventRepository, outbox),
-                        new SyncWriteApplicationAssembler());
+                        new SyncWriteAppAssembler());
         var manager = mock(PlatformTransactionManager.class);
         when(manager.getTransaction(any())).thenAnswer(invocation -> new SimpleTransactionStatus());
         var transactions =
-                new Transactions(
-                        authWrites,
-                        manager,
-                        new AuthRepositories(
-                                accountRepository, device, session, challenge, refresh));
+                new Transactions(authWrites, manager, accountRepository);
         var account =
                 new UserAccountAggregate(
                         snapshot(UserAccountEntity.class, Collections.singletonMap("id", null)));

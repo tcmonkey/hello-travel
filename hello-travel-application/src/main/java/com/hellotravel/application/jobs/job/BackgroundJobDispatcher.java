@@ -1,29 +1,31 @@
 package com.hellotravel.application.jobs.job;
 
-import com.hellotravel.application.auth.support.AuthRepositories;
-import com.hellotravel.application.auth.support.AuthWrites;
+import com.hellotravel.application.auth.AuthWriteAppService;
 import com.hellotravel.application.exception.ApplicationErrorCode;
 import com.hellotravel.application.exception.ApplicationException;
-import com.hellotravel.application.knowledge.support.KnowledgeRepositories;
-import com.hellotravel.application.knowledge.job.KnowledgeIndexJob;
-import com.hellotravel.application.auth.email.adaptor.MailOutAdaptor;
-import com.hellotravel.application.auth.email.assembler.MailCommandAssembler;
-import com.hellotravel.application.chat.memory.cleanup.PrivacyCleanupService;
-import com.hellotravel.application.chat.memory.context.MemoryContextService;
-import com.hellotravel.application.auth.security.adaptor.SecurityOutAdaptor;
-import com.hellotravel.application.auth.security.assembler.SecurityCommandAssembler;
-import com.hellotravel.application.support.Json;
+import com.hellotravel.application.knowledge.KnowledgeIndexJobAppService;
+import com.hellotravel.application.auth.adaptor.MailAdaptor;
+import com.hellotravel.application.auth.assembler.MailCommandAppAssembler;
+import com.hellotravel.application.chat.MemoryPrivacyCleanupAppService;
+import com.hellotravel.application.chat.MemoryContextAppService;
+import com.hellotravel.application.auth.adaptor.SecurityAdaptor;
+import com.hellotravel.application.auth.assembler.SecurityCommandAppAssembler;
+import com.hellotravel.util.JsonUtil;
 import com.hellotravel.application.support.ApplicationFailures;
-import com.hellotravel.application.chat.sync.support.SyncRepositories;
-import com.hellotravel.application.chat.sync.support.SyncWrites;
-import com.hellotravel.application.chat.travel.execution.RunExecutionService;
-import com.hellotravel.application.chat.travel.service.TravelApplication;
-import com.hellotravel.application.chat.travel.assembler.TravelApplicationAssembler;
+import com.hellotravel.application.chat.support.SyncWrites;
+import com.hellotravel.application.exception.RunExecutionService;
+import com.hellotravel.application.chat.travel.TravelAppService;
+import com.hellotravel.application.chat.assembler.TravelAppAssembler;
 import com.hellotravel.application.tx.Transactions;
 import com.hellotravel.domain.auth.model.aggregate.EmailChallengeAggregate;
+import com.hellotravel.domain.auth.repository.EmailChallengeRepository;
+import com.hellotravel.domain.knowledge.repository.IndexJobRepository;
+import com.hellotravel.domain.knowledge.repository.KnowledgeChunkRepository;
+import com.hellotravel.domain.knowledge.repository.KnowledgeDocumentRepository;
 import com.hellotravel.domain.query.model.value.QueryValue;
 import com.hellotravel.domain.sync.model.aggregate.OutboxEventAggregate;
 import com.hellotravel.domain.sync.model.entity.OutboxEventEntity;
+import com.hellotravel.domain.sync.repository.OutboxEventRepository;
 
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -39,20 +41,22 @@ import java.time.ZoneOffset;
 @Component
 public final class BackgroundJobDispatcher {
 
-    private final AuthRepositories authRepositories;
-    private final KnowledgeRepositories knowledgeRepositories;
-    private final SyncRepositories syncRepositories;
-    private final AuthWrites authWrites;
+    private final EmailChallengeRepository emailChallengeRepository;
+    public final KnowledgeDocumentRepository knowledgeDocument;
+    public final KnowledgeChunkRepository knowledgeChunk;
+    public final IndexJobRepository indexJob;
+    private final OutboxEventRepository outboxEventRepository;
+    private final AuthWriteAppService authWriteAppService;
     private final SyncWrites syncWrites;
     private final Transactions transactions;
-    private final TravelApplication travelApplication;
-    private final TravelApplicationAssembler travelApplicationAssembler;
-    private final MemoryContextService memory;
-    private final PrivacyCleanupService privacy;
-    private final KnowledgeIndexJob indexer;
+    private final TravelAppService travelAppService;
+    private final TravelAppAssembler travelAppAssembler;
+    private final MemoryContextAppService memory;
+    private final MemoryPrivacyCleanupAppService privacy;
+    private final KnowledgeIndexJobAppService indexer;
     private final RunExecutionService coordinator;
-    private final SecurityOutAdaptor security;
-    private final MailOutAdaptor mail;
+    private final SecurityAdaptor security;
+    private final MailAdaptor mail;
 
     /**
      * 有界后台执行器。
@@ -76,42 +80,46 @@ public final class BackgroundJobDispatcher {
                     },
                     new java.util.concurrent.ThreadPoolExecutor.AbortPolicy());
 
-    private final MailCommandAssembler mailCommandAssembler;
-    private final SecurityCommandAssembler securityCommandAssembler;
+    private final MailCommandAppAssembler mailCommandAppAssembler;
+    private final SecurityCommandAppAssembler securityCommandAppAssembler;
 
     public BackgroundJobDispatcher(
-            AuthWrites authWrites,
+            AuthWriteAppService authWriteAppService,
             SyncWrites syncWrites,
-            AuthRepositories authRepositories,
-            KnowledgeRepositories knowledgeRepositories,
-            SyncRepositories syncRepositories,
+            EmailChallengeRepository emailChallengeRepository,
+            KnowledgeDocumentRepository knowledgeDocument,
+            KnowledgeChunkRepository knowledgeChunk,
+            IndexJobRepository indexJob,
+            OutboxEventRepository outboxEventRepository,
             Transactions transactions,
-            TravelApplication travelApplication,
-            TravelApplicationAssembler travelApplicationAssembler,
-            MemoryContextService memory,
-            PrivacyCleanupService privacy,
-            KnowledgeIndexJob indexer,
+            TravelAppService travelAppService,
+            TravelAppAssembler travelAppAssembler,
+            MemoryContextAppService memory,
+            MemoryPrivacyCleanupAppService privacy,
+            KnowledgeIndexJobAppService indexer,
             RunExecutionService coordinator,
-            SecurityOutAdaptor security,
-            MailOutAdaptor mail,
-            MailCommandAssembler mailCommandAssembler,
-            SecurityCommandAssembler securityCommandAssembler) {
-        this.authWrites = authWrites;
+            SecurityAdaptor security,
+            MailAdaptor mail,
+            MailCommandAppAssembler mailCommandAppAssembler,
+            SecurityCommandAppAssembler securityCommandAppAssembler) {
+        this.authWriteAppService = authWriteAppService;
         this.syncWrites = syncWrites;
-        this.authRepositories = authRepositories;
-        this.knowledgeRepositories = knowledgeRepositories;
-        this.syncRepositories = syncRepositories;
+        this.emailChallengeRepository = emailChallengeRepository;
+        this.knowledgeDocument = knowledgeDocument;
+        this.knowledgeChunk = knowledgeChunk;
+        this.indexJob = indexJob;
+        this.outboxEventRepository = outboxEventRepository;
         this.transactions = transactions;
-        this.travelApplication = travelApplication;
-        this.travelApplicationAssembler = travelApplicationAssembler;
+        this.travelAppService = travelAppService;
+        this.travelAppAssembler = travelAppAssembler;
         this.memory = memory;
         this.privacy = privacy;
         this.indexer = indexer;
         this.coordinator = coordinator;
         this.security = security;
         this.mail = mail;
-        this.mailCommandAssembler = mailCommandAssembler;
-        this.securityCommandAssembler = securityCommandAssembler;
+        this.mailCommandAppAssembler = mailCommandAppAssembler;
+        this.securityCommandAppAssembler = securityCommandAppAssembler;
     }
 
     /**
@@ -127,7 +135,7 @@ public final class BackgroundJobDispatcher {
         }
         // 2. 逐项处理当前数据窗口，并在循环中核对可用状态与停止条件。
         for (var row :
-                syncRepositories.outboxEvent.query(
+                outboxEventRepository.query(
                         QueryValue.all("id", 4)
                                 .where("status", "EQ", "PENDING")
                                 .where("next_attempt_at", "LE", now()))) {
@@ -136,8 +144,7 @@ public final class BackgroundJobDispatcher {
                             () -> {
                                 // 1. 按可信内部标识读取发件箱任务当前快照。
                                 var old =
-                                        syncRepositories
-                                                .outboxEvent
+                                        outboxEventRepository
                                                 .findById(row.entity().id())
                                                 .entity();
                                 // 2. 依据实体当前状态与允许的操作处理分支，避免继续使用无效数据。
@@ -156,7 +163,7 @@ public final class BackgroundJobDispatcher {
                                 Transactions.require(
                                         syncWrites.saveOutboxEvent(new OutboxEventAggregate(next)));
                                 // 5. 提供本事务或回调的处理结果，完成责任由所属外层流程承接。
-                                return syncRepositories.outboxEvent.findById(next.id()).entity();
+                                return outboxEventRepository.findById(next.id()).entity();
                             });
             if (claimed != null) {
                 try {
@@ -167,8 +174,7 @@ public final class BackgroundJobDispatcher {
             }
         }
         // 3. 逐项处理当前数据窗口，并在循环中核对可用状态与停止条件。
-        for (var row :
-                knowledgeRepositories.indexJob.query(
+        for (var row : indexJob.query(
                         QueryValue.all("id", 2).where("status", "EQ", "PENDING"))) {
             try {
                 executor.execute(() -> indexer.execute(row.entity().id()));
@@ -181,14 +187,14 @@ public final class BackgroundJobDispatcher {
     private void deliver(OutboxEventEntity event) {
         try {
             // 1. 取得任务载荷的结构化内容，供本段后续处理使用。
-            var payload = Json.read(event.payloadJson());
+            var payload = JsonUtil.read(event.payloadJson());
             // 2. 按可信业务动作分发独立分支，未知动作返回受控失败。
             switch (event.eventType()) {
                 case "SYNC" -> {
                     /* SSE通过持久事件游标读取，发件箱确认不替代事件事实源。 */
                 }
                 case "GENERATE" -> ApplicationFailures.required(
-                        travelApplication.generate(travelApplicationAssembler.generate(payload)));
+                        travelAppService.generate(travelAppAssembler.generate(payload)));
                 case "MEMORY_EXTRACT" -> memory.extract(payload.path("runId").asText());
                 case "MEMORY_REBUILD" -> privacy.execute(payload.path("conversationId").asLong());
                 case "EMAIL" -> email(payload.path("challengeId").asText());
@@ -204,7 +210,7 @@ public final class BackgroundJobDispatcher {
     private void email(String id) {
         // 1. 读取邮箱验证码，按当前用例条件限定查询窗口。
         var rows =
-                authRepositories.emailChallenge.query(
+                emailChallengeRepository.query(
                         QueryValue.all("id", 1).where("public_id", "EQ", id));
         // 2. 没有待处理任务时结束当前领取窗口。
         if (rows.isEmpty()) {
@@ -219,20 +225,20 @@ public final class BackgroundJobDispatcher {
         // 5. 准备可投递的加密验证码，原始码不进入数据库。
         String encrypted =
                 java.util.Base64.getEncoder().encodeToString(challenge.deliveryCiphertext());
-        var decrypted = security.process(securityCommandAssembler.decrypt(encrypted, id));
+        var decrypted = security.process(securityCommandAppAssembler.decrypt(encrypted, id));
         boolean sent =
                 decrypted.success()
-                        && mail.deliver(mailCommandAssembler.challenge(challenge, decrypted.data()))
+                        && mail.deliver(mailCommandAppAssembler.challenge(challenge, decrypted.data()))
                                 .success();
         // 6. 进入受控事务处理，结果与回滚责任保持清晰。
         transactions.plain(
                 () -> {
                     // 1. 按可信内部标识读取邮箱验证码当前快照。
-                    var current = authRepositories.emailChallenge.findById(challenge.id()).entity();
+                    var current = emailChallengeRepository.findById(challenge.id()).entity();
                     // 2. 依据实体当前状态与允许的操作处理分支，避免继续使用无效数据。
                     if ("PENDING_SEND".equals(current.status())) {
                         Transactions.require(
-                                authWrites.saveEmailChallenge(
+                                authWriteAppService.saveEmailChallenge(
                                         new EmailChallengeAggregate(current)
                                                 .delivery(sent ? "ISSUED" : "FAILED")));
                     }
@@ -249,7 +255,7 @@ public final class BackgroundJobDispatcher {
         transactions.plain(
                 () -> {
                     // 1. 按可信内部标识读取发件箱任务当前快照。
-                    var old = syncRepositories.outboxEvent.findById(expected.id()).entity();
+                    var old = outboxEventRepository.findById(expected.id()).entity();
                     // 2. 核对租约持有者、栅栏和到期时间，旧执行者不能提交。
                     if ("DELIVERING".equals(old.status())
                             && old.leaseFence().equals(expected.leaseFence())) {
@@ -294,7 +300,7 @@ public final class BackgroundJobDispatcher {
         coordinator.recoverAccepted();
         // 3. 逐项处理当前数据窗口，并在循环中核对可用状态与停止条件。
         for (var row :
-                syncRepositories.outboxEvent.query(
+                outboxEventRepository.query(
                         QueryValue.all("id", 50)
                                 .where("status", "EQ", "DELIVERING")
                                 .where("lease_until", "LT", now()))) {

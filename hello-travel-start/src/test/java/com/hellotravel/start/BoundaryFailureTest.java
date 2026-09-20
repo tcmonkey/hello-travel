@@ -6,12 +6,12 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-import com.hellotravel.adaptor.knowledge.input.assembler.KnowledgeInputAssembler;
-import com.hellotravel.adaptor.knowledge.input.controller.KnowledgeController;
-import com.hellotravel.application.auth.service.AuthApplication;
-import com.hellotravel.application.chat.service.ChatApplication;
-import com.hellotravel.application.knowledge.service.KnowledgeApplication;
-import com.hellotravel.application.chat.sync.service.SyncApplication;
+import com.hellotravel.adaptor.knowledge.input.assembler.KnowledgeAssembler;
+import com.hellotravel.adaptor.knowledge.input.KnowledgeController;
+import com.hellotravel.application.auth.AuthAppService;
+import com.hellotravel.application.chat.ChatAppService;
+import com.hellotravel.application.knowledge.KnowledgeAppService;
+import com.hellotravel.application.chat.SyncAppService;
 import com.hellotravel.common.result.Result;
 import com.hellotravel.domain.auth.service.AuthDomainService;
 import com.hellotravel.domain.chat.service.ChatDomainService;
@@ -53,7 +53,7 @@ class BoundaryFailureTest {
         when(file.getBytes()).thenThrow(new IOException("private-storage-path"));
         var controller =
                 new KnowledgeController(
-                        mock(KnowledgeApplication.class), new KnowledgeInputAssembler());
+                        mock(KnowledgeAppService.class), new KnowledgeAssembler());
         var result = assertDoesNotThrow(() -> controller.upload(file, null, request));
         assertFalse(result.success());
         assertEquals("FAILED", result.code());
@@ -70,7 +70,7 @@ class BoundaryFailureTest {
         when(file.isEmpty()).thenReturn(true);
         var controller =
                 new KnowledgeController(
-                        mock(KnowledgeApplication.class), new KnowledgeInputAssembler());
+                        mock(KnowledgeAppService.class), new KnowledgeAssembler());
         var result = assertDoesNotThrow(() -> controller.upload(file, null, request));
         assertEquals("INVALID", result.code());
         assertEquals(400, response.getStatus());
@@ -81,10 +81,10 @@ class BoundaryFailureTest {
         int checked = 0;
         for (Class<?> type :
                 List.of(
-                        AuthApplication.class,
-                        ChatApplication.class,
-                        KnowledgeApplication.class,
-                        SyncApplication.class,
+                        AuthAppService.class,
+                        ChatAppService.class,
+                        KnowledgeAppService.class,
+                        SyncAppService.class,
                         AuthDomainService.class,
                         ChatDomainService.class,
                         MemoryDomainService.class,
@@ -112,6 +112,9 @@ class BoundaryFailureTest {
     }
 
     private static Object failingDependency(Class<?> type) {
+        if (type == List.class) {
+            return List.of();
+        }
         return mock(
                 type,
                 invocation -> {

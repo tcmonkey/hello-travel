@@ -5,7 +5,7 @@
 ## 项目结构
 
 - 同级独立项目[hello-travel-app](../hello-travel-app/README.md)：Node24、React、TypeScript、Ant Design、Vite；浏览器SID绑定、完整分页恢复、SSE与游标补齐。
-- `hello-travel-common/client/model/domain/application/infrastructure/adaptor/start`：Java17八模块DDD工程。领域模块无Spring/MyBatis依赖；启动模块装配Spring Boot、MyBatis-Plus、LangChain4j与LangGraph4j。
+- `hello-travel-common/util/client/model/domain/application/infrastructure/adaptor/start`：Java17九模块DDD工程。`util`只承载内部技术工具，领域模块无Spring/MyBatis/Jackson依赖；启动模块装配Spring Boot、MyBatis-Plus、LangChain4j与LangGraph4j。
 - `hello-travel-start/src/main/resources/db/migration/V1__initial_schema.sql`：MySQL单库 `hello-travel` 的17张表，Flyway唯一迁移来源。
 - Milvus独立collection：`hello_travel_kb_v1_d1024`。向量存Milvus，原文、分块、状态与归属存MySQL。Redis仅用于原子限流，不承担唯一消息/登录事实。
 - [技术方案](<AI/output/04 技术方案.md>)、[开发交付记录](<AI/output/05 开发交付记录.md>)、[接口与运行约定](AI/output/docs/API.md)。

@@ -26,6 +26,7 @@
     </properties>
     <modules>
         <module>hello-travel-common</module>
+        <module>hello-travel-util</module>
         <module>hello-travel-client</module>
         <module>hello-travel-model</module>
         <module>hello-travel-domain</module>
@@ -39,6 +40,11 @@
             <dependency>
                 <groupId>com.hellotravel</groupId>
                 <artifactId>hello-travel-common</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.hellotravel</groupId>
+                <artifactId>hello-travel-util</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

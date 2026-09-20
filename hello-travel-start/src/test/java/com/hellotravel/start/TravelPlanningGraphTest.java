@@ -11,22 +11,22 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
-import com.hellotravel.application.chat.travel.context.TravelContextService;
-import com.hellotravel.application.chat.travel.context.TravelConversationContext;
-import com.hellotravel.application.chat.travel.execution.RunExecutionService;
-import com.hellotravel.application.chat.travel.fact.evidence.TravelEvidenceCollector;
-import com.hellotravel.application.chat.travel.planning.adaptor.TravelPlanGenerationAdaptor;
-import com.hellotravel.application.chat.travel.planning.assembler.TravelPlanAssembler;
-import com.hellotravel.application.chat.travel.planning.graph.TravelPlanningGraph;
-import com.hellotravel.application.chat.travel.planning.graph.TravelPlanningContextRegistry;
-import com.hellotravel.application.chat.travel.planning.graph.node.ClarifyTravelRequirementsNode;
-import com.hellotravel.application.chat.travel.planning.graph.node.CollectDestinationEvidenceNode;
-import com.hellotravel.application.chat.travel.planning.graph.node.CollectRealtimeFactsNode;
-import com.hellotravel.application.chat.travel.planning.graph.node.GenerateTravelDraftNode;
-import com.hellotravel.application.chat.travel.planning.graph.node.RenderTravelPlanNode;
-import com.hellotravel.application.chat.travel.planning.graph.node.ReviseTravelDraftNode;
-import com.hellotravel.application.chat.travel.planning.graph.node.ValidateTravelDraftNode;
-import com.hellotravel.application.chat.travel.planning.graph.node.ValidateTravelRequestNode;
+import com.hellotravel.application.chat.TravelContextService;
+import com.hellotravel.application.chat.support.TravelConversationContext;
+import com.hellotravel.application.exception.RunExecutionService;
+import com.hellotravel.application.chat.TravelEvidenceCollectorAppService;
+import com.hellotravel.application.chat.adaptor.TravelPlanGenerationAdaptor;
+import com.hellotravel.application.chat.assembler.TravelPlanAppAssembler;
+import com.hellotravel.application.chat.travel.TravelPlanningGraph;
+import com.hellotravel.application.chat.travel.TravelPlanningContextRegistry;
+import com.hellotravel.application.chat.travel.node.ClarifyTravelRequirementsNode;
+import com.hellotravel.application.chat.travel.node.CollectDestinationEvidenceNode;
+import com.hellotravel.application.chat.travel.node.CollectRealtimeFactsNode;
+import com.hellotravel.application.chat.travel.node.GenerateTravelDraftNode;
+import com.hellotravel.application.chat.travel.node.RenderTravelPlanNode;
+import com.hellotravel.application.chat.travel.node.ReviseTravelDraftNode;
+import com.hellotravel.application.chat.travel.node.ValidateTravelDraftNode;
+import com.hellotravel.application.chat.travel.node.ValidateTravelRequestNode;
 import com.hellotravel.domain.chat.model.entity.ChatRunEntity;
 import com.hellotravel.domain.travel.model.param.TravelPlanDraftValidationParam;
 import com.hellotravel.domain.travel.service.TravelPlanDomainService;
@@ -111,7 +111,7 @@ class TravelPlanningGraphTest {
     void missingRequirementsRouteToClarificationBeforeExternalEvidence() {
         var contextService = mock(TravelContextService.class);
         var domainService = new TravelPlanDomainService();
-        var assembler = new TravelPlanAssembler(contextService);
+        var assembler = new TravelPlanAppAssembler(contextService);
         var registry = new TravelPlanningContextRegistry();
         var validateRequest =
                 new ValidateTravelRequestNode(
@@ -237,7 +237,7 @@ class TravelPlanningGraphTest {
     private Fixture fixture() {
         // 1. 创建外部边界替身，并为预算、证据和调用登记提供成功结果。
         TravelContextService contextService = mock(TravelContextService.class);
-        TravelEvidenceCollector evidence = mock(TravelEvidenceCollector.class);
+        TravelEvidenceCollectorAppService evidence = mock(TravelEvidenceCollectorAppService.class);
         TravelPlanGenerationAdaptor plan = mock(TravelPlanGenerationAdaptor.class);
         RunExecutionService execution = mock(RunExecutionService.class);
         ChatRunEntity run = mock(ChatRunEntity.class);
@@ -248,7 +248,7 @@ class TravelPlanningGraphTest {
         when(evidence.collectRealtimeFacts(any())).thenReturn(Result.success(Boolean.TRUE));
         when(execution.invocation(any(), any(), anyInt(), anyInt())).thenReturn("invocation");
         // 2. 使用真实 assembler、领域服务和八个节点形成可执行图。
-        TravelPlanAssembler assembler = new TravelPlanAssembler(contextService);
+        TravelPlanAppAssembler assembler = new TravelPlanAppAssembler(contextService);
         TravelPlanningContextRegistry registry = new TravelPlanningContextRegistry();
         var graph = new TravelPlanningGraph(
                 new ValidateTravelRequestNode(
@@ -318,7 +318,7 @@ class TravelPlanningGraphTest {
 
     private record Fixture(
             TravelPlanningGraph graph,
-            TravelEvidenceCollector evidence,
+            TravelEvidenceCollectorAppService evidence,
             TravelPlanGenerationAdaptor plan,
             ChatRunEntity run) {
     }

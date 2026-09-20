@@ -1,25 +1,27 @@
 package com.hellotravel.application.chat.usecase;
 
-import com.hellotravel.application.auth.support.AuthRepositories;
-import com.hellotravel.application.chat.assembler.ChatApplicationAssembler;
+import com.hellotravel.application.chat.assembler.ChatAppAssembler;
 import com.hellotravel.application.chat.command.ChatCommand;
-import com.hellotravel.application.chat.result.ChatResult;
-import com.hellotravel.application.chat.support.ChatRepositories;
+import com.hellotravel.application.chat.result.ChatAppResult;
 import com.hellotravel.application.chat.support.ChatWrites;
 import com.hellotravel.application.exception.ApplicationErrorCode;
 import com.hellotravel.application.exception.ApplicationException;
-import com.hellotravel.application.chat.memory.assembler.ContextApplicationAssembler;
+import com.hellotravel.application.chat.assembler.MemoryContextAppAssembler;
 import com.hellotravel.application.chat.context.policy.ChatContextPolicy;
-import com.hellotravel.application.support.Json;
-import com.hellotravel.application.chat.sync.support.SyncEventPublisher;
+import com.hellotravel.util.JsonUtil;
+import com.hellotravel.application.chat.support.SyncEventPublisher;
 import com.hellotravel.application.tx.Transactions;
 import com.hellotravel.common.identity.Ids;
+import com.hellotravel.domain.auth.repository.UserAccountRepository;
 import com.hellotravel.domain.chat.model.aggregate.ChatRunAggregate;
 import com.hellotravel.domain.chat.model.aggregate.ConversationAggregate;
 import com.hellotravel.domain.chat.model.aggregate.MessageAggregate;
 import com.hellotravel.domain.chat.model.entity.ChatRunEntity;
 import com.hellotravel.domain.chat.model.entity.ConversationEntity;
 import com.hellotravel.domain.chat.model.entity.MessageEntity;
+import com.hellotravel.domain.chat.repository.ChatRunRepository;
+import com.hellotravel.domain.chat.repository.ConversationRepository;
+import com.hellotravel.domain.chat.repository.MessageRepository;
 import com.hellotravel.domain.query.model.value.QueryValue;
 
 import org.springframework.stereotype.Component;
@@ -38,32 +40,38 @@ import java.util.UUID;
 @Component
 public final class ChatActionOperations {
 
-    private final ChatRepositories chatRepositories;
-    private final AuthRepositories authRepositories;
+    private final ConversationRepository conversationRepository;
+    private final MessageRepository messageRepository;
+    private final ChatRunRepository chatRunRepository;
+    private final UserAccountRepository userAccountRepository;
     private final ChatWrites chatWrites;
     private final Transactions transactions;
     private final SyncEventPublisher events;
     private final ChatContextPolicy contextPolicy;
-    private final ChatApplicationAssembler assembler;
-    private final ContextApplicationAssembler contextApplicationAssembler;
+    private final ChatAppAssembler assembler;
+    private final MemoryContextAppAssembler memoryContextAppAssembler;
 
     public ChatActionOperations(
             ChatWrites chatWrites,
-            ChatRepositories chatRepositories,
-            AuthRepositories authRepositories,
+            ConversationRepository conversationRepository,
+            MessageRepository messageRepository,
+            ChatRunRepository chatRunRepository,
+            UserAccountRepository userAccountRepository,
             Transactions transactions,
             SyncEventPublisher events,
-            ChatApplicationAssembler assembler,
+            ChatAppAssembler assembler,
             ChatContextPolicy contextPolicy,
-            ContextApplicationAssembler contextApplicationAssembler) {
+            MemoryContextAppAssembler memoryContextAppAssembler) {
         this.chatWrites = chatWrites;
-        this.chatRepositories = chatRepositories;
-        this.authRepositories = authRepositories;
+        this.conversationRepository = conversationRepository;
+        this.messageRepository = messageRepository;
+        this.chatRunRepository = chatRunRepository;
+        this.userAccountRepository = userAccountRepository;
         this.transactions = transactions;
         this.events = events;
         this.assembler = assembler;
         this.contextPolicy = contextPolicy;
-        this.contextApplicationAssembler = contextApplicationAssembler;
+        this.memoryContextAppAssembler = memoryContextAppAssembler;
     }
 
     /**
@@ -77,7 +85,7 @@ public final class ChatActionOperations {
     public ConversationEntity owned(Long userId, String publicId) {
         // 1. 读取对话，限定当前用户及查询窗口。
         var found =
-                chatRepositories.conversation.query(
+                conversationRepository.query(
                         QueryValue.all("id", 1)
                                 .where("user_id", "EQ", userId)
                                 .where("public_id", "EQ", publicId)
@@ -93,7 +101,7 @@ public final class ChatActionOperations {
     private ChatRunEntity run(ChatCommand command) {
         // 1. 读取生成任务，限定当前用户及查询窗口。
         var found =
-                chatRepositories.chatRun.query(
+                chatRunRepository.query(
                         QueryValue.all("id", 1)
                                 .where("user_id", "EQ", command.userId())
                                 .where("public_id", "EQ", command.runId()));
@@ -103,8 +111,7 @@ public final class ChatActionOperations {
         }
         // 3. 按可信内部标识读取对话当前快照。
         ConversationEntity conversation =
-                chatRepositories
-                        .conversation
+                conversationRepository
                         .findById(found.get(0).entity().conversationId())
                         .entity();
         // 4. 核对删除状态与当前记忆代次，失败中止当前处理。
@@ -123,25 +130,31 @@ public final class ChatActionOperations {
     }
 
     private List<ChatRunAggregate> active(ConversationEntity c) {
-        return chatRepositories.chatRun.query(
+        return chatRunRepository.query(
                 QueryValue.all("id", 1)
                         .where("conversation_id", "EQ", c.id())
                         .where("status", "IN", List.of("ACCEPTED", "RUNNING")));
     }
 
-    ChatResult bootstrap(ChatCommand command) {
+    /**
+     * 读取对话页首次加载所需的分页上界与同步序号。
+     *
+     * @param command 当前账号命令
+     * @return 初始化游标
+     * @author AIGenerator
+     */
+    public ChatAppResult bootstrap(ChatCommand command) {
         return transactions.snapshot(
                 () -> {
                     // 1. 读取对话，限定当前用户及查询窗口。
                     var newest =
-                            chatRepositories.conversation.query(
+                            conversationRepository.query(
                                     QueryValue.all("id", 1)
                                             .desc()
                                             .where("user_id", "EQ", command.userId()));
                     long max = newest.isEmpty() ? 0 : newest.get(0).entity().id();
                     long sync =
-                            authRepositories
-                                    .userAccount
+                            userAccountRepository
                                     .findById(command.userId())
                                     .entity()
                                     .syncSeq();
@@ -150,7 +163,14 @@ public final class ChatActionOperations {
                 });
     }
 
-    ChatResult list(ChatCommand command) {
+    /**
+     * 分页读取当前账号的未删除对话。
+     *
+     * @param command 有界分页命令
+     * @return 对话页
+     * @author AIGenerator
+     */
+    public ChatAppResult list(ChatCommand command) {
         // 1. 组装受控查询条件与分页边界。
         QueryValue query =
                 QueryValue.all("id", command.limit())
@@ -162,12 +182,19 @@ public final class ChatActionOperations {
             query = query.where("id", "LE", command.maxSeq());
         }
         // 3. 读取对话，按当前用例条件限定查询窗口。
-        var rows = chatRepositories.conversation.query(query);
+        var rows = conversationRepository.query(query);
         // 4. 返回本段实际处理结果，保持本层输出契约。
         return assembler.tabs(rows, command);
     }
 
-    ChatResult create(ChatCommand command) {
+    /**
+     * 创建对话并登记跨设备同步事件。
+     *
+     * @param command 创建命令
+     * @return 新对话视图
+     * @author AIGenerator
+     */
+    public ChatAppResult create(ChatCommand command) {
         // 1. 取得原始或默认标题，由领域工厂统一校验和去除首尾空白。
         String name = command.title() == null ? "新对话" : command.title();
         // 2. 进入短事务完成原子变更，外层统一负责提交、回滚与失败转换。
@@ -194,7 +221,14 @@ public final class ChatActionOperations {
                 });
     }
 
-    ChatResult rename(ChatCommand command) {
+    /**
+     * 按预期版本重命名当前账号拥有的对话。
+     *
+     * @param command 重命名命令
+     * @return 更新后的对话视图
+     * @author AIGenerator
+     */
+    public ChatAppResult rename(ChatCommand command) {
         return transactions.mutate(
                 command.userId(),
                 account -> {
@@ -221,7 +255,14 @@ public final class ChatActionOperations {
                 });
     }
 
-    ChatResult history(ChatCommand command) {
+    /**
+     * 在固定历史代次内分页读取消息。
+     *
+     * @param command 历史分页命令
+     * @return 消息页
+     * @author AIGenerator
+     */
+    public ChatAppResult history(ChatCommand command) {
         // 1. 取得当前对话或验证码快照，供本段后续处理使用。
         ConversationEntity c = owned(command.userId(), command.conversationId());
         // 2. 核对历史或记忆代次，分页与派生记忆不能跨删除边界使用。
@@ -231,7 +272,7 @@ public final class ChatActionOperations {
         // 3. 取得本次操作的容量上限，供本段后续处理使用。
         long max = command.maxSeq() == null ? c.lastMessageSeq() : command.maxSeq();
         var rows =
-                chatRepositories.message.query(
+                messageRepository.query(
                         QueryValue.all("message_seq", command.limit())
                                 .where("user_id", "EQ", command.userId())
                                 .where("conversation_id", "EQ", c.id())
@@ -240,8 +281,7 @@ public final class ChatActionOperations {
                                 .where("message_seq", "LE", max));
         // 再读删除代次防止分页期间删除；普通流式更新不会触发重启。
         // 4. 核对历史或记忆代次，分页与派生记忆不能跨删除边界使用。
-        if (!chatRepositories
-                .conversation
+        if (!conversationRepository
                 .findById(c.id())
                 .entity()
                 .historyEpoch()
@@ -252,7 +292,14 @@ public final class ChatActionOperations {
         return assembler.history(c, rows, command, max);
     }
 
-    synchronized ChatResult submit(ChatCommand command) {
+    /**
+     * 幂等受理用户消息并创建异步模型任务。
+     *
+     * @param command 消息提交命令
+     * @return 已受理的消息与运行视图
+     * @author AIGenerator
+     */
+    public synchronized ChatAppResult submit(ChatCommand command) {
         // 1. 核对输入或读取结果的存在性，失败中止当前处理。
         if (command.text() == null || command.text().isBlank() || command.text().length() > 8000) {
             throw new ApplicationException(ApplicationErrorCode.INVALID);
@@ -272,7 +319,7 @@ public final class ChatActionOperations {
                     // 1. 取得当前对话或验证码快照，供本段后续处理使用。
                     ConversationEntity c = owned(account.id(), command.conversationId());
                     var replay =
-                            chatRepositories.chatRun.query(
+                            chatRunRepository.query(
                                     QueryValue.all("id", 1)
                                             .where("user_id", "EQ", account.id())
                                             .where("conversation_id", "EQ", c.id())
@@ -297,8 +344,7 @@ public final class ChatActionOperations {
                                         command, replay.get(0).entity().publicId()));
                     }
                     // 3. 核对实体当前状态与允许的操作，失败中止当前处理。
-                    if (chatRepositories
-                                    .chatRun
+                    if (chatRunRepository
                                     .query(
                                             QueryValue.all("id", 8)
                                                     .where(
@@ -311,8 +357,7 @@ public final class ChatActionOperations {
                     }
                     // 4. 核对输入或读取结果的存在性，失败中止当前处理。
                     if (!active(c).isEmpty()
-                            || !chatRepositories
-                                    .chatRun
+                            || !chatRunRepository
                                     .query(
                                             QueryValue.all("id", 1)
                                                     .where("user_id", "EQ", command.userId())
@@ -336,16 +381,14 @@ public final class ChatActionOperations {
                     Transactions.require(chatWrites.saveMessage(new MessageAggregate(output)));
                     // 9. 读取消息，按当前用例条件限定查询窗口。
                     MessageEntity storedInput =
-                            chatRepositories
-                                    .message
+                            messageRepository
                                     .query(
                                             QueryValue.all("id", 1)
                                                     .where("public_id", "EQ", input.publicId()))
                                     .get(0)
                                     .entity();
                     MessageEntity storedOutput =
-                            chatRepositories
-                                    .message
+                            messageRepository
                                     .query(
                                             QueryValue.all("id", 1)
                                                     .where("public_id", "EQ", output.publicId()))
@@ -370,28 +413,42 @@ public final class ChatActionOperations {
                             c.publicId(),
                             c.version() + 1,
                             null,
-                            Json.encode(Map.of("runId", run.publicId())));
+                            JsonUtil.encode(Map.of("runId", run.publicId())));
                     // 12. 同事务登记可恢复后台任务，外部调用在提交之后执行。
                     events.outbox(
                             account.id(),
                             "GENERATE",
                             run.publicId(),
-                            Json.encode(Map.of("runId", run.publicId())));
+                            JsonUtil.encode(Map.of("runId", run.publicId())));
                     // 13. 提供本事务或回调的处理结果，完成责任由所属外层流程承接。
                     return assembler.accepted(List.of(input, output), run, c, account);
                 });
     }
 
-    ChatResult readRun(ChatCommand command) {
+    /**
+     * 读取当前账号拥有的模型运行快照。
+     *
+     * @param command 运行查询命令
+     * @return 运行快照
+     * @author AIGenerator
+     */
+    public ChatAppResult readRun(ChatCommand command) {
         // 1. 取得下层返回的标准结果，供本段后续处理使用。
         ChatRunEntity r = run(command);
-        ConversationEntity c = chatRepositories.conversation.findById(r.conversationId()).entity();
-        MessageEntity output = chatRepositories.message.findById(r.assistantMessageId()).entity();
+        ConversationEntity c = conversationRepository.findById(r.conversationId()).entity();
+        MessageEntity output = messageRepository.findById(r.assistantMessageId()).entity();
         // 2. 返回本段实际处理结果，保持本层输出契约。
         return assembler.runSnapshot(r, c, output);
     }
 
-    ChatResult cancel(ChatCommand command) {
+    /**
+     * 取消仍可执行的模型运行并同步终态。
+     *
+     * @param command 取消命令
+     * @return 取消后的运行快照
+     * @author AIGenerator
+     */
+    public ChatAppResult cancel(ChatCommand command) {
         return transactions.mutate(
                 command.userId(),
                 account -> {
@@ -403,7 +460,7 @@ public final class ChatActionOperations {
                                 chatWrites.saveChatRun(
                                         new ChatRunAggregate(r).finish("CANCELLED", null)));
                         MessageEntity m =
-                                chatRepositories.message.findById(r.assistantMessageId()).entity();
+                                messageRepository.findById(r.assistantMessageId()).entity();
                         Transactions.require(
                                 chatWrites.saveMessage(
                                         new MessageAggregate(m)
@@ -420,18 +477,24 @@ public final class ChatActionOperations {
                 });
     }
 
-    ChatResult retry(ChatCommand command) {
+    /**
+     * 在无并发运行时重试既有模型任务。
+     *
+     * @param command 重试命令
+     * @return 重试后的运行快照
+     * @author AIGenerator
+     */
+    public ChatAppResult retry(ChatCommand command) {
         return transactions.mutate(
                 command.userId(),
                 account -> {
                     // 1. 取得下层返回的标准结果，供本段后续处理使用。
                     ChatRunEntity r = run(command);
                     ConversationEntity c =
-                            chatRepositories.conversation.findById(r.conversationId()).entity();
+                            conversationRepository.findById(r.conversationId()).entity();
                     // 2. 核对输入或读取结果的存在性，失败中止当前处理。
                     if (!active(c).isEmpty()
-                            || !chatRepositories
-                                    .chatRun
+                            || !chatRunRepository
                                     .query(
                                             QueryValue.all("id", 1)
                                                     .where("user_id", "EQ", command.userId())
@@ -444,9 +507,9 @@ public final class ChatActionOperations {
                     }
                     // 3. 按可信内部标识读取消息当前快照。
                     MessageEntity input =
-                            chatRepositories.message.findById(r.userMessageId()).entity();
+                            messageRepository.findById(r.userMessageId()).entity();
                     MessageEntity output =
-                            chatRepositories.message.findById(r.assistantMessageId()).entity();
+                            messageRepository.findById(r.assistantMessageId()).entity();
                     // 4. 核对关联对象归属与角色，拒绝跨账号或跨会话关联。
                     if (input.deletedAt() != null
                             || output.deletedAt() != null
@@ -470,13 +533,21 @@ public final class ChatActionOperations {
                             account.id(),
                             "GENERATE",
                             r.publicId() + ":" + next.attemptCount(),
-                            Json.encode(Map.of("runId", r.publicId())));
+                            JsonUtil.encode(Map.of("runId", r.publicId())));
                     // 10. 提供本事务或回调的处理结果，完成责任由所属外层流程承接。
                     return readRun(command);
                 });
     }
 
-    ChatResult erase(ChatCommand command, boolean entire) {
+    /**
+     * 删除指定消息或整段对话历史并触发记忆重建。
+     *
+     * @param command 删除命令
+     * @param entire 是否删除整段对话
+     * @return 完成结果
+     * @author AIGenerator
+     */
+    public ChatAppResult erase(ChatCommand command, boolean entire) {
         // 1. 进入受控事务处理，结果与回滚责任保持清晰。
         transactions.mutate(
                 command.userId(),
@@ -506,7 +577,7 @@ public final class ChatActionOperations {
                             throw new ApplicationException(ApplicationErrorCode.INVALID);
                         }
                         var rows =
-                                chatRepositories.message.query(
+                                messageRepository.query(
                                         QueryValue.all("id", 100)
                                                 .where("user_id", "EQ", account.id())
                                                 .where("conversation_id", "EQ", c.id())
@@ -538,7 +609,7 @@ public final class ChatActionOperations {
                             account.id(),
                             "MEMORY_REBUILD",
                             c.publicId() + ":" + (c.memoryEpoch() + 1),
-                            Json.encode(Map.of("conversationId", c.id())));
+                            JsonUtil.encode(Map.of("conversationId", c.id())));
                     // 10. 提供本事务或回调的处理结果，完成责任由所属外层流程承接。
                     return null;
                 });
@@ -546,15 +617,22 @@ public final class ChatActionOperations {
         return assembler.completed();
     }
 
-    ChatResult context(ChatCommand command) {
+    /**
+     * 读取最近一次运行的上下文用量快照。
+     *
+     * @param command 上下文查询命令
+     * @return 上下文视图
+     * @author AIGenerator
+     */
+    public ChatAppResult context(ChatCommand command) {
         // 1. 取得当前对话或验证码快照，供本段后续处理使用。
         ConversationEntity c = owned(command.userId(), command.conversationId());
         var found =
-                chatRepositories.chatRun.query(
+                chatRunRepository.query(
                         QueryValue.all("id", 1).desc().where("conversation_id", "EQ", c.id()));
         String data =
                 found.isEmpty()
-                        ? contextApplicationAssembler.initial(contextPolicy)
+                        ? memoryContextAppAssembler.initial(contextPolicy)
                         : found.get(0).entity().contextSnapshotJson();
         // 2. 返回本段实际处理结果，保持本层输出契约。
         return assembler.context(c, found, data);

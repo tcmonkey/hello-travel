@@ -1,17 +1,16 @@
 package com.hellotravel.application.auth.usecase;
 
-import com.hellotravel.application.auth.assembler.AuthApplicationAssembler;
+import com.hellotravel.application.auth.assembler.AuthAppAssembler;
 import com.hellotravel.application.auth.command.AuthCommand;
-import com.hellotravel.application.auth.result.AuthResult;
-import com.hellotravel.application.auth.support.AuthRepositories;
-import com.hellotravel.application.auth.support.AuthWrites;
+import com.hellotravel.application.auth.result.AuthAppResult;
+import com.hellotravel.application.auth.AuthWriteAppService;
 import com.hellotravel.application.exception.ApplicationErrorCode;
 import com.hellotravel.application.exception.ApplicationException;
-import com.hellotravel.application.auth.security.adaptor.SecurityOutAdaptor;
-import com.hellotravel.application.auth.security.assembler.SecurityCommandAssembler;
-import com.hellotravel.application.auth.security.command.SecurityCommand;
-import com.hellotravel.application.support.Json;
-import com.hellotravel.application.chat.sync.support.SyncEventPublisher;
+import com.hellotravel.application.auth.adaptor.SecurityAdaptor;
+import com.hellotravel.application.auth.assembler.SecurityCommandAppAssembler;
+import com.hellotravel.application.auth.command.SecurityCommand;
+import com.hellotravel.util.JsonUtil;
+import com.hellotravel.application.chat.support.SyncEventPublisher;
 import com.hellotravel.application.tx.Transactions;
 import com.hellotravel.common.identity.Ids;
 import com.hellotravel.common.result.Result;
@@ -24,6 +23,11 @@ import com.hellotravel.domain.auth.model.entity.DeviceEntity;
 import com.hellotravel.domain.auth.model.entity.EmailChallengeEntity;
 import com.hellotravel.domain.auth.model.entity.LoginSessionEntity;
 import com.hellotravel.domain.auth.model.entity.UserAccountEntity;
+import com.hellotravel.domain.auth.repository.DeviceRepository;
+import com.hellotravel.domain.auth.repository.EmailChallengeRepository;
+import com.hellotravel.domain.auth.repository.LoginSessionRepository;
+import com.hellotravel.domain.auth.repository.RefreshReceiptRepository;
+import com.hellotravel.domain.auth.repository.UserAccountRepository;
 import com.hellotravel.domain.query.model.value.QueryValue;
 import com.hellotravel.model.security.SecurityDO;
 
@@ -46,41 +50,57 @@ import java.util.Set;
 @Component
 public final class AuthActionOperations {
 
-    private final AuthRepositories authRepositories;
-    private final AuthWrites authWrites;
+    private final UserAccountRepository userAccountRepository;
+    private final DeviceRepository deviceRepository;
+    private final LoginSessionRepository loginSessionRepository;
+    private final EmailChallengeRepository emailChallengeRepository;
+    private final RefreshReceiptRepository refreshReceiptRepository;
+    private final AuthWriteAppService authWriteAppService;
     private final Transactions transactions;
     private final SyncEventPublisher events;
-    private final SecurityOutAdaptor security;
-    private final AuthApplicationAssembler authApplicationAssembler;
-    private final SecurityCommandAssembler securityCommandAssembler;
+    private final SecurityAdaptor security;
+    private final AuthAppAssembler authAppAssembler;
+    private final SecurityCommandAppAssembler securityCommandAppAssembler;
 
     /**
      * 组装认证用例共享的仓储、领域写入、事务与安全协作。
      *
-     * @param authWrites 认证领域写入协作
-     * @param authRepositories 认证读取协作
+     * @param authWriteAppService 认证领域写入协作
+     * @param userAccountRepository 账号仓储
+     * @param deviceRepository 设备仓储
+     * @param loginSessionRepository 登录会话仓储
+     * @param emailChallengeRepository 邮箱验证仓储
+     * @param refreshReceiptRepository 刷新消费凭据仓储
      * @param transactions 短事务协作
      * @param events 持久同步事件协作
      * @param security 安全能力端口
-     * @param authApplicationAssembler 认证结果转换器
-     * @param securityCommandAssembler 安全命令转换器
+     * @param authAppAssembler 认证结果转换器
+     * @param securityCommandAppAssembler 安全命令转换器
      * @author AIGenerator
      */
     public AuthActionOperations(
-            AuthWrites authWrites,
-            AuthRepositories authRepositories,
+            AuthWriteAppService authWriteAppService,
+            UserAccountRepository userAccountRepository,
+            DeviceRepository deviceRepository,
+            LoginSessionRepository loginSessionRepository,
+            EmailChallengeRepository emailChallengeRepository,
+            RefreshReceiptRepository refreshReceiptRepository,
             Transactions transactions,
             SyncEventPublisher events,
-            SecurityOutAdaptor security,
-            AuthApplicationAssembler authApplicationAssembler,
-            SecurityCommandAssembler securityCommandAssembler) {
-        this.authWrites = authWrites;
-        this.authRepositories = authRepositories;
+            SecurityAdaptor security,
+            AuthAppAssembler authAppAssembler,
+            SecurityCommandAppAssembler securityCommandAppAssembler) {
+        this.authWriteAppService = authWriteAppService;
+        this.userAccountRepository = userAccountRepository;
+        this.deviceRepository = deviceRepository;
+        this.loginSessionRepository = loginSessionRepository;
+        this.emailChallengeRepository = emailChallengeRepository;
+        this.refreshReceiptRepository = refreshReceiptRepository;
         this.transactions = transactions;
         this.events = events;
         this.security = security;
-        this.authApplicationAssembler = authApplicationAssembler;
-        this.securityCommandAssembler = securityCommandAssembler;
+        this.authAppAssembler = authAppAssembler;
+        this.securityCommandAppAssembler = securityCommandAppAssembler;
     }
 
     private SecurityDO secure(SecurityCommand command) {
@@ -105,7 +125,7 @@ public final class AuthActionOperations {
 
     private void limit(AuthCommand command, String key) {
         // 1. 取得本段结果并准备本层转换，随后显式核对成功状态。
-        SecurityDO result = secure(securityCommandAssembler.limit(command.rateKey(), key));
+        SecurityDO result = secure(securityCommandAppAssembler.limit(command.rateKey(), key));
         // 2. 核对安全端口返回的验证或限流结果，失败提前中止。
         if (!result.valid()) {
             throw new ApplicationException(ApplicationErrorCode.RATE_LIMITED);
@@ -115,7 +135,7 @@ public final class AuthActionOperations {
     private UserAccountEntity account(String address) {
         // 1. 读取账号，按当前用例条件限定查询窗口。
         var list =
-                authRepositories.userAccount.query(
+                userAccountRepository.query(
                         QueryValue.all("id", 1).where("email_normalized", "EQ", address));
         // 2. 返回规范邮箱对应的账号；记录不存在时交给认证步骤统一处理。
         return list.isEmpty() ? null : list.get(0).entity();
@@ -130,7 +150,7 @@ public final class AuthActionOperations {
         }
         // 2. 读取邮箱验证码，按当前用例条件限定查询窗口。
         var found =
-                authRepositories.emailChallenge.query(
+                emailChallengeRepository.query(
                         QueryValue.all("id", 1).where("public_id", "EQ", command.challengeId()));
         // 3. 验证码记录缺失时统一拒绝邮箱证明。
         if (found.isEmpty()) {
@@ -148,7 +168,7 @@ public final class AuthActionOperations {
                 Base64.getDecoder()
                         .decode(
                                 secure(
-                                                securityCommandAssembler.hmac(
+                                                securityCommandAppAssembler.hmac(
                                                         command.code(),
                                                         c.publicId()
                                                                 + "|"
@@ -163,11 +183,11 @@ public final class AuthActionOperations {
                         () -> {
                             // 1. 按可信内部标识读取邮箱验证码当前快照。
                             EmailChallengeEntity current =
-                                    authRepositories.emailChallenge.findById(c.id()).entity();
+                                    emailChallengeRepository.findById(c.id()).entity();
                             // 2. 依据实体当前状态与允许的操作处理分支，避免继续使用无效数据。
                             if ("ISSUED".equals(current.status())) {
                                 Transactions.require(
-                                        authWrites.saveEmailChallenge(
+                                        authWriteAppService.saveEmailChallenge(
                                                 new EmailChallengeAggregate(current)
                                                         .failedAttempt()));
                             }
@@ -184,14 +204,15 @@ public final class AuthActionOperations {
     private void consume(EmailChallengeEntity proof) {
         // 1. 按可信内部标识读取邮箱验证码当前快照。
         EmailChallengeEntity current =
-                authRepositories.emailChallenge.findById(proof.id()).entity();
+                emailChallengeRepository.findById(proof.id()).entity();
         // 2. 核对快照版本与预期版本，失败中止当前处理。
         if (!current.version().equals(proof.version()) || !"ISSUED".equals(current.status())) {
             throw new ApplicationException(ApplicationErrorCode.UNAUTHORIZED);
         }
         // 3. 持久化当前完整聚合，失败必须中断事务而非继续提交。
         Transactions.require(
-                authWrites.saveEmailChallenge(new EmailChallengeAggregate(current).consume()));
+                authWriteAppService.saveEmailChallenge(
+                        new EmailChallengeAggregate(current).consume()));
     }
 
     private String hashPassword(String password) {
@@ -200,7 +221,7 @@ public final class AuthActionOperations {
             throw new ApplicationException(ApplicationErrorCode.INVALID);
         }
         // 2. 返回带算法、参数与盐的密码摘要，原始密码不进入数据库。
-        return secure(securityCommandAssembler.hashPassword(password)).value();
+        return secure(securityCommandAppAssembler.hashPassword(password)).value();
     }
 
     /**
@@ -210,7 +231,7 @@ public final class AuthActionOperations {
      * @return 验证码公开标识
      * @author AIGenerator
      */
-    public AuthResult challenge(AuthCommand command) {
+    public AuthAppResult challenge(AuthCommand command) {
         // 1. 规范化邮箱并限制输入长度。
         String address = email(command.email());
         // 2. 仅接受注册、登录和密码重置三种验证码用途。
@@ -218,7 +239,7 @@ public final class AuthActionOperations {
             throw new ApplicationException(ApplicationErrorCode.INVALID);
         }
         // 3. 核对安全端口返回的验证或限流结果，失败提前中止。
-        if (!secure(securityCommandAssembler.mailAvailable()).valid()) {
+        if (!secure(securityCommandAppAssembler.mailAvailable()).valid()) {
             throw new ApplicationException(ApplicationErrorCode.UNAVAILABLE);
         }
         // 4. 执行当前主体及用途的频控，超限提前中止。
@@ -227,12 +248,12 @@ public final class AuthActionOperations {
         limit(command, "issue-ip");
         // 6. 生成本次业务的公开标识，内部数据库主键保持由仓储分配。
         String id = Ids.next();
-        String code = secure(securityCommandAssembler.otp()).value();
+        String code = secure(securityCommandAppAssembler.otp()).value();
         byte[] hmac =
                 Base64.getDecoder()
                         .decode(
                                 secure(
-                                                securityCommandAssembler.hmac(
+                                                securityCommandAppAssembler.hmac(
                                                         code,
                                                         id
                                                                 + "|"
@@ -242,13 +263,13 @@ public final class AuthActionOperations {
                                         .value());
         byte[] encrypted =
                 Base64.getDecoder()
-                        .decode(secure(securityCommandAssembler.encrypt(code, id)).value());
+                        .decode(secure(securityCommandAppAssembler.encrypt(code, id)).value());
         // 7. 进入受控事务处理，结果与回滚责任保持清晰。
         transactions.plain(
                 () -> {
                     // 1. 读取邮箱验证码，按当前用例条件限定查询窗口。
                     var previous =
-                            authRepositories.emailChallenge.query(
+                            emailChallengeRepository.query(
                                     QueryValue.all("id", 10)
                                             .where("email_normalized", "EQ", address)
                                             .where("purpose", "EQ", command.purpose())
@@ -259,7 +280,7 @@ public final class AuthActionOperations {
                     // 2. 逐项处理当前数据窗口，并在循环中核对可用状态与停止条件。
                     for (var old : previous) {
                         Transactions.require(
-                                authWrites.saveEmailChallenge(
+                                authWriteAppService.saveEmailChallenge(
                                         new EmailChallengeAggregate(old.entity())
                                                 .delivery("REVOKED")));
                     }
@@ -277,14 +298,15 @@ public final class AuthActionOperations {
                                     .entity();
                     // 4. 持久化当前完整聚合，失败必须中断事务而非继续提交。
                     Transactions.require(
-                            authWrites.saveEmailChallenge(new EmailChallengeAggregate(created)));
+                            authWriteAppService.saveEmailChallenge(
+                                    new EmailChallengeAggregate(created)));
                     // 5. 同事务登记可恢复后台任务，外部调用在提交之后执行。
-                    events.outbox(null, "EMAIL", id, Json.encode(Map.of("challengeId", id)));
+                    events.outbox(null, "EMAIL", id, JsonUtil.encode(Map.of("challengeId", id)));
                     // 6. 提供本事务或回调的处理结果，完成责任由所属外层流程承接。
                     return null;
                 });
         // 8. 返回本段实际处理结果，保持本层输出契约。
-        return authApplicationAssembler.challenge(id);
+        return authAppAssembler.challenge(id);
     }
 
     /**
@@ -294,7 +316,7 @@ public final class AuthActionOperations {
      * @return 新账号公开视图
      * @author AIGenerator
      */
-    public AuthResult register(AuthCommand command) {
+    public AuthAppResult register(AuthCommand command) {
         // 1. 规范化邮箱并限制输入长度。
         String address = email(command.email());
         // 2. 执行当前主体及用途的频控，超限提前中止。
@@ -318,14 +340,14 @@ public final class AuthActionOperations {
                                     .entity();
                     // 3. 持久化当前完整聚合，失败必须中断事务而非继续提交。
                     Transactions.require(
-                            authWrites.saveUserAccount(new UserAccountAggregate(created)));
+                            authWriteAppService.saveUserAccount(new UserAccountAggregate(created)));
                     // 4. 提供本事务或回调的处理结果，完成责任由所属外层流程承接。
                     return null;
                 });
         // 5. 取得新账号的持久化快照，供本段后续处理使用。
         UserAccountEntity user = account(address);
         // 6. 将已读取快照转为本用例视图，凭据与内部字段按协议隔离。
-        return authApplicationAssembler.account(user);
+        return authAppAssembler.account(user);
     }
 
     /**
@@ -335,7 +357,7 @@ public final class AuthActionOperations {
      * @return 当前会话与公开账号视图
      * @author AIGenerator
      */
-    public AuthResult login(AuthCommand command) {
+    public AuthAppResult login(AuthCommand command) {
         // 1. 规范化邮箱并限制输入长度。
         String address = email(command.email());
         // 2. 执行当前主体及用途的频控，超限提前中止。
@@ -348,7 +370,7 @@ public final class AuthActionOperations {
             verified = proof(command, "LOGIN", address);
         } else {
             boolean valid =
-                    secure(securityCommandAssembler.passwordProof(command, snapshot)).valid();
+                    secure(securityCommandAppAssembler.passwordProof(command, snapshot)).valid();
             if (!valid) {
                 throw new ApplicationException(ApplicationErrorCode.UNAUTHORIZED);
             }
@@ -376,7 +398,7 @@ public final class AuthActionOperations {
                     // 3. 取得浏览器设备标识的不可逆摘要，供本段后续处理使用。
                     byte[] deviceHash = Ids.hash(command.deviceKey());
                     var found =
-                            authRepositories.device.query(
+                            deviceRepository.query(
                                     QueryValue.all("id", 1)
                                             .where("user_id", "EQ", current.id())
                                             .where("device_key_hash", "EQ", deviceHash));
@@ -385,10 +407,9 @@ public final class AuthActionOperations {
                     if (found.isEmpty()) {
                         DeviceEntity created =
                                 DeviceAggregate.browser(current.id(), deviceHash, now()).entity();
-                        Transactions.require(authWrites.saveDevice(new DeviceAggregate(created)));
+                        Transactions.require(authWriteAppService.saveDevice(new DeviceAggregate(created)));
                         device =
-                                authRepositories
-                                        .device
+                                deviceRepository
                                         .query(
                                                 QueryValue.all("id", 1)
                                                         .where(
@@ -402,7 +423,7 @@ public final class AuthActionOperations {
                     }
                     // 5. 读取登录会话，按当前用例条件限定查询窗口。
                     var active =
-                            authRepositories.loginSession.query(
+                            loginSessionRepository.query(
                                     QueryValue.all("id", 1)
                                             .where("device_id", "EQ", device.id())
                                             .where("status", "EQ", "ACTIVE"));
@@ -411,7 +432,7 @@ public final class AuthActionOperations {
                     if (!active.isEmpty()) {
                         revoked = active.get(0).entity().publicId();
                         Transactions.require(
-                                authWrites.saveLoginSession(
+                                authWriteAppService.saveLoginSession(
                                         new LoginSessionAggregate(active.get(0).entity())
                                                 .revoke("REPLACED")));
                     }
@@ -428,18 +449,17 @@ public final class AuthActionOperations {
                                     .entity();
                     // 8. 持久化当前完整聚合，失败必须中断事务而非继续提交。
                     Transactions.require(
-                            authWrites.saveLoginSession(new LoginSessionAggregate(created)));
+                            authWriteAppService.saveLoginSession(new LoginSessionAggregate(created)));
                     // 9. 同事务记录用户提交序号与同步事件，推送不能代替持久化。
                     events.append(current, "session.replaced", sid, 0, revoked, "{}");
                     // 10. 读取登录会话，按当前用例条件限定查询窗口。
                     var stored =
-                            authRepositories
-                                    .loginSession
+                            loginSessionRepository
                                     .query(QueryValue.all("id", 1).where("public_id", "EQ", sid))
                                     .get(0)
                                     .entity();
                     // 11. 将已读取快照转为本用例视图，凭据与内部字段按协议隔离。
-                    return authApplicationAssembler.session(current, stored, access, refresh, csrf);
+                    return authAppAssembler.session(current, stored, access, refresh, csrf);
                 });
     }
 
@@ -450,7 +470,7 @@ public final class AuthActionOperations {
         }
         // 2. 读取登录会话，按当前用例条件限定查询窗口。
         var found =
-                authRepositories.loginSession.query(
+                loginSessionRepository.query(
                         QueryValue.all("id", 1)
                                 .where(
                                         refresh ? "refresh_token_hash" : "access_token_hash",
@@ -470,7 +490,7 @@ public final class AuthActionOperations {
             throw new ApplicationException(ApplicationErrorCode.SESSION_REPLACED);
         }
         // 2. 按可信内部标识读取账号当前快照。
-        UserAccountEntity user = authRepositories.userAccount.findById(session.userId()).entity();
+        UserAccountEntity user = userAccountRepository.findById(session.userId()).entity();
         // 3. 再次核对密码快照与账号认证代次，阻断重置后的旧校验结果。
         if (!"ACTIVE".equals(session.status())
                 || !"ACTIVE".equals(user.status())
@@ -490,11 +510,11 @@ public final class AuthActionOperations {
      * @return 已验证会话主体
      * @author AIGenerator
      */
-    public AuthResult check(AuthCommand command) {
+    public AuthAppResult check(AuthCommand command) {
         // 1. 取得当前登录会话快照，供本段后续处理使用。
         LoginSessionEntity s = session(command.accessToken(), false);
         // 2. 将已读取快照转为本用例视图，凭据与内部字段按协议隔离。
-        return authApplicationAssembler.checked(valid(s, command.expectedSid(), false), s);
+        return authAppAssembler.checked(valid(s, command.expectedSid(), false), s);
     }
 
     /**
@@ -504,7 +524,7 @@ public final class AuthActionOperations {
      * @return 轮换后的会话主体
      * @author AIGenerator
      */
-    public AuthResult refresh(AuthCommand command) {
+    public AuthAppResult refresh(AuthCommand command) {
         // 1. 保留当前来源或状态快照，后续核对并发变更与重复执行。
         LoginSessionEntity snapshot;
         // 2. 在异常捕获或资源释放边界内完成本段处理，失败不得伪装为成功。
@@ -513,14 +533,13 @@ public final class AuthActionOperations {
         } catch (ApplicationException exception) {
             if (command.refreshToken() != null && command.refreshToken().length() <= 200) {
                 var receipts =
-                        authRepositories.refreshReceipt.query(
+                        refreshReceiptRepository.query(
                                 QueryValue.all("id", 1)
                                         .where("token_hash", "EQ", Ids.hash(command.refreshToken()))
                                         .where("expires_at", "GT", now()));
                 if (!receipts.isEmpty()) {
                     var prior =
-                            authRepositories
-                                    .loginSession
+                            loginSessionRepository
                                     .findById(receipts.get(0).entity().sessionId())
                                     .entity();
                     if (!prior.publicId().equals(command.expectedSid())) {
@@ -531,10 +550,10 @@ public final class AuthActionOperations {
                             owner -> {
                                 // 1. 按可信内部标识读取登录会话当前快照。
                                 var current =
-                                        authRepositories.loginSession.findById(prior.id()).entity();
+                                        loginSessionRepository.findById(prior.id()).entity();
                                 // 2. 持久化当前完整聚合，失败必须中断事务而非继续提交。
                                 Transactions.require(
-                                        authWrites.saveLoginSession(
+                                        authWriteAppService.saveLoginSession(
                                                 new LoginSessionAggregate(current)
                                                         .revoke("REFRESH_REPLAY")));
                                 // 3. 同事务记录用户提交序号与同步事件，推送不能代替持久化。
@@ -567,7 +586,7 @@ public final class AuthActionOperations {
                 current -> {
                     // 1. 按可信内部标识读取登录会话当前快照。
                     LoginSessionEntity stored =
-                            authRepositories.loginSession.findById(snapshot.id()).entity();
+                            loginSessionRepository.findById(snapshot.id()).entity();
                     // 2. 执行valid职责步骤，并把失败交给所属事务或入口处理。
                     valid(stored, command.expectedSid(), true);
                     // 3. 刷新证明与已加载快照不一致时拒绝轮换，阻断消费后的重放。
@@ -586,7 +605,7 @@ public final class AuthActionOperations {
                                     .entity();
                     // 5. 持久化当前完整聚合，失败必须中断事务而非继续提交。
                     Transactions.require(
-                            authWrites.saveRefreshReceipt(new RefreshReceiptAggregate(receipt)));
+                            authWriteAppService.saveRefreshReceipt(new RefreshReceiptAggregate(receipt)));
                     // 6. 通过领域聚合语义准备业务快照，固定状态由实体封装。
                     LoginSessionEntity rotated =
                             new LoginSessionAggregate(stored)
@@ -598,7 +617,7 @@ public final class AuthActionOperations {
                                     .entity();
                     // 7. 持久化当前完整聚合，失败必须中断事务而非继续提交。
                     Transactions.require(
-                            authWrites.saveLoginSession(new LoginSessionAggregate(rotated)));
+                            authWriteAppService.saveLoginSession(new LoginSessionAggregate(rotated)));
                     // 8. 同事务记录用户提交序号与同步事件，推送不能代替持久化。
                     events.append(
                             current,
@@ -608,7 +627,7 @@ public final class AuthActionOperations {
                             null,
                             "{}");
                     // 9. 将已读取快照转为本用例视图，凭据与内部字段按协议隔离。
-                    return authApplicationAssembler.session(
+                    return authAppAssembler.session(
                             current, rotated, access, refresh, csrf);
                 });
     }
@@ -620,19 +639,19 @@ public final class AuthActionOperations {
      * @return 已撤销会话的主体视图
      * @author AIGenerator
      */
-    public AuthResult logout(AuthCommand command) {
+    public AuthAppResult logout(AuthCommand command) {
         // 1. 取得当前请求的认证主体，供本段后续处理使用。
-        AuthResult principal = check(command);
+        AuthAppResult principal = check(command);
         // 2. 进入受控事务处理，结果与回滚责任保持清晰。
         transactions.mutate(
                 principal.userId(),
                 current -> {
                     // 1. 按可信内部标识读取登录会话当前快照。
                     LoginSessionEntity stored =
-                            authRepositories.loginSession.findById(principal.sessionId()).entity();
+                            loginSessionRepository.findById(principal.sessionId()).entity();
                     // 2. 持久化当前完整聚合，失败必须中断事务而非继续提交。
                     Transactions.require(
-                            authWrites.saveLoginSession(
+                            authWriteAppService.saveLoginSession(
                                     new LoginSessionAggregate(stored).revoke("LOGOUT")));
                     // 3. 同事务记录用户提交序号与同步事件，推送不能代替持久化。
                     events.append(
@@ -656,7 +675,7 @@ public final class AuthActionOperations {
      * @return 已更新账号视图
      * @author AIGenerator
      */
-    public AuthResult reset(AuthCommand command) {
+    public AuthAppResult reset(AuthCommand command) {
         // 1. 规范化邮箱并限制输入长度。
         String address = email(command.email());
         // 2. 执行当前主体及用途的频控，超限提前中止。
@@ -677,19 +696,19 @@ public final class AuthActionOperations {
                     consume(verified);
                     // 2. 按可信内部标识读取账号当前快照。
                     UserAccountEntity locked =
-                            authRepositories.userAccount.findById(current.id()).entity();
+                            userAccountRepository.findById(current.id()).entity();
                     // 3. 持久化当前完整聚合，失败必须中断事务而非继续提交。
                     Transactions.require(
-                            authWrites.saveUserAccount(
+                            authWriteAppService.saveUserAccount(
                                     new UserAccountAggregate(locked).resetPassword(hash)));
                     // 4. 逐项处理当前数据窗口，并在循环中核对可用状态与停止条件。
                     for (var active :
-                            authRepositories.loginSession.query(
+                            loginSessionRepository.query(
                                     QueryValue.all("id", 1000)
                                             .where("user_id", "EQ", current.id())
                                             .where("status", "EQ", "ACTIVE"))) {
                         Transactions.require(
-                                authWrites.saveLoginSession(
+                                authWriteAppService.saveLoginSession(
                                         new LoginSessionAggregate(active.entity())
                                                 .revoke("PASSWORD_RESET")));
                     }
@@ -705,7 +724,7 @@ public final class AuthActionOperations {
                     return null;
                 });
         // 6. 将已读取快照转为本用例视图，凭据与内部字段按协议隔离。
-        return authApplicationAssembler.account(owner);
+        return authAppAssembler.account(owner);
     }
 
     private static LocalDateTime now() {

@@ -1,11 +1,11 @@
 package com.hellotravel.application.tx;
 
-import com.hellotravel.application.auth.support.AuthRepositories;
-import com.hellotravel.application.auth.support.AuthWrites;
+import com.hellotravel.application.auth.AuthWriteAppService;
 import com.hellotravel.application.exception.ApplicationErrorCode;
 import com.hellotravel.application.exception.ApplicationException;
 import com.hellotravel.domain.auth.model.aggregate.UserAccountAggregate;
 import com.hellotravel.domain.auth.model.entity.UserAccountEntity;
+import com.hellotravel.domain.auth.repository.UserAccountRepository;
 
 import org.springframework.dao.TransientDataAccessException;
 import org.springframework.stereotype.Component;
@@ -24,16 +24,16 @@ import java.util.function.Supplier;
 public final class Transactions {
 
     private final PlatformTransactionManager manager;
-    private final AuthRepositories authRepositories;
-    private final AuthWrites authWrites;
+    private final UserAccountRepository userAccountRepository;
+    private final AuthWriteAppService authWriteAppService;
 
     public Transactions(
-            AuthWrites authWrites,
+            AuthWriteAppService authWriteAppService,
             PlatformTransactionManager manager,
-            AuthRepositories authRepositories) {
+            UserAccountRepository userAccountRepository) {
         this.manager = manager;
-        this.authWrites = authWrites;
-        this.authRepositories = authRepositories;
+        this.authWriteAppService = authWriteAppService;
+        this.userAccountRepository = userAccountRepository;
     }
 
     /**
@@ -90,7 +90,7 @@ public final class Transactions {
                         () -> {
                             // 1. 按可信内部标识读取账号当前快照。
                             UserAccountAggregate stored =
-                                    authRepositories.userAccount.findById(userId);
+                                    userAccountRepository.findById(userId);
                             // 2. 账号不存在或不活动时拒绝进入写事务，防止停用后的请求继续提交。
                             if (stored == null || !"ACTIVE".equals(stored.entity().status())) {
                                 throw new ApplicationException(ApplicationErrorCode.UNAUTHORIZED);
@@ -101,7 +101,7 @@ public final class Transactions {
                                             .advanceSync()
                                             .entity();
                             // 4. 持久化当前完整聚合，失败必须中断事务而非继续提交。
-                            require(authWrites.saveUserAccount(new UserAccountAggregate(next)));
+                            require(authWriteAppService.saveUserAccount(new UserAccountAggregate(next)));
                             // 5. 提供本事务或回调的处理结果，完成责任由所属外层流程承接。
                             return operation.apply(next);
                         });

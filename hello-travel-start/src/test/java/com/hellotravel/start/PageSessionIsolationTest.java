@@ -7,16 +7,15 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
-import com.hellotravel.application.auth.assembler.AuthApplicationAssembler;
+import com.hellotravel.application.auth.assembler.AuthAppAssembler;
 import com.hellotravel.application.auth.command.AuthCommand;
-import com.hellotravel.application.auth.support.AuthRepositories;
-import com.hellotravel.application.auth.support.AuthWrites;
+import com.hellotravel.application.auth.AuthWriteAppService;
 import com.hellotravel.application.auth.usecase.AuthActionOperations;
 import com.hellotravel.application.exception.ApplicationErrorCode;
 import com.hellotravel.application.exception.ApplicationException;
-import com.hellotravel.application.auth.security.adaptor.SecurityOutAdaptor;
-import com.hellotravel.application.auth.security.assembler.SecurityCommandAssembler;
-import com.hellotravel.application.chat.sync.support.SyncEventPublisher;
+import com.hellotravel.application.auth.adaptor.SecurityAdaptor;
+import com.hellotravel.application.auth.assembler.SecurityCommandAppAssembler;
+import com.hellotravel.application.chat.support.SyncEventPublisher;
 import com.hellotravel.application.tx.Transactions;
 import com.hellotravel.common.identity.Ids;
 import com.hellotravel.domain.auth.model.aggregate.LoginSessionAggregate;
@@ -63,26 +62,27 @@ class PageSessionIsolationTest {
                         java.time.LocalDateTime.now(java.time.ZoneOffset.UTC),
                         0L);
         when(loginSessions.query(any())).thenReturn(List.of(new LoginSessionAggregate(next)));
-        var repositories =
-                new AuthRepositories(
-                        mock(UserAccountRepository.class),
-                        mock(DeviceRepository.class),
-                        loginSessions,
-                        mock(EmailChallengeRepository.class),
-                        mock(RefreshReceiptRepository.class));
+        var userAccounts = mock(UserAccountRepository.class);
+        var devices = mock(DeviceRepository.class);
+        var challenges = mock(EmailChallengeRepository.class);
+        var refreshReceipts = mock(RefreshReceiptRepository.class);
         var transactions = mock(Transactions.class);
-        var writes = mock(AuthWrites.class);
+        var writes = mock(AuthWriteAppService.class);
         var events = mock(SyncEventPublisher.class);
-        var security = mock(SecurityOutAdaptor.class);
+        var security = mock(SecurityAdaptor.class);
         var operations =
                 new AuthActionOperations(
                         writes,
-                        repositories,
+                        userAccounts,
+                        devices,
+                        loginSessions,
+                        challenges,
+                        refreshReceipts,
                         transactions,
                         events,
                         security,
-                        new AuthApplicationAssembler(),
-                        new SecurityCommandAssembler());
+                        new AuthAppAssembler(),
+                        new SecurityCommandAppAssembler());
         var command =
                 new AuthCommand(
                         "REFRESH",

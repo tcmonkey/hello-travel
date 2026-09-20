@@ -14,6 +14,10 @@
         </dependency>
         <dependency>
             <groupId>com.hellotravel</groupId>
+            <artifactId>hello-travel-util</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.hellotravel</groupId>
             <artifactId>hello-travel-model</artifactId>
         </dependency>
         <dependency>

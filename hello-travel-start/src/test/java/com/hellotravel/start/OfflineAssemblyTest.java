@@ -2,10 +2,10 @@ package com.hellotravel.start;
 
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
-import com.hellotravel.application.auth.service.AuthApplication;
-import com.hellotravel.application.knowledge.service.KnowledgeApplication;
-import com.hellotravel.application.chat.travel.planning.graph.TravelPlanningGraph;
-import com.hellotravel.application.chat.travel.service.TravelApplication;
+import com.hellotravel.application.auth.AuthAppService;
+import com.hellotravel.application.knowledge.KnowledgeAppService;
+import com.hellotravel.application.chat.travel.TravelPlanningGraph;
+import com.hellotravel.application.chat.travel.TravelAppService;
 import com.hellotravel.domain.auth.service.AuthDomainService;
 import com.hellotravel.domain.chat.service.ChatDomainService;
 import com.hellotravel.domain.knowledge.service.KnowledgeDomainService;
@@ -62,8 +62,8 @@ class OfflineAssemblyTest {
         assertNotNull(context.getBean(SyncDomainService.class));
         assertNotNull(context.getBean(TravelPlanDomainService.class));
         assertNotNull(context.getBean(TravelPlanningGraph.class));
-        assertNotNull(context.getBean(TravelApplication.class));
-        assertNotNull(context.getBean(AuthApplication.class));
-        assertNotNull(context.getBean(KnowledgeApplication.class));
+        assertNotNull(context.getBean(TravelAppService.class));
+        assertNotNull(context.getBean(AuthAppService.class));
+        assertNotNull(context.getBean(KnowledgeAppService.class));
     }
 }

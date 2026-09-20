@@ -15,37 +15,37 @@ import static org.mockito.Mockito.when;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hellotravel.adaptor.exception.AdaptorErrorCode;
 import com.hellotravel.adaptor.exception.AdaptorException;
-import com.hellotravel.adaptor.auth.input.assembler.AuthInputAssembler;
-import com.hellotravel.adaptor.auth.input.controller.AuthController;
-import com.hellotravel.adaptor.chat.input.assembler.ChatInputAssembler;
-import com.hellotravel.adaptor.knowledge.input.assembler.KnowledgeInputAssembler;
-import com.hellotravel.adaptor.knowledge.input.controller.KnowledgeController;
-import com.hellotravel.adaptor.web.support.AuthCookies;
-import com.hellotravel.adaptor.web.support.HttpResults;
-import com.hellotravel.adaptor.knowledge.output.vector.converter.VectorOutputConverter;
-import com.hellotravel.adaptor.chat.output.dialogue.LangChain4jTravelDialogueOutAdaptor;
-import com.hellotravel.adaptor.chat.output.dialogue.TravelDialogueAiService;
-import com.hellotravel.adaptor.chat.output.intent.LangChain4jTravelIntentRecognitionOutAdaptor;
-import com.hellotravel.adaptor.chat.output.intent.TravelIntentAiService;
-import com.hellotravel.adaptor.chat.output.support.converter.ChatModelOutputConverter;
-import com.hellotravel.application.auth.result.AuthResult;
-import com.hellotravel.application.auth.service.AuthApplication;
+import com.hellotravel.adaptor.auth.input.assembler.AuthAssembler;
+import com.hellotravel.adaptor.auth.input.AuthController;
+import com.hellotravel.adaptor.chat.input.assembler.ChatAssembler;
+import com.hellotravel.adaptor.knowledge.input.assembler.KnowledgeAssembler;
+import com.hellotravel.adaptor.knowledge.input.KnowledgeController;
+import com.hellotravel.adaptor.knowledge.output.VectorOutAdaptorImpl;
+import com.hellotravel.adaptor.common.AuthCookies;
+import com.hellotravel.adaptor.common.HttpResults;
+import com.hellotravel.adaptor.knowledge.output.converter.VectorConverter;
+import com.hellotravel.adaptor.chat.output.TravelDialogueAdaptorImpl;
+import com.hellotravel.adaptor.chat.output.aiservice.TravelDialogueAiService;
+import com.hellotravel.adaptor.chat.output.TravelIntentRecognitionAdaptorImpl;
+import com.hellotravel.adaptor.chat.output.aiservice.TravelIntentAiService;
+import com.hellotravel.adaptor.chat.output.converter.ChatModelConverter;
+import com.hellotravel.application.auth.result.AuthAppResult;
+import com.hellotravel.application.auth.AuthAppService;
 import com.hellotravel.application.exception.ApplicationErrorCode;
 import com.hellotravel.application.exception.ApplicationException;
-import com.hellotravel.application.knowledge.assembler.KnowledgeApplicationAssembler;
+import com.hellotravel.application.knowledge.assembler.KnowledgeAppAssembler;
 import com.hellotravel.application.knowledge.policy.KnowledgeIndexPolicy;
-import com.hellotravel.application.knowledge.vector.command.VectorCommand;
-import com.hellotravel.application.knowledge.vector.command.VectorItemCommand;
-import com.hellotravel.application.knowledge.service.KnowledgeApplication;
-import com.hellotravel.application.chat.memory.assembler.ContextApplicationAssembler;
+import com.hellotravel.application.knowledge.command.VectorCommand;
+import com.hellotravel.application.knowledge.command.VectorItemCommand;
+import com.hellotravel.application.knowledge.KnowledgeAppService;
+import com.hellotravel.application.chat.assembler.MemoryContextAppAssembler;
 import com.hellotravel.application.chat.context.policy.ChatContextPolicy;
-import com.hellotravel.application.chat.memory.context.MemoryContextService;
-import com.hellotravel.application.chat.support.ChatRepositories;
-import com.hellotravel.application.chat.travel.context.TravelContextService;
-import com.hellotravel.application.chat.travel.context.TravelConversationContext;
-import com.hellotravel.application.chat.travel.dialogue.command.TravelDialogueCommand;
-import com.hellotravel.application.chat.travel.execution.RunExecutionService;
-import com.hellotravel.application.chat.travel.intent.assembler.TravelIntentAssembler;
+import com.hellotravel.application.chat.MemoryContextAppService;
+import com.hellotravel.application.chat.TravelContextService;
+import com.hellotravel.application.chat.support.TravelConversationContext;
+import com.hellotravel.application.chat.command.TravelDialogueCommand;
+import com.hellotravel.application.exception.RunExecutionService;
+import com.hellotravel.application.chat.assembler.TravelIntentAppAssembler;
 import com.hellotravel.application.support.ApplicationFailures;
 import com.hellotravel.client.auth.request.AuthRequest;
 import com.hellotravel.client.chat.request.ChatRequest;
@@ -54,8 +54,10 @@ import com.hellotravel.common.result.Result;
 import com.hellotravel.domain.exception.DomainErrorCode;
 import com.hellotravel.domain.exception.DomainException;
 import com.hellotravel.domain.chat.model.entity.MessageEntity;
+import com.hellotravel.domain.chat.repository.MessageRepository;
 import com.hellotravel.model.chat.ChatModelStage;
 
+import com.hellotravel.util.JsonUtil;
 import jakarta.servlet.http.Cookie;
 
 import org.junit.jupiter.api.AfterEach;
@@ -95,9 +97,9 @@ class MappingBoundaryTest {
         http.addHeader("ht_refresh", "forged-header");
         http.setCookies(new Cookie("ht_refresh", "real-cookie"));
         var command =
-                new AuthInputAssembler()
+                new AuthAssembler()
                         .toCommand(
-                                new AuthInputAssembler().action("refresh"),
+                                new AuthAssembler().action("refresh"),
                                 new AuthRequest(null, null, null, null, null),
                                 http,
                                 "signed-device");
@@ -114,18 +116,18 @@ class MappingBoundaryTest {
         var http = new MockHttpServletRequest();
         var auth =
                 assertThrows(
-                        AdaptorException.class, () -> new AuthInputAssembler().action("unknown"));
+                        AdaptorException.class, () -> new AuthAssembler().action("unknown"));
         var chat =
                 assertThrows(
                         AdaptorException.class,
                         () ->
-                                new ChatInputAssembler()
+                                new ChatAssembler()
                                         .toCommand("unknown", chatRequest(null, null), http));
         var knowledge =
                 assertThrows(
                         AdaptorException.class,
                         () ->
-                                new KnowledgeInputAssembler()
+                                new KnowledgeAssembler()
                                         .toCommand(
                                                 "unknown",
                                                 new KnowledgeRequest(null, null, null, null),
@@ -141,8 +143,8 @@ class MappingBoundaryTest {
         http.setAttribute("ht.user", 23L);
         http.setAttribute("ht.session", 47L);
         http.addHeader("ht.user", "999");
-        var first = new ChatInputAssembler().toCommand("history", chatRequest(null, null), http);
-        var next = new ChatInputAssembler().toCommand("history", chatRequest(30L, 20), http);
+        var first = new ChatAssembler().toCommand("history", chatRequest(null, null), http);
+        var next = new ChatAssembler().toCommand("history", chatRequest(30L, 20), http);
         assertEquals(23L, first.userId());
         assertEquals(47L, first.sessionId());
         assertEquals(0, first.after());
@@ -159,7 +161,7 @@ class MappingBoundaryTest {
         http.addHeader("X-Session-ID", "old-page");
         http.addHeader("Authorization", "Bearer old-access");
         http.setCookies(new Cookie("ht_refresh", "new-page-refresh"));
-        var check = new AuthInputAssembler().check(http);
+        var check = new AuthAssembler().check(http);
         assertEquals("old-page", check.expectedSid());
         assertEquals("old-access", check.accessToken());
         assertNull(check.refreshToken());
@@ -169,7 +171,7 @@ class MappingBoundaryTest {
     @Test
     void authenticationResponseExcludesInternalIdsAndRefreshSecret() throws Exception {
         var result =
-                new AuthResult(
+                new AuthAppResult(
                         11L,
                         "public",
                         "a@example.com",
@@ -179,7 +181,7 @@ class MappingBoundaryTest {
                         "refresh-secret",
                         "csrf",
                         null);
-        var json = new ObjectMapper().valueToTree(new AuthInputAssembler().toResponse(result));
+        var json = new ObjectMapper().valueToTree(new AuthAssembler().toResponse(result));
         assertEquals(6, json.size());
         assertTrue(json.path("userId").isTextual());
         assertEquals("public", json.path("userId").asText());
@@ -193,13 +195,13 @@ class MappingBoundaryTest {
         var http = new MockHttpServletRequest();
         var response = new MockHttpServletResponse();
         RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(http, response));
-        var application = mock(AuthApplication.class);
+        var application = mock(AuthAppService.class);
         var cookies = mock(AuthCookies.class);
         when(cookies.device(http, response)).thenReturn("device");
         when(application.authenticate(any()))
                 .thenReturn(Result.failure(DomainErrorCode.CONTEXT_LIMIT));
         var result =
-                new AuthController(application, cookies, new AuthInputAssembler())
+                new AuthController(application, cookies, new AuthAssembler())
                         .authenticate(
                                 "login",
                                 new AuthRequest("a@example.com", "password", null, null, null),
@@ -237,9 +239,9 @@ class MappingBoundaryTest {
         var file = mock(MultipartFile.class);
         when(file.isEmpty()).thenReturn(false);
         when(file.getSize()).thenReturn(10L * 1024 * 1024 + 1);
-        var application = mock(KnowledgeApplication.class);
+        var application = mock(KnowledgeAppService.class);
         var result =
-                new KnowledgeController(application, new KnowledgeInputAssembler())
+                new KnowledgeController(application, new KnowledgeAssembler())
                         .upload(file, null, new MockHttpServletRequest());
         assertFalse(result.success());
         assertEquals("INVALID", result.code());
@@ -255,7 +257,7 @@ class MappingBoundaryTest {
                 assertThrows(
                                 AdaptorException.class,
                                 () ->
-                                        new KnowledgeInputAssembler()
+                                        new KnowledgeAssembler()
                                                 .upload(
                                                         new MockMultipartFile("file", new byte[0]),
                                                         null,
@@ -268,7 +270,7 @@ class MappingBoundaryTest {
                 AdaptorErrorCode.FAILED,
                 assertThrows(
                                 AdaptorException.class,
-                                () -> new KnowledgeInputAssembler().upload(file, null, http))
+                                () -> new KnowledgeAssembler().upload(file, null, http))
                         .errorCode());
     }
 
@@ -281,16 +283,16 @@ class MappingBoundaryTest {
                         null,
                         0L,
                         List.of(),
-                        java.util.Collections.nCopies(VectorOutputConverter.DIMENSIONS, 0.1F));
+                        java.util.Collections.nCopies(VectorConverter.DIMENSIONS, 0.1F));
         assertEquals(
                 "owner_user_id == \"" + OWNER + "\"",
-                new VectorOutputConverter()
-                        .search(VectorOutputConverter.COLLECTION, search)
+                new VectorConverter()
+                        .search(VectorConverter.COLLECTION, search)
                         .getFilter());
         var cleanup = new VectorCommand("RECONCILE", OWNER, DOCUMENT, 3L, List.of(), null);
         var filter =
-                new VectorOutputConverter()
-                        .delete(VectorOutputConverter.COLLECTION, cleanup)
+                new VectorConverter()
+                        .delete(VectorConverter.COLLECTION, cleanup)
                         .getFilter();
         assertTrue(filter.contains(OWNER));
         assertTrue(filter.contains(DOCUMENT));
@@ -299,7 +301,7 @@ class MappingBoundaryTest {
                 new VectorCommand("DELETE", OWNER + "\" or true", DOCUMENT, 3L, List.of(), null);
         assertThrows(
                 AdaptorException.class,
-                () -> new VectorOutputConverter().delete(VectorOutputConverter.COLLECTION, forged));
+                () -> new VectorConverter().delete(VectorConverter.COLLECTION, forged));
     }
 
     @Test
@@ -311,11 +313,11 @@ class MappingBoundaryTest {
                         2L,
                         0,
                         "a".repeat(64),
-                        java.util.Collections.nCopies(VectorOutputConverter.DIMENSIONS, 0.1F));
+                        java.util.Collections.nCopies(VectorConverter.DIMENSIONS, 0.1F));
         var cross = new VectorCommand("UPSERT", OWNER, DOCUMENT, 2L, List.of(item), null);
         assertThrows(
                 AdaptorException.class,
-                () -> new VectorOutputConverter().upsert(VectorOutputConverter.COLLECTION, cross));
+                () -> new VectorConverter().upsert(VectorConverter.COLLECTION, cross));
         var bad =
                 new VectorCommand(
                         "SEARCH",
@@ -323,10 +325,10 @@ class MappingBoundaryTest {
                         null,
                         0L,
                         List.of(),
-                        java.util.Collections.nCopies(VectorOutputConverter.DIMENSIONS, Float.NaN));
+                        java.util.Collections.nCopies(VectorConverter.DIMENSIONS, Float.NaN));
         assertThrows(
                 AdaptorException.class,
-                () -> new VectorOutputConverter().search(VectorOutputConverter.COLLECTION, bad));
+                () -> new VectorConverter().search(VectorConverter.COLLECTION, bad));
     }
 
     @Test
@@ -351,11 +353,11 @@ class MappingBoundaryTest {
         travelContext.load("景德镇", List.of(message), "trusted-rule", "");
         var contextService =
                 new TravelContextService(
-                        mock(ChatRepositories.class),
+                        mock(MessageRepository.class),
                         mock(RunExecutionService.class),
-                        mock(MemoryContextService.class),
+                        mock(MemoryContextAppService.class),
                         mock(ChatContextPolicy.class),
-                        mock(ContextApplicationAssembler.class));
+                        mock(MemoryContextAppAssembler.class));
         String context = contextService.trustedContext(travelContext);
         assertTrue(context.contains("会话摘要：trusted-rule"));
         assertTrue(context.contains("历史-USER: 景德镇"));
@@ -364,10 +366,10 @@ class MappingBoundaryTest {
 
     @Test
     void invalidAuthRouteDoesNotIssueDeviceOrCallApplication() {
-        var application = mock(AuthApplication.class);
+        var application = mock(AuthAppService.class);
         var cookies = mock(AuthCookies.class);
         var result =
-                new AuthController(application, cookies, new AuthInputAssembler())
+                new AuthController(application, cookies, new AuthAssembler())
                         .authenticate(
                                 "unknown",
                                 new AuthRequest(null, null, null, null, null),
@@ -390,8 +392,8 @@ class MappingBoundaryTest {
         assertTrue(budget.fits());
         assertFalse(policy.budget(15001).fits());
         var initial =
-                com.hellotravel.application.support.Json.read(
-                        new ContextApplicationAssembler().initial(policy));
+                JsonUtil.read(
+                        new MemoryContextAppAssembler().initial(policy));
         assertEquals(20000, initial.path("window").asInt());
         assertEquals(policy.outputReserve(), initial.path("outputReserve").asInt());
         assertEquals(2000, initial.path("safetyReserve").asInt());
@@ -421,10 +423,10 @@ class MappingBoundaryTest {
         var parsed =
                 new com.hellotravel.model.knowledge.FileDO(
                         "file-key", "text/plain", new byte[] {2}, "policy");
-        var document = new KnowledgeApplicationAssembler().received(command, parsed).entity();
+        var document = new KnowledgeAppAssembler().received(command, parsed).entity();
         assertEquals(KnowledgeIndexPolicy.model(), document.embeddingModel());
         assertEquals(KnowledgeIndexPolicy.dimensions(), document.embeddingDimension());
-        assertEquals(VectorOutputConverter.COLLECTION, document.collectionName());
+        assertEquals(VectorConverter.COLLECTION, document.collectionName());
         assertEquals(document.createdAt(), document.updatedAt());
     }
 
@@ -455,8 +457,8 @@ class MappingBoundaryTest {
     void outputBoundaryKeepsConverterClassificationAndRejectsBeforeIO() {
         var environment = mock(org.springframework.core.env.Environment.class);
         var vector =
-                new com.hellotravel.adaptor.knowledge.output.vector.VectorOutAdaptorImpl(
-                        environment, new VectorOutputConverter());
+                new VectorOutAdaptorImpl(
+                        environment, new VectorConverter());
         var result =
                 vector.index(
                         new VectorCommand("DELETE", "forged-id", DOCUMENT, 1L, List.of(), null));
@@ -467,10 +469,10 @@ class MappingBoundaryTest {
                         .withProperty("DASHSCOPE_API_KEY", "unused-placeholder");
         var aiService = mock(TravelIntentAiService.class);
         var agent =
-                new LangChain4jTravelIntentRecognitionOutAdaptor(
+                new TravelIntentRecognitionAdaptorImpl(
                         aiService, new ChatContextPolicy(modelEnvironment));
         var rejected =
-                agent.recognize(new TravelIntentAssembler().command("X".repeat(32768)));
+                agent.recognize(new TravelIntentAppAssembler().command("X".repeat(32768)));
         assertEquals("CONTEXT_LIMIT", rejected.code());
         verifyNoInteractions(aiService);
     }
@@ -482,10 +484,10 @@ class MappingBoundaryTest {
                         .withProperty("DASHSCOPE_API_KEY", "unused-placeholder");
         var policy = new ChatContextPolicy(environment);
         var aiService = mock(TravelIntentAiService.class);
-        var provider = new LangChain4jTravelIntentRecognitionOutAdaptor(aiService, policy);
+        var provider = new TravelIntentRecognitionAdaptorImpl(aiService, policy);
         assertEquals(
                 "CONTEXT_LIMIT",
-                provider.recognize(new TravelIntentAssembler().command("X".repeat(32768))).code());
+                provider.recognize(new TravelIntentAppAssembler().command("X".repeat(32768))).code());
         verifyNoInteractions(aiService);
         var small =
                 new ChatContextPolicy(
@@ -500,10 +502,10 @@ class MappingBoundaryTest {
                 .thenReturn(reactor.core.publisher.Flux.just("你", "好"));
         var latest = new java.util.concurrent.atomic.AtomicReference<String>();
         var agent =
-                new LangChain4jTravelDialogueOutAdaptor(
+                new TravelDialogueAdaptorImpl(
                         aiService,
                         new ChatContextPolicy(new org.springframework.mock.env.MockEnvironment()),
-                        new ChatModelOutputConverter(),
+                        new ChatModelConverter(),
                         new org.springframework.mock.env.MockEnvironment());
 
         var result =
