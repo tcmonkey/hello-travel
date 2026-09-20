@@ -4,14 +4,14 @@ import com.hellotravel.application.exception.ApplicationErrorCode;
 import com.hellotravel.application.exception.ApplicationException;
 import com.hellotravel.application.knowledge.command.KnowledgeCommand;
 import com.hellotravel.application.knowledge.result.KnowledgeAppResult;
-import com.hellotravel.application.knowledge.usecase.KnowledgeActionOperations;
 import com.hellotravel.application.support.ApplicationFailures;
 import com.hellotravel.common.result.Result;
 
 import org.springframework.stereotype.Service;
 
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
-import java.util.function.Function;
 
 /**
  * 承载KnowledgeApplication的受控业务契约。
@@ -26,21 +26,22 @@ public final class KnowledgeAppService {
      *
      * @author AIGenerator
      */
-    private final Map<String, Function<KnowledgeCommand, KnowledgeAppResult>> actions;
+    private final Map<String, KnowledgeActionHandler> actions;
 
     /**
      * 注册知识文档可用动作。
      *
-     * @param operations 知识文档操作集合
+     * @param candidates Spring发现的知识库动作应用
      * @author AIGenerator
      */
-    public KnowledgeAppService(KnowledgeActionOperations operations) {
-        this.actions = Map.of(
-                "LIST", operations::list,
-                "READ", operations::read,
-                "UPLOAD", operations::upload,
-                "RETRY", operations::retry,
-                "DELETE", operations::delete);
+    public KnowledgeAppService(List<KnowledgeActionHandler> candidates) {
+        Map<String, KnowledgeActionHandler> registered = new HashMap<>();
+        for (KnowledgeActionHandler candidate : candidates) {
+            if (registered.putIfAbsent(candidate.action(), candidate) != null) {
+                throw new IllegalStateException("duplicate knowledge action: " + candidate.action());
+            }
+        }
+        this.actions = Map.copyOf(registered);
     }
 
     /**
@@ -58,12 +59,12 @@ public final class KnowledgeAppService {
                 throw new ApplicationException(ApplicationErrorCode.INVALID);
             }
             // 2. 未注册动作立即拒绝，防止默认分支改变文档状态。
-            Function<KnowledgeCommand, KnowledgeAppResult> application = actions.get(knowledgeCommand.action());
+            KnowledgeActionHandler application = actions.get(knowledgeCommand.action());
             if (application == null) {
                 throw new ApplicationException(ApplicationErrorCode.INVALID);
             }
             // 3. 委托唯一用例执行。
-            KnowledgeAppResult result = application.apply(knowledgeCommand);
+            KnowledgeAppResult result = application.execute(knowledgeCommand);
             return Result.success(result);
         } catch (Exception exception) {
             return ApplicationFailures.capture(exception);

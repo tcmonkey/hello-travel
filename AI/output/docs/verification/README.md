@@ -34,4 +34,4 @@ vertical-summary.json是当前范围，vertical-*.log/CSV与vertical-junit为原
 [domain-service-naming.md](domain-service-naming.md)记录SRC-050的业务职责命名、构建、边界审计、DDD快照和solo发行检查。此前vertical-*清单是当时的历史位置快照，不冒充本轮的类型名称清单。
 
 
-`current-method-inventory.csv`是SRC-061后当前源码清单；`vertical-*`仅保留SRC-030/031当轮历史证据，其中已删除类型不得用于描述当前结构。
+`current-method-inventory.csv`是SRC-062后当前源码清单；`vertical-*`仅保留SRC-030/031当轮历史证据，其中已删除类型不得用于描述当前结构。

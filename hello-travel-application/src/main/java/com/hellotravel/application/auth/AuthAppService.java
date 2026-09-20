@@ -2,7 +2,6 @@ package com.hellotravel.application.auth;
 
 import com.hellotravel.application.auth.command.AuthCommand;
 import com.hellotravel.application.auth.result.AuthAppResult;
-import com.hellotravel.application.auth.usecase.AuthActionAppInterface;
 import com.hellotravel.application.exception.ApplicationErrorCode;
 import com.hellotravel.application.exception.ApplicationException;
 import com.hellotravel.application.support.ApplicationFailures;
@@ -27,7 +26,7 @@ public final class AuthAppService {
      *
      * @author AIGenerator
      */
-    private final Map<String, AuthActionAppInterface> applications;
+    private final Map<String, AuthActionHandler> applications;
 
     /**
      * 注册全部认证动作应用并拒绝冲突动作。
@@ -35,10 +34,10 @@ public final class AuthAppService {
      * @param candidates Spring发现的动作应用
      * @author AIGenerator
      */
-    public AuthAppService(List<AuthActionAppInterface> candidates) {
+    public AuthAppService(List<AuthActionHandler> candidates) {
         // 1. 建立受Spring管理的认证动作到用例映射，拒绝重复动作避免启动后路由歧义。
-        Map<String, AuthActionAppInterface> registered = new HashMap<>();
-        for (AuthActionAppInterface candidate : candidates) {
+        Map<String, AuthActionHandler> registered = new HashMap<>();
+        for (AuthActionHandler candidate : candidates) {
             if (registered.putIfAbsent(candidate.action(), candidate) != null) {
                 throw new IllegalStateException("duplicate auth action: " + candidate.action());
             }
@@ -57,7 +56,7 @@ public final class AuthAppService {
     public Result<AuthAppResult> authenticate(AuthCommand authCommand) {
         try {
             // 1. 读取动作对应的策略，不允许未知动作落入默认业务逻辑。
-            AuthActionAppInterface application = applications.get(authCommand.action());
+            AuthActionHandler application = applications.get(authCommand.action());
             // 2. 缺少处理器时返回应用层参数错误，保护策略边界。
             if (application == null) {
                 throw new ApplicationException(ApplicationErrorCode.INVALID);

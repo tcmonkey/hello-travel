@@ -10,7 +10,7 @@ import static org.mockito.Mockito.when;
 import com.hellotravel.application.auth.assembler.AuthAppAssembler;
 import com.hellotravel.application.auth.assembler.AuthDomainParamAssembler;
 import com.hellotravel.application.auth.command.AuthCommand;
-import com.hellotravel.application.auth.usecase.AuthActionOperations;
+import com.hellotravel.application.auth.RefreshAppService;
 import com.hellotravel.application.exception.ApplicationErrorCode;
 import com.hellotravel.application.exception.ApplicationException;
 import com.hellotravel.application.auth.adaptor.SecurityAdaptor;
@@ -71,8 +71,8 @@ class PageSessionIsolationTest {
         var authDomainService = mock(AuthDomainService.class);
         var events = mock(SyncEventPublisher.class);
         var security = mock(SecurityAdaptor.class);
-        var operations =
-                new AuthActionOperations(
+        var refreshAppService =
+                new RefreshAppService(
                         authDomainService,
                         new AuthDomainParamAssembler(),
                         userAccounts,
@@ -99,7 +99,7 @@ class PageSessionIsolationTest {
                         "refresh",
                         "old-csrf",
                         "test");
-        var rejected = assertThrows(ApplicationException.class, () -> operations.refresh(command));
+        var rejected = assertThrows(ApplicationException.class, () -> refreshAppService.execute(command));
         assertEquals(ApplicationErrorCode.SESSION_REPLACED, rejected.errorCode());
         verifyNoInteractions(transactions, authDomainService, events, security);
     }
