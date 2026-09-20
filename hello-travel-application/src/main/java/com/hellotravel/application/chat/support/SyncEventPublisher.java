@@ -1,5 +1,7 @@
 package com.hellotravel.application.chat.support;
 
+import com.hellotravel.application.chat.assembler.SyncDomainParamAssembler;
+import com.hellotravel.application.support.ApplicationFailures;
 import com.hellotravel.util.JsonUtil;
 import com.hellotravel.application.tx.Transactions;
 import com.hellotravel.domain.auth.model.entity.UserAccountEntity;
@@ -7,6 +9,7 @@ import com.hellotravel.domain.sync.model.aggregate.OutboxEventAggregate;
 import com.hellotravel.domain.sync.model.aggregate.SyncEventAggregate;
 import com.hellotravel.domain.sync.model.entity.OutboxEventEntity;
 import com.hellotravel.domain.sync.model.entity.SyncEventEntity;
+import com.hellotravel.domain.sync.service.SyncDomainService;
 
 import org.springframework.stereotype.Component;
 
@@ -18,10 +21,14 @@ import org.springframework.stereotype.Component;
 @Component
 public final class SyncEventPublisher {
 
-    private final SyncWrites syncWrites;
+    private final SyncDomainService syncDomainService;
+    private final SyncDomainParamAssembler syncDomainParamAssembler;
 
-    public SyncEventPublisher(SyncWrites syncWrites) {
-        this.syncWrites = syncWrites;
+    public SyncEventPublisher(
+            SyncDomainService syncDomainService,
+            SyncDomainParamAssembler syncDomainParamAssembler) {
+        this.syncDomainService = syncDomainService;
+        this.syncDomainParamAssembler = syncDomainParamAssembler;
     }
 
     /**
@@ -56,7 +63,10 @@ public final class SyncEventPublisher {
                                 java.time.LocalDateTime.now(java.time.ZoneOffset.UTC).plusHours(72))
                         .entity();
         // 2. 持久化当前完整聚合，失败必须中断事务而非继续提交。
-        Transactions.require(syncWrites.saveSyncEvent(new SyncEventAggregate(event)));
+        Transactions.require(ApplicationFailures.required(
+                                syncDomainService.saveSyncEvent(
+                                        syncDomainParamAssembler.syncEvent(new SyncEventAggregate(event))))
+                        .saved());
         // 3. 同事务登记可恢复后台任务，外部调用在提交之后执行。
         outbox(
                 account.id(),
@@ -87,6 +97,9 @@ public final class SyncEventPublisher {
                                 java.time.LocalDateTime.now(java.time.ZoneOffset.UTC))
                         .entity();
         // 2. 持久化当前完整聚合，失败必须中断事务而非继续提交。
-        Transactions.require(syncWrites.saveOutboxEvent(new OutboxEventAggregate(event)));
+        Transactions.require(ApplicationFailures.required(
+                                syncDomainService.saveOutboxEvent(
+                                        syncDomainParamAssembler.outboxEvent(new OutboxEventAggregate(event))))
+                        .saved());
     }
 }

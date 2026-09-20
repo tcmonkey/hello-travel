@@ -6,12 +6,14 @@ import com.hellotravel.application.knowledge.adaptor.FileOutAdaptor;
 import com.hellotravel.application.knowledge.assembler.FileCommandAppAssembler;
 import com.hellotravel.application.knowledge.adaptor.VectorOutAdaptor;
 import com.hellotravel.application.knowledge.assembler.KnowledgeEmbeddingAppAssembler;
+import com.hellotravel.application.knowledge.assembler.KnowledgeDomainParamAssembler;
 import com.hellotravel.application.knowledge.assembler.VectorCommandAppAssembler;
 import com.hellotravel.application.knowledge.command.VectorItemCommand;
 import com.hellotravel.application.knowledge.adaptor.KnowledgeEmbeddingAgent;
 import com.hellotravel.util.JsonUtil;
 import com.hellotravel.application.chat.support.SyncEventPublisher;
 import com.hellotravel.application.tx.Transactions;
+import com.hellotravel.application.support.ApplicationFailures;
 import com.hellotravel.common.identity.Ids;
 import com.hellotravel.domain.knowledge.model.aggregate.IndexJobAggregate;
 import com.hellotravel.domain.knowledge.model.aggregate.KnowledgeChunkAggregate;
@@ -21,6 +23,7 @@ import com.hellotravel.domain.knowledge.model.entity.KnowledgeDocumentEntity;
 import com.hellotravel.domain.knowledge.repository.IndexJobRepository;
 import com.hellotravel.domain.knowledge.repository.KnowledgeChunkRepository;
 import com.hellotravel.domain.knowledge.repository.KnowledgeDocumentRepository;
+import com.hellotravel.domain.knowledge.service.KnowledgeDomainService;
 import com.hellotravel.domain.auth.repository.UserAccountRepository;
 import com.hellotravel.domain.memory.model.value.ContextBudgetValue;
 import com.hellotravel.domain.query.model.value.QueryValue;
@@ -43,7 +46,8 @@ public final class KnowledgeIndexJobAppService {
     public final KnowledgeChunkRepository knowledgeChunk;
     public final IndexJobRepository indexJob;
     private final UserAccountRepository userAccountRepository;
-    private final KnowledgeWriteAppService knowledgeWriteAppService;
+    private final KnowledgeDomainService knowledgeDomainService;
+    private final KnowledgeDomainParamAssembler knowledgeDomainParamAssembler;
     private final Transactions transactions;
     private final SyncEventPublisher events;
     private final KnowledgeEmbeddingAgent embeddingAgent;
@@ -71,7 +75,8 @@ public final class KnowledgeIndexJobAppService {
     private final VectorCommandAppAssembler vectorCommandAppAssembler;
 
     public KnowledgeIndexJobAppService(
-            KnowledgeWriteAppService knowledgeWriteAppService,
+            KnowledgeDomainService knowledgeDomainService,
+            KnowledgeDomainParamAssembler knowledgeDomainParamAssembler,
             KnowledgeDocumentRepository knowledgeDocument,
             KnowledgeChunkRepository knowledgeChunk,
             IndexJobRepository indexJob,
@@ -84,7 +89,8 @@ public final class KnowledgeIndexJobAppService {
             FileCommandAppAssembler fileCommandAppAssembler,
             KnowledgeEmbeddingAppAssembler embeddingAssembler,
             VectorCommandAppAssembler vectorCommandAppAssembler) {
-        this.knowledgeWriteAppService = knowledgeWriteAppService;
+        this.knowledgeDomainService = knowledgeDomainService;
+        this.knowledgeDomainParamAssembler = knowledgeDomainParamAssembler;
         this.knowledgeDocument = knowledgeDocument;
         this.knowledgeChunk = knowledgeChunk;
         this.indexJob = indexJob;
@@ -195,9 +201,12 @@ public final class KnowledgeIndexJobAppService {
                                     .entity();
                     // 3. 持久化当前完整聚合，失败必须中断事务而非继续提交。
                     Transactions.require(
-                            knowledgeWriteAppService.saveKnowledgeDocument(
+                            ApplicationFailures.required(
+                                knowledgeDomainService.saveKnowledgeDocument(
+                                        knowledgeDomainParamAssembler.knowledgeDocument(
                                     new KnowledgeDocumentAggregate(doc)
-                                            .transition(next, doc.extractedText(), error)));
+                                            .transition(next, doc.extractedText(), error))))
+                        .saved());
                     // 4. 同事务记录用户提交序号与同步事件，推送不能代替持久化。
                     events.append(
                             account,
@@ -226,7 +235,10 @@ public final class KnowledgeIndexJobAppService {
                         boolean same = doc.indexGeneration().equals(old.indexGeneration());
                         var done = new IndexJobAggregate(old).complete(success, error).entity();
                         Transactions.require(
-                                knowledgeWriteAppService.saveIndexJob(new IndexJobAggregate(done)));
+                                ApplicationFailures.required(
+                                knowledgeDomainService.saveIndexJob(
+                                        knowledgeDomainParamAssembler.indexJob(new IndexJobAggregate(done))))
+                        .saved());
                         if (same
                                 && (("DELETE".equals(old.jobType()) && doc.deletedAt() != null)
                                         || doc.deletedAt() == null)) {
@@ -235,14 +247,17 @@ public final class KnowledgeIndexJobAppService {
                                             ? (success ? "DELETED" : "DELETING")
                                             : (success ? "READY" : "FAILED");
                             Transactions.require(
-                                    knowledgeWriteAppService.saveKnowledgeDocument(
+                                    ApplicationFailures.required(
+                                knowledgeDomainService.saveKnowledgeDocument(
+                                        knowledgeDomainParamAssembler.knowledgeDocument(
                                             new KnowledgeDocumentAggregate(doc)
                                                     .transition(
                                                             next,
                                                             "DELETED".equals(next)
                                                                     ? null
                                                                     : doc.extractedText(),
-                                                            error)));
+                                                            error))))
+                        .saved());
                         }
                     }
                     // 3. 同事务记录用户提交序号与同步事件，推送不能代替持久化。
@@ -309,9 +324,12 @@ public final class KnowledgeIndexJobAppService {
                                     && (!"DELETED".equals(current.status())
                                             || current.extractedText() != null)) {
                                 Transactions.require(
-                                        knowledgeWriteAppService.saveKnowledgeDocument(
+                                        ApplicationFailures.required(
+                                knowledgeDomainService.saveKnowledgeDocument(
+                                        knowledgeDomainParamAssembler.knowledgeDocument(
                                                 new KnowledgeDocumentAggregate(current)
-                                                        .transition("DELETED", null, null)));
+                                                        .transition("DELETED", null, null))))
+                        .saved());
                             }
                             // 3. 逐项处理当前数据窗口，并在循环中核对可用状态与停止条件。
                             for (var chunk :
@@ -322,8 +340,11 @@ public final class KnowledgeIndexJobAppService {
                                 var old = chunk.entity();
                                 var gone = new KnowledgeChunkAggregate(old).deleted(now()).entity();
                                 Transactions.require(
-                                        knowledgeWriteAppService.saveKnowledgeChunk(
-                                                new KnowledgeChunkAggregate(gone)));
+                                        ApplicationFailures.required(
+                                knowledgeDomainService.saveKnowledgeChunk(
+                                        knowledgeDomainParamAssembler.knowledgeChunk(
+                                                new KnowledgeChunkAggregate(gone))))
+                        .saved());
                             }
                             // 4. 同事务记录用户提交序号与同步事件，推送不能代替持久化。
                             events.append(
@@ -403,7 +424,10 @@ public final class KnowledgeIndexJobAppService {
                             var next = new IndexJobAggregate(old).claim(Ids.next(), now()).entity();
                             // 4. 持久化当前完整聚合，失败必须中断事务而非继续提交。
                             Transactions.require(
-                                    knowledgeWriteAppService.saveIndexJob(new IndexJobAggregate(next)));
+                                    ApplicationFailures.required(
+                                knowledgeDomainService.saveIndexJob(
+                                        knowledgeDomainParamAssembler.indexJob(new IndexJobAggregate(next))))
+                        .saved());
                             // 5. 提供本事务或回调的处理结果，完成责任由所属外层流程承接。
                             return indexJob.findById(jobId).entity();
                         });
@@ -465,8 +489,11 @@ public final class KnowledgeIndexJobAppService {
                                                 .entity();
                                 // 3. 持久化当前完整聚合，失败必须中断事务而非继续提交。
                                 Transactions.require(
-                                        knowledgeWriteAppService.saveKnowledgeChunk(
-                                                new KnowledgeChunkAggregate(entity)));
+                                        ApplicationFailures.required(
+                                knowledgeDomainService.saveKnowledgeChunk(
+                                        knowledgeDomainParamAssembler.knowledgeChunk(
+                                                new KnowledgeChunkAggregate(entity))))
+                        .saved());
                                 // 4. 提供本事务或回调的处理结果，完成责任由所属外层流程承接。
                                 return entity;
                             });
@@ -494,8 +521,11 @@ public final class KnowledgeIndexJobAppService {
                                         .entity();
                         var ready = new KnowledgeChunkAggregate(old).ready().entity();
                         Transactions.require(
-                                knowledgeWriteAppService.saveKnowledgeChunk(
-                                        new KnowledgeChunkAggregate(ready)));
+                                ApplicationFailures.required(
+                                knowledgeDomainService.saveKnowledgeChunk(
+                                        knowledgeDomainParamAssembler.knowledgeChunk(
+                                        new KnowledgeChunkAggregate(ready))))
+                        .saved());
                     }
                     // 3. 提供本事务或回调的处理结果，完成责任由所属外层流程承接。
                     return null;

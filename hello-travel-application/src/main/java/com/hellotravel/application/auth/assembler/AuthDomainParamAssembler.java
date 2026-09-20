@@ -20,7 +20,7 @@ import org.springframework.stereotype.Component;
  * @author AIGenerator
  */
 @Component
-public final class AuthWriteAppAssembler {
+public final class AuthDomainParamAssembler {
 
     /**
      * 投影UserAccount写入参数，聚合承担业务状态校验。
@@ -29,7 +29,7 @@ public final class AuthWriteAppAssembler {
      * @return 明确用途的转换结果
      * @author AIGenerator
      */
-    public UserAccountWriteParam write(UserAccountAggregate aggregate) {
+    public UserAccountWriteParam userAccount(UserAccountAggregate aggregate) {
         return new UserAccountWriteParam(aggregate);
     }
 
@@ -40,7 +40,7 @@ public final class AuthWriteAppAssembler {
      * @return 明确用途的转换结果
      * @author AIGenerator
      */
-    public DeviceWriteParam write(DeviceAggregate aggregate) {
+    public DeviceWriteParam device(DeviceAggregate aggregate) {
         return new DeviceWriteParam(aggregate);
     }
 
@@ -51,7 +51,7 @@ public final class AuthWriteAppAssembler {
      * @return 明确用途的转换结果
      * @author AIGenerator
      */
-    public LoginSessionWriteParam write(LoginSessionAggregate aggregate) {
+    public LoginSessionWriteParam loginSession(LoginSessionAggregate aggregate) {
         return new LoginSessionWriteParam(aggregate);
     }
 
@@ -62,7 +62,7 @@ public final class AuthWriteAppAssembler {
      * @return 明确用途的转换结果
      * @author AIGenerator
      */
-    public EmailChallengeWriteParam write(EmailChallengeAggregate aggregate) {
+    public EmailChallengeWriteParam emailChallenge(EmailChallengeAggregate aggregate) {
         return new EmailChallengeWriteParam(aggregate);
     }
 
@@ -73,7 +73,7 @@ public final class AuthWriteAppAssembler {
      * @return 明确用途的转换结果
      * @author AIGenerator
      */
-    public RefreshReceiptWriteParam write(RefreshReceiptAggregate aggregate) {
+    public RefreshReceiptWriteParam refreshReceipt(RefreshReceiptAggregate aggregate) {
         return new RefreshReceiptWriteParam(aggregate);
     }
 

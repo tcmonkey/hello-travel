@@ -1,11 +1,13 @@
 package com.hellotravel.application.tx;
 
-import com.hellotravel.application.auth.AuthWriteAppService;
+import com.hellotravel.application.auth.assembler.AuthDomainParamAssembler;
 import com.hellotravel.application.exception.ApplicationErrorCode;
 import com.hellotravel.application.exception.ApplicationException;
+import com.hellotravel.application.support.ApplicationFailures;
 import com.hellotravel.domain.auth.model.aggregate.UserAccountAggregate;
 import com.hellotravel.domain.auth.model.entity.UserAccountEntity;
 import com.hellotravel.domain.auth.repository.UserAccountRepository;
+import com.hellotravel.domain.auth.service.AuthDomainService;
 
 import org.springframework.dao.TransientDataAccessException;
 import org.springframework.stereotype.Component;
@@ -25,14 +27,17 @@ public final class Transactions {
 
     private final PlatformTransactionManager manager;
     private final UserAccountRepository userAccountRepository;
-    private final AuthWriteAppService authWriteAppService;
+    private final AuthDomainService authDomainService;
+    private final AuthDomainParamAssembler authDomainParamAssembler;
 
     public Transactions(
-            AuthWriteAppService authWriteAppService,
+            AuthDomainService authDomainService,
+            AuthDomainParamAssembler authDomainParamAssembler,
             PlatformTransactionManager manager,
             UserAccountRepository userAccountRepository) {
         this.manager = manager;
-        this.authWriteAppService = authWriteAppService;
+        this.authDomainService = authDomainService;
+        this.authDomainParamAssembler = authDomainParamAssembler;
         this.userAccountRepository = userAccountRepository;
     }
 
@@ -101,7 +106,12 @@ public final class Transactions {
                                             .advanceSync()
                                             .entity();
                             // 4. 持久化当前完整聚合，失败必须中断事务而非继续提交。
-                            require(authWriteAppService.saveUserAccount(new UserAccountAggregate(next)));
+                            require(
+                                    ApplicationFailures.required(
+                                                    authDomainService.saveUserAccount(
+                                                            authDomainParamAssembler.userAccount(
+                                                                    new UserAccountAggregate(next))))
+                                            .saved());
                             // 5. 提供本事务或回调的处理结果，完成责任由所属外层流程承接。
                             return operation.apply(next);
                         });

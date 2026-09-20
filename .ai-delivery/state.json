@@ -7,7 +7,7 @@
   "delivery_mode": "full",
   "execution_goal": "auto",
   "interaction_mode": "guided",
-  "revision": 18,
+  "revision": 19,
   "current_phase": "development",
   "phases": {
     "intake": {
@@ -135,13 +135,13 @@
   "last_actor": {
     "platform": "codex",
     "model": "unknown",
-    "updated_at": "2026-09-20T15:23:45+08:00"
+    "updated_at": "2026-09-20T16:25:52+08:00"
   },
   "handoff": {
-    "summary": "SRC-060完成：删除ChatRepositories、MemoryRepositories、SyncRepositories；所有Application调用者直接注入实际Repository；新增项目门禁阻止Application层Repositories聚合。干净Maven回归52项、Spring离线装配及352类/905方法/411流程块零违规通过。公共DDD+AI规范未修改。",
-    "next_action": "用户继续审阅Application直接仓储依赖与业务职责；如继续反馈则修正hello-travel及项目证据。待用户明确认可后再决定是否沉淀公共DDD+AI规范；完整06、独立CR和真实外部联调仍未开始。"
+    "summary": "SRC-061完成：删除AuthWriteAppService、ChatWrites、SyncWrites，并基于同类反思一并删除MemoryWriteAppService、KnowledgeWriteAppService；各业务流程经明确DomainParamAssembler直接调用所属DomainService，不生成伪业务SaveXxxAppService。新增QUALITY-APPLICATION-ACTION反例门禁。干净Maven回归52项、Spring离线装配及347类/880方法/391流程块零违规通过。公共DDD+AI规范未修改。",
+    "next_action": "用户继续按注册、登录、对话、记忆、知识索引和同步调用链审阅业务动作职责；如有反馈继续修正hello-travel及项目证据。待用户明确认可后再决定是否沉淀公共DDD+AI规范；完整06、独立CR和真实外部联调仍未开始。"
   },
-  "last_updated": "2026-09-20T15:23:45+08:00",
+  "last_updated": "2026-09-20T16:25:52+08:00",
   "execution_goal_detail": {
     "type": "custom",
     "original_request": "本次仅做到代码生成完，审阅方案文档和代码质量",

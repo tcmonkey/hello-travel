@@ -8,8 +8,8 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.hellotravel.application.auth.assembler.AuthAppAssembler;
+import com.hellotravel.application.auth.assembler.AuthDomainParamAssembler;
 import com.hellotravel.application.auth.command.AuthCommand;
-import com.hellotravel.application.auth.AuthWriteAppService;
 import com.hellotravel.application.auth.usecase.AuthActionOperations;
 import com.hellotravel.application.exception.ApplicationErrorCode;
 import com.hellotravel.application.exception.ApplicationException;
@@ -25,6 +25,7 @@ import com.hellotravel.domain.auth.repository.EmailChallengeRepository;
 import com.hellotravel.domain.auth.repository.LoginSessionRepository;
 import com.hellotravel.domain.auth.repository.RefreshReceiptRepository;
 import com.hellotravel.domain.auth.repository.UserAccountRepository;
+import com.hellotravel.domain.auth.service.AuthDomainService;
 
 import org.junit.jupiter.api.Test;
 
@@ -67,12 +68,13 @@ class PageSessionIsolationTest {
         var challenges = mock(EmailChallengeRepository.class);
         var refreshReceipts = mock(RefreshReceiptRepository.class);
         var transactions = mock(Transactions.class);
-        var writes = mock(AuthWriteAppService.class);
+        var authDomainService = mock(AuthDomainService.class);
         var events = mock(SyncEventPublisher.class);
         var security = mock(SecurityAdaptor.class);
         var operations =
                 new AuthActionOperations(
-                        writes,
+                        authDomainService,
+                        new AuthDomainParamAssembler(),
                         userAccounts,
                         devices,
                         loginSessions,
@@ -99,6 +101,6 @@ class PageSessionIsolationTest {
                         "test");
         var rejected = assertThrows(ApplicationException.class, () -> operations.refresh(command));
         assertEquals(ApplicationErrorCode.SESSION_REPLACED, rejected.errorCode());
-        verifyNoInteractions(transactions, writes, events, security);
+        verifyNoInteractions(transactions, authDomainService, events, security);
     }
 }

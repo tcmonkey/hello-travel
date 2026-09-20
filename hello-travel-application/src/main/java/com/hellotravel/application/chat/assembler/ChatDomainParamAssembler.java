@@ -17,7 +17,7 @@ import org.springframework.stereotype.Component;
  * @author AIGenerator
  */
 @Component
-public final class ChatWriteAppAssembler {
+public final class ChatDomainParamAssembler {
 
     /**
      * 投影Conversation写入参数，聚合承担业务状态校验。
@@ -26,7 +26,7 @@ public final class ChatWriteAppAssembler {
      * @return 明确用途的转换结果
      * @author AIGenerator
      */
-    public ConversationWriteParam write(ConversationAggregate aggregate) {
+    public ConversationWriteParam conversation(ConversationAggregate aggregate) {
         return new ConversationWriteParam(aggregate);
     }
 
@@ -37,7 +37,7 @@ public final class ChatWriteAppAssembler {
      * @return 明确用途的转换结果
      * @author AIGenerator
      */
-    public MessageWriteParam write(MessageAggregate aggregate) {
+    public MessageWriteParam message(MessageAggregate aggregate) {
         return new MessageWriteParam(aggregate);
     }
 
@@ -48,7 +48,7 @@ public final class ChatWriteAppAssembler {
      * @return 明确用途的转换结果
      * @author AIGenerator
      */
-    public ChatRunWriteParam write(ChatRunAggregate aggregate) {
+    public ChatRunWriteParam chatRun(ChatRunAggregate aggregate) {
         return new ChatRunWriteParam(aggregate);
     }
 
@@ -59,7 +59,7 @@ public final class ChatWriteAppAssembler {
      * @return 明确用途的转换结果
      * @author AIGenerator
      */
-    public ModelInvocationWriteParam write(ModelInvocationAggregate aggregate) {
+    public ModelInvocationWriteParam modelInvocation(ModelInvocationAggregate aggregate) {
         return new ModelInvocationWriteParam(aggregate);
     }
 }

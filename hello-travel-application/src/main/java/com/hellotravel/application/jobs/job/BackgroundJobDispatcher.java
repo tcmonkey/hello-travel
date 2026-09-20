@@ -1,6 +1,6 @@
 package com.hellotravel.application.jobs.job;
 
-import com.hellotravel.application.auth.AuthWriteAppService;
+import com.hellotravel.application.auth.assembler.AuthDomainParamAssembler;
 import com.hellotravel.application.exception.ApplicationErrorCode;
 import com.hellotravel.application.exception.ApplicationException;
 import com.hellotravel.application.knowledge.KnowledgeIndexJobAppService;
@@ -12,13 +12,14 @@ import com.hellotravel.application.auth.adaptor.SecurityAdaptor;
 import com.hellotravel.application.auth.assembler.SecurityCommandAppAssembler;
 import com.hellotravel.util.JsonUtil;
 import com.hellotravel.application.support.ApplicationFailures;
-import com.hellotravel.application.chat.support.SyncWrites;
+import com.hellotravel.application.chat.assembler.SyncDomainParamAssembler;
 import com.hellotravel.application.exception.RunExecutionService;
 import com.hellotravel.application.chat.travel.TravelAppService;
 import com.hellotravel.application.chat.assembler.TravelAppAssembler;
 import com.hellotravel.application.tx.Transactions;
 import com.hellotravel.domain.auth.model.aggregate.EmailChallengeAggregate;
 import com.hellotravel.domain.auth.repository.EmailChallengeRepository;
+import com.hellotravel.domain.auth.service.AuthDomainService;
 import com.hellotravel.domain.knowledge.repository.IndexJobRepository;
 import com.hellotravel.domain.knowledge.repository.KnowledgeChunkRepository;
 import com.hellotravel.domain.knowledge.repository.KnowledgeDocumentRepository;
@@ -26,6 +27,7 @@ import com.hellotravel.domain.query.model.value.QueryValue;
 import com.hellotravel.domain.sync.model.aggregate.OutboxEventAggregate;
 import com.hellotravel.domain.sync.model.entity.OutboxEventEntity;
 import com.hellotravel.domain.sync.repository.OutboxEventRepository;
+import com.hellotravel.domain.sync.service.SyncDomainService;
 
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -46,8 +48,10 @@ public final class BackgroundJobDispatcher {
     public final KnowledgeChunkRepository knowledgeChunk;
     public final IndexJobRepository indexJob;
     private final OutboxEventRepository outboxEventRepository;
-    private final AuthWriteAppService authWriteAppService;
-    private final SyncWrites syncWrites;
+    private final AuthDomainService authDomainService;
+    private final AuthDomainParamAssembler authDomainParamAssembler;
+    private final SyncDomainService syncDomainService;
+    private final SyncDomainParamAssembler syncDomainParamAssembler;
     private final Transactions transactions;
     private final TravelAppService travelAppService;
     private final TravelAppAssembler travelAppAssembler;
@@ -84,8 +88,10 @@ public final class BackgroundJobDispatcher {
     private final SecurityCommandAppAssembler securityCommandAppAssembler;
 
     public BackgroundJobDispatcher(
-            AuthWriteAppService authWriteAppService,
-            SyncWrites syncWrites,
+            AuthDomainService authDomainService,
+            AuthDomainParamAssembler authDomainParamAssembler,
+            SyncDomainService syncDomainService,
+            SyncDomainParamAssembler syncDomainParamAssembler,
             EmailChallengeRepository emailChallengeRepository,
             KnowledgeDocumentRepository knowledgeDocument,
             KnowledgeChunkRepository knowledgeChunk,
@@ -102,8 +108,10 @@ public final class BackgroundJobDispatcher {
             MailAdaptor mail,
             MailCommandAppAssembler mailCommandAppAssembler,
             SecurityCommandAppAssembler securityCommandAppAssembler) {
-        this.authWriteAppService = authWriteAppService;
-        this.syncWrites = syncWrites;
+        this.authDomainService = authDomainService;
+        this.authDomainParamAssembler = authDomainParamAssembler;
+        this.syncDomainService = syncDomainService;
+        this.syncDomainParamAssembler = syncDomainParamAssembler;
         this.emailChallengeRepository = emailChallengeRepository;
         this.knowledgeDocument = knowledgeDocument;
         this.knowledgeChunk = knowledgeChunk;
@@ -161,7 +169,10 @@ public final class BackgroundJobDispatcher {
                                                 .entity();
                                 // 4. 持久化当前完整聚合，失败必须中断事务而非继续提交。
                                 Transactions.require(
-                                        syncWrites.saveOutboxEvent(new OutboxEventAggregate(next)));
+                                        ApplicationFailures.required(
+                                syncDomainService.saveOutboxEvent(
+                                        syncDomainParamAssembler.outboxEvent(new OutboxEventAggregate(next))))
+                        .saved());
                                 // 5. 提供本事务或回调的处理结果，完成责任由所属外层流程承接。
                                 return outboxEventRepository.findById(next.id()).entity();
                             });
@@ -238,9 +249,12 @@ public final class BackgroundJobDispatcher {
                     // 2. 依据实体当前状态与允许的操作处理分支，避免继续使用无效数据。
                     if ("PENDING_SEND".equals(current.status())) {
                         Transactions.require(
-                                authWriteAppService.saveEmailChallenge(
+                                ApplicationFailures.required(
+                                authDomainService.saveEmailChallenge(
+                                        authDomainParamAssembler.emailChallenge(
                                         new EmailChallengeAggregate(current)
-                                                .delivery(sent ? "ISSUED" : "FAILED")));
+                                                .delivery(sent ? "ISSUED" : "FAILED"))))
+                        .saved());
                     }
                     // 3. 返回去空白、统一大小写的规范邮箱供唯一键与证明绑定使用。
                     return null;
@@ -280,7 +294,10 @@ public final class BackgroundJobDispatcher {
                                         success ? now() : null,
                                         error);
                         Transactions.require(
-                                syncWrites.saveOutboxEvent(new OutboxEventAggregate(next)));
+                                ApplicationFailures.required(
+                                syncDomainService.saveOutboxEvent(
+                                        syncDomainParamAssembler.outboxEvent(new OutboxEventAggregate(next))))
+                        .saved());
                     }
                     // 3. 提供本事务或回调的处理结果，完成责任由所属外层流程承接。
                     return null;

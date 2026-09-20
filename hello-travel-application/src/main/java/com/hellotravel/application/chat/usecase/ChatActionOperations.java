@@ -1,11 +1,12 @@
 package com.hellotravel.application.chat.usecase;
 
 import com.hellotravel.application.chat.assembler.ChatAppAssembler;
+import com.hellotravel.application.chat.assembler.ChatDomainParamAssembler;
 import com.hellotravel.application.chat.command.ChatCommand;
 import com.hellotravel.application.chat.result.ChatAppResult;
-import com.hellotravel.application.chat.support.ChatWrites;
 import com.hellotravel.application.exception.ApplicationErrorCode;
 import com.hellotravel.application.exception.ApplicationException;
+import com.hellotravel.application.support.ApplicationFailures;
 import com.hellotravel.application.chat.assembler.MemoryContextAppAssembler;
 import com.hellotravel.application.chat.context.policy.ChatContextPolicy;
 import com.hellotravel.util.JsonUtil;
@@ -22,6 +23,7 @@ import com.hellotravel.domain.chat.model.entity.MessageEntity;
 import com.hellotravel.domain.chat.repository.ChatRunRepository;
 import com.hellotravel.domain.chat.repository.ConversationRepository;
 import com.hellotravel.domain.chat.repository.MessageRepository;
+import com.hellotravel.domain.chat.service.ChatDomainService;
 import com.hellotravel.domain.query.model.value.QueryValue;
 
 import org.springframework.stereotype.Component;
@@ -44,7 +46,8 @@ public final class ChatActionOperations {
     private final MessageRepository messageRepository;
     private final ChatRunRepository chatRunRepository;
     private final UserAccountRepository userAccountRepository;
-    private final ChatWrites chatWrites;
+    private final ChatDomainService chatDomainService;
+    private final ChatDomainParamAssembler chatDomainParamAssembler;
     private final Transactions transactions;
     private final SyncEventPublisher events;
     private final ChatContextPolicy contextPolicy;
@@ -52,7 +55,8 @@ public final class ChatActionOperations {
     private final MemoryContextAppAssembler memoryContextAppAssembler;
 
     public ChatActionOperations(
-            ChatWrites chatWrites,
+            ChatDomainService chatDomainService,
+            ChatDomainParamAssembler chatDomainParamAssembler,
             ConversationRepository conversationRepository,
             MessageRepository messageRepository,
             ChatRunRepository chatRunRepository,
@@ -62,7 +66,8 @@ public final class ChatActionOperations {
             ChatAppAssembler assembler,
             ChatContextPolicy contextPolicy,
             MemoryContextAppAssembler memoryContextAppAssembler) {
-        this.chatWrites = chatWrites;
+        this.chatDomainService = chatDomainService;
+        this.chatDomainParamAssembler = chatDomainParamAssembler;
         this.conversationRepository = conversationRepository;
         this.messageRepository = messageRepository;
         this.chatRunRepository = chatRunRepository;
@@ -212,7 +217,10 @@ public final class ChatActionOperations {
                                     .entity();
                     // 2. 持久化当前完整聚合，失败必须中断事务而非继续提交。
                     Transactions.require(
-                            chatWrites.saveConversation(new ConversationAggregate(created)));
+                            ApplicationFailures.required(
+                                chatDomainService.saveConversation(
+                                        chatDomainParamAssembler.conversation(new ConversationAggregate(created))))
+                        .saved());
                     // 3. 同事务记录用户提交序号与同步事件，推送不能代替持久化。
                     events.append(
                             account, "conversation.created", created.publicId(), 0, null, "{}");
@@ -238,8 +246,11 @@ public final class ChatActionOperations {
                     version(stored, command.expectedVersion());
                     // 3. 持久化当前完整聚合，失败必须中断事务而非继续提交。
                     Transactions.require(
-                            chatWrites.saveConversation(
-                                    new ConversationAggregate(stored).rename(command.title())));
+                            ApplicationFailures.required(
+                                chatDomainService.saveConversation(
+                                        chatDomainParamAssembler.conversation(
+                                    new ConversationAggregate(stored).rename(command.title()))))
+                        .saved());
                     // 4. 同事务记录用户提交序号与同步事件，推送不能代替持久化。
                     events.append(
                             account,
@@ -374,11 +385,21 @@ public final class ChatActionOperations {
                     MessageEntity output = MessageAggregate.assistantPlaceholder(c, now()).entity();
                     // 6. 持久化当前完整聚合，失败必须中断事务而非继续提交。
                     Transactions.require(
-                            chatWrites.saveConversation(new ConversationAggregate(c).appendPair()));
+                            ApplicationFailures.required(
+                                    chatDomainService.saveConversation(
+                                            chatDomainParamAssembler.conversation(
+                                                    new ConversationAggregate(c).appendPair())))
+                            .saved());
                     // 7. 持久化当前完整聚合，失败必须中断事务而非继续提交。
-                    Transactions.require(chatWrites.saveMessage(new MessageAggregate(input)));
+                    Transactions.require(ApplicationFailures.required(
+                                chatDomainService.saveMessage(
+                                        chatDomainParamAssembler.message(new MessageAggregate(input))))
+                        .saved());
                     // 8. 持久化当前完整聚合，失败必须中断事务而非继续提交。
-                    Transactions.require(chatWrites.saveMessage(new MessageAggregate(output)));
+                    Transactions.require(ApplicationFailures.required(
+                                chatDomainService.saveMessage(
+                                        chatDomainParamAssembler.message(new MessageAggregate(output))))
+                        .saved());
                     // 9. 读取消息，按当前用例条件限定查询窗口。
                     MessageEntity storedInput =
                             messageRepository
@@ -405,7 +426,10 @@ public final class ChatActionOperations {
                                             now())
                                     .entity();
                     // 10. 持久化当前完整聚合，失败必须中断事务而非继续提交。
-                    Transactions.require(chatWrites.saveChatRun(new ChatRunAggregate(run)));
+                    Transactions.require(ApplicationFailures.required(
+                                chatDomainService.saveChatRun(
+                                        chatDomainParamAssembler.chatRun(new ChatRunAggregate(run))))
+                        .saved());
                     // 11. 同事务记录用户提交序号与同步事件，推送不能代替持久化。
                     events.append(
                             account,
@@ -457,17 +481,23 @@ public final class ChatActionOperations {
                     // 2. 依据实体当前状态与允许的操作处理分支，避免继续使用无效数据。
                     if (List.of("ACCEPTED", "RUNNING").contains(r.status())) {
                         Transactions.require(
-                                chatWrites.saveChatRun(
-                                        new ChatRunAggregate(r).finish("CANCELLED", null)));
+                                ApplicationFailures.required(
+                                chatDomainService.saveChatRun(
+                                        chatDomainParamAssembler.chatRun(
+                                        new ChatRunAggregate(r).finish("CANCELLED", null))))
+                        .saved());
                         MessageEntity m =
                                 messageRepository.findById(r.assistantMessageId()).entity();
                         Transactions.require(
-                                chatWrites.saveMessage(
+                                ApplicationFailures.required(
+                                chatDomainService.saveMessage(
+                                        chatDomainParamAssembler.message(
                                         new MessageAggregate(m)
                                                 .progress(
                                                         m.content(),
                                                         "CANCELLED",
-                                                        m.citationsJson())));
+                                                        m.citationsJson()))))
+                        .saved());
                     }
                     // 3. 同事务记录用户提交序号与同步事件，推送不能代替持久化。
                     events.append(
@@ -520,11 +550,17 @@ public final class ChatActionOperations {
                     // 5. 通过领域聚合语义准备业务快照，固定状态由实体封装。
                     ChatRunEntity next = new ChatRunAggregate(r).retry(c.memoryEpoch()).entity();
                     // 6. 持久化当前完整聚合，失败必须中断事务而非继续提交。
-                    Transactions.require(chatWrites.saveChatRun(new ChatRunAggregate(next)));
+                    Transactions.require(ApplicationFailures.required(
+                                chatDomainService.saveChatRun(
+                                        chatDomainParamAssembler.chatRun(new ChatRunAggregate(next))))
+                        .saved());
                     // 7. 持久化当前完整聚合，失败必须中断事务而非继续提交。
                     Transactions.require(
-                            chatWrites.saveMessage(
-                                    new MessageAggregate(output).progress("", "ACCEPTED", null)));
+                            ApplicationFailures.required(
+                                chatDomainService.saveMessage(
+                                        chatDomainParamAssembler.message(
+                                    new MessageAggregate(output).progress("", "ACCEPTED", null))))
+                        .saved());
                     // 8. 同事务记录用户提交序号与同步事件，推送不能代替持久化。
                     events.append(
                             account, "run.retried", r.publicId(), r.version() + 1, null, "{}");
@@ -565,9 +601,12 @@ public final class ChatActionOperations {
                     // 5. 逐项处理当前数据窗口，并在循环中核对可用状态与停止条件。
                     for (var r : running) {
                         Transactions.require(
-                                chatWrites.saveChatRun(
+                                ApplicationFailures.required(
+                                chatDomainService.saveChatRun(
+                                        chatDomainParamAssembler.chatRun(
                                         new ChatRunAggregate(r.entity())
-                                                .finish("CANCELLED", "CONVERSATION_DELETED")));
+                                                .finish("CANCELLED", "CONVERSATION_DELETED"))))
+                        .saved());
                     }
                     // 6. 局部删消息时校验稳定消息标识，全量清理走独立代次处理。
                     if (!entire) {
@@ -588,14 +627,20 @@ public final class ChatActionOperations {
                         }
                         for (var m : rows) {
                             Transactions.require(
-                                    chatWrites.saveMessage(
-                                            new MessageAggregate(m.entity()).erase()));
+                                    ApplicationFailures.required(
+                                chatDomainService.saveMessage(
+                                        chatDomainParamAssembler.message(
+                                            new MessageAggregate(m.entity()).erase())))
+                        .saved());
                         }
                     }
                     // 7. 持久化当前完整聚合，失败必须中断事务而非继续提交。
                     Transactions.require(
-                            chatWrites.saveConversation(
-                                    new ConversationAggregate(c).eraseHistory(entire)));
+                            ApplicationFailures.required(
+                                chatDomainService.saveConversation(
+                                        chatDomainParamAssembler.conversation(
+                                    new ConversationAggregate(c).eraseHistory(entire))))
+                        .saved());
                     // 8. 同事务记录用户提交序号与同步事件，推送不能代替持久化。
                     events.append(
                             account,

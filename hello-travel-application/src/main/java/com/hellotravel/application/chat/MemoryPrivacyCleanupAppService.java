@@ -1,17 +1,21 @@
 package com.hellotravel.application.chat;
 
-import com.hellotravel.application.chat.support.ChatWrites;
+import com.hellotravel.application.chat.assembler.ChatDomainParamAssembler;
+import com.hellotravel.application.chat.assembler.MemoryDomainParamAssembler;
+import com.hellotravel.application.support.ApplicationFailures;
 import com.hellotravel.util.JsonUtil;
 import com.hellotravel.application.chat.support.SyncEventPublisher;
 import com.hellotravel.application.tx.Transactions;
 import com.hellotravel.domain.chat.model.aggregate.MessageAggregate;
 import com.hellotravel.domain.chat.repository.ConversationRepository;
 import com.hellotravel.domain.chat.repository.MessageRepository;
+import com.hellotravel.domain.chat.service.ChatDomainService;
 import com.hellotravel.domain.memory.model.aggregate.MemoryFactAggregate;
 import com.hellotravel.domain.memory.model.aggregate.MemorySummaryAggregate;
 import com.hellotravel.domain.memory.repository.MemoryFactRepository;
 import com.hellotravel.domain.memory.repository.MemoryFactSourceRepository;
 import com.hellotravel.domain.memory.repository.MemorySummaryRepository;
+import com.hellotravel.domain.memory.service.MemoryDomainService;
 import com.hellotravel.domain.query.model.value.QueryValue;
 
 import org.springframework.stereotype.Component;
@@ -31,14 +35,18 @@ public final class MemoryPrivacyCleanupAppService {
     private final MemoryFactSourceRepository memoryFactSourceRepository;
     private final ConversationRepository conversationRepository;
     private final MessageRepository messageRepository;
-    private final MemoryWriteAppService memoryWriteAppService;
-    private final ChatWrites chatWrites;
+    private final MemoryDomainService memoryDomainService;
+    private final MemoryDomainParamAssembler memoryDomainParamAssembler;
+    private final ChatDomainService chatDomainService;
+    private final ChatDomainParamAssembler chatDomainParamAssembler;
     private final Transactions transactions;
     private final SyncEventPublisher events;
 
     public MemoryPrivacyCleanupAppService(
-            MemoryWriteAppService memoryWriteAppService,
-            ChatWrites chatWrites,
+            MemoryDomainService memoryDomainService,
+            MemoryDomainParamAssembler memoryDomainParamAssembler,
+            ChatDomainService chatDomainService,
+            ChatDomainParamAssembler chatDomainParamAssembler,
             MemorySummaryRepository memorySummaryRepository,
             MemoryFactRepository memoryFactRepository,
             MemoryFactSourceRepository memoryFactSourceRepository,
@@ -46,8 +54,10 @@ public final class MemoryPrivacyCleanupAppService {
             MessageRepository messageRepository,
             Transactions transactions,
             SyncEventPublisher events) {
-        this.memoryWriteAppService = memoryWriteAppService;
-        this.chatWrites = chatWrites;
+        this.memoryDomainService = memoryDomainService;
+        this.memoryDomainParamAssembler = memoryDomainParamAssembler;
+        this.chatDomainService = chatDomainService;
+        this.chatDomainParamAssembler = chatDomainParamAssembler;
         this.memorySummaryRepository = memorySummaryRepository;
         this.memoryFactRepository = memoryFactRepository;
         this.memoryFactSourceRepository = memoryFactSourceRepository;
@@ -88,7 +98,10 @@ public final class MemoryPrivacyCleanupAppService {
                         var old = row.entity();
                         var next = old.redacted();
                         Transactions.require(
-                                memoryWriteAppService.saveMemorySummary(new MemorySummaryAggregate(next)));
+                                ApplicationFailures.required(
+                                memoryDomainService.saveMemorySummary(
+                                        memoryDomainParamAssembler.memorySummary(new MemorySummaryAggregate(next))))
+                        .saved());
                     }
                     // 3. 逐项处理当前数据窗口，并在循环中核对可用状态与停止条件。
                     for (var row :
@@ -103,11 +116,17 @@ public final class MemoryPrivacyCleanupAppService {
                                         QueryValue.all("id", 1000)
                                                 .where("fact_id", "EQ", old.id()))) {
                             Transactions.require(
-                                    memoryWriteAppService.removeMemoryFactSource(source.entity().id()));
+                                    ApplicationFailures.required(
+                                memoryDomainService.removeMemoryFactSource(
+                                        memoryDomainParamAssembler.removeMemoryFactSource(source.entity().id())))
+                        .saved());
                         }
                         var next = old.redacted();
                         Transactions.require(
-                                memoryWriteAppService.saveMemoryFact(new MemoryFactAggregate(next)));
+                                ApplicationFailures.required(
+                                memoryDomainService.saveMemoryFact(
+                                        memoryDomainParamAssembler.memoryFact(new MemoryFactAggregate(next))))
+                        .saved());
                     }
                     // 4. 依据删除状态与当前记忆代次处理分支，避免继续使用无效数据。
                     if (c.deletedAt() != null) {
@@ -117,8 +136,11 @@ public final class MemoryPrivacyCleanupAppService {
                                                 .where("conversation_id", "EQ", c.id())
                                                 .where("deleted_at", "NULL", null))) {
                             Transactions.require(
-                                    chatWrites.saveMessage(
-                                            new MessageAggregate(row.entity()).erase()));
+                                    ApplicationFailures.required(
+                                chatDomainService.saveMessage(
+                                        chatDomainParamAssembler.message(
+                                            new MessageAggregate(row.entity()).erase())))
+                        .saved());
                         }
                     }
                     // 5. 读取消息，按当前用例条件限定查询窗口。

@@ -1,8 +1,9 @@
 package com.hellotravel.application.jobs.job;
 
-import com.hellotravel.application.auth.AuthWriteAppService;
-import com.hellotravel.application.chat.support.SyncWrites;
+import com.hellotravel.application.auth.assembler.AuthDomainParamAssembler;
+import com.hellotravel.application.chat.assembler.SyncDomainParamAssembler;
 import com.hellotravel.application.chat.support.SyncEventPublisher;
+import com.hellotravel.application.support.ApplicationFailures;
 import com.hellotravel.application.tx.Transactions;
 import com.hellotravel.domain.auth.model.aggregate.EmailChallengeAggregate;
 import com.hellotravel.domain.auth.model.aggregate.LoginSessionAggregate;
@@ -10,8 +11,10 @@ import com.hellotravel.domain.auth.repository.EmailChallengeRepository;
 import com.hellotravel.domain.auth.repository.LoginSessionRepository;
 import com.hellotravel.domain.auth.repository.RefreshReceiptRepository;
 import com.hellotravel.domain.auth.repository.UserAccountRepository;
+import com.hellotravel.domain.auth.service.AuthDomainService;
 import com.hellotravel.domain.query.model.value.QueryValue;
 import com.hellotravel.domain.sync.repository.SyncEventRepository;
+import com.hellotravel.domain.sync.service.SyncDomainService;
 
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -32,8 +35,10 @@ public final class RetentionJob {
     private final EmailChallengeRepository emailChallengeRepository;
     private final RefreshReceiptRepository refreshReceiptRepository;
     private final SyncEventRepository syncEventRepository;
-    private final AuthWriteAppService authWriteAppService;
-    private final SyncWrites syncWrites;
+    private final AuthDomainService authDomainService;
+    private final AuthDomainParamAssembler authDomainParamAssembler;
+    private final SyncDomainService syncDomainService;
+    private final SyncDomainParamAssembler syncDomainParamAssembler;
     private final Transactions transactions;
     private final SyncEventPublisher events;
 
@@ -43,8 +48,10 @@ public final class RetentionJob {
             EmailChallengeRepository emailChallengeRepository,
             RefreshReceiptRepository refreshReceiptRepository,
             SyncEventRepository syncEventRepository,
-            AuthWriteAppService authWriteAppService,
-            SyncWrites syncWrites,
+            AuthDomainService authDomainService,
+            AuthDomainParamAssembler authDomainParamAssembler,
+            SyncDomainService syncDomainService,
+            SyncDomainParamAssembler syncDomainParamAssembler,
             Transactions transactions,
             SyncEventPublisher events) {
         this.userAccountRepository = userAccountRepository;
@@ -52,8 +59,10 @@ public final class RetentionJob {
         this.emailChallengeRepository = emailChallengeRepository;
         this.refreshReceiptRepository = refreshReceiptRepository;
         this.syncEventRepository = syncEventRepository;
-        this.authWriteAppService = authWriteAppService;
-        this.syncWrites = syncWrites;
+        this.authDomainService = authDomainService;
+        this.authDomainParamAssembler = authDomainParamAssembler;
+        this.syncDomainService = syncDomainService;
+        this.syncDomainParamAssembler = syncDomainParamAssembler;
         this.transactions = transactions;
         this.events = events;
     }
@@ -71,13 +80,19 @@ public final class RetentionJob {
                     for (var row :
                             refreshReceiptRepository.query(
                                     QueryValue.all("id", 200).where("expires_at", "LT", now()))) {
-                        Transactions.require(authWriteAppService.removeRefreshReceipt(row.entity().id()));
+                        Transactions.require(ApplicationFailures.required(
+                                authDomainService.removeRefreshReceipt(
+                                        authDomainParamAssembler.removeRefreshReceipt(row.entity().id())))
+                        .saved());
                     }
                     // 2. 逐项处理当前数据窗口，并在循环中核对可用状态与停止条件。
                     for (var row :
                             syncEventRepository.query(
                                     QueryValue.all("id", 200).where("expires_at", "LT", now()))) {
-                        Transactions.require(syncWrites.removeSyncEvent(row.entity().id()));
+                        Transactions.require(ApplicationFailures.required(
+                                syncDomainService.removeSyncEvent(
+                                        syncDomainParamAssembler.removeSyncEvent(row.entity().id())))
+                        .saved());
                     }
                     // 3. 提供本事务或回调的处理结果，完成责任由所属外层流程承接。
                     return null;
@@ -104,9 +119,12 @@ public final class RetentionJob {
                                                     java.util.List.of("PENDING_SEND", "ISSUED"))
                                             .where("expires_at", "LT", now()))) {
                         Transactions.require(
-                                authWriteAppService.saveEmailChallenge(
+                                ApplicationFailures.required(
+                                authDomainService.saveEmailChallenge(
+                                        authDomainParamAssembler.emailChallenge(
                                         new EmailChallengeAggregate(row.entity())
-                                                .delivery("EXPIRED")));
+                                                .delivery("EXPIRED"))))
+                        .saved());
                     }
                     // 2. 提供本事务或回调的处理结果，完成责任由所属外层流程承接。
                     return null;
@@ -135,8 +153,11 @@ public final class RetentionJob {
                         if ("ACTIVE".equals(current.status())
                                 && current.refreshExpiresAt().isBefore(now())) {
                             Transactions.require(
-                                    authWriteAppService.saveLoginSession(
-                                            new LoginSessionAggregate(current).revoke("EXPIRED")));
+                                    ApplicationFailures.required(
+                                authDomainService.saveLoginSession(
+                                        authDomainParamAssembler.loginSession(
+                                            new LoginSessionAggregate(current).revoke("EXPIRED"))))
+                        .saved());
                         }
                         // 3. 同事务记录用户提交序号与同步事件，推送不能代替持久化。
                         events.append(

@@ -13,11 +13,10 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.hellotravel.application.auth.assembler.AuthWriteAppAssembler;
-import com.hellotravel.application.auth.AuthWriteAppService;
+import com.hellotravel.application.auth.assembler.AuthDomainParamAssembler;
+import com.hellotravel.application.chat.assembler.SyncDomainParamAssembler;
 import com.hellotravel.application.exception.ApplicationException;
-import com.hellotravel.application.chat.assembler.SyncWriteAppAssembler;
-import com.hellotravel.application.chat.support.SyncWrites;
+import com.hellotravel.application.support.ApplicationFailures;
 import com.hellotravel.application.tx.Transactions;
 import com.hellotravel.common.result.Result;
 import com.hellotravel.domain.auth.model.aggregate.UserAccountAggregate;
@@ -165,19 +164,19 @@ class VerticalDomainWriteTest {
         var refresh = mock(RefreshReceiptRepository.class);
         var eventRepository = mock(SyncEventRepository.class);
         var outbox = mock(OutboxEventRepository.class);
-        var authWrites =
-                new AuthWriteAppService(
-                        new AuthDomainService(
-                                accountRepository, device, session, challenge, refresh),
-                        new AuthWriteAppAssembler());
-        var syncWrites =
-                new SyncWrites(
-                        new SyncDomainService(eventRepository, outbox),
-                        new SyncWriteAppAssembler());
+        var authDomainService =
+                new AuthDomainService(accountRepository, device, session, challenge, refresh);
+        var authDomainParamAssembler = new AuthDomainParamAssembler();
+        var syncDomainService = new SyncDomainService(eventRepository, outbox);
+        var syncDomainParamAssembler = new SyncDomainParamAssembler();
         var manager = mock(PlatformTransactionManager.class);
         when(manager.getTransaction(any())).thenAnswer(invocation -> new SimpleTransactionStatus());
         var transactions =
-                new Transactions(authWrites, manager, accountRepository);
+                new Transactions(
+                        authDomainService,
+                        authDomainParamAssembler,
+                        manager,
+                        accountRepository);
         var account =
                 new UserAccountAggregate(
                         snapshot(UserAccountEntity.class, Collections.singletonMap("id", null)));
@@ -188,8 +187,16 @@ class VerticalDomainWriteTest {
         when(eventRepository.save(any())).thenReturn(true);
         transactions.plain(
                 () -> {
-                    authWrites.saveUserAccount(account);
-                    syncWrites.saveSyncEvent(event);
+                    Transactions.require(
+                            ApplicationFailures.required(
+                                            authDomainService.saveUserAccount(
+                                                    authDomainParamAssembler.userAccount(account)))
+                                    .saved());
+                    Transactions.require(
+                            ApplicationFailures.required(
+                                            syncDomainService.saveSyncEvent(
+                                                    syncDomainParamAssembler.syncEvent(event)))
+                                    .saved());
                     return true;
                 });
         verify(manager).commit(any());
@@ -202,8 +209,19 @@ class VerticalDomainWriteTest {
                         () ->
                                 transactions.plain(
                                         () -> {
-                                            authWrites.saveUserAccount(account);
-                                            syncWrites.saveSyncEvent(event);
+                                            Transactions.require(
+                                                    ApplicationFailures.required(
+                                                                    authDomainService.saveUserAccount(
+                                                                            authDomainParamAssembler
+                                                                                    .userAccount(
+                                                                                            account)))
+                                                            .saved());
+                                            Transactions.require(
+                                                    ApplicationFailures.required(
+                                                                    syncDomainService.saveSyncEvent(
+                                                                            syncDomainParamAssembler
+                                                                                    .syncEvent(event)))
+                                                            .saved());
                                             afterFailure.set(true);
                                             return true;
                                         }));

@@ -7,7 +7,8 @@ import com.hellotravel.application.knowledge.assembler.FileCommandAppAssembler;
 import com.hellotravel.application.knowledge.assembler.KnowledgeAppAssembler;
 import com.hellotravel.application.knowledge.command.KnowledgeCommand;
 import com.hellotravel.application.knowledge.result.KnowledgeAppResult;
-import com.hellotravel.application.knowledge.KnowledgeWriteAppService;
+import com.hellotravel.application.knowledge.assembler.KnowledgeDomainParamAssembler;
+import com.hellotravel.application.support.ApplicationFailures;
 import com.hellotravel.application.chat.support.SyncEventPublisher;
 import com.hellotravel.application.tx.Transactions;
 import com.hellotravel.domain.knowledge.model.aggregate.IndexJobAggregate;
@@ -17,6 +18,7 @@ import com.hellotravel.domain.knowledge.model.entity.KnowledgeDocumentEntity;
 import com.hellotravel.domain.knowledge.repository.IndexJobRepository;
 import com.hellotravel.domain.knowledge.repository.KnowledgeChunkRepository;
 import com.hellotravel.domain.knowledge.repository.KnowledgeDocumentRepository;
+import com.hellotravel.domain.knowledge.service.KnowledgeDomainService;
 import com.hellotravel.domain.query.model.value.QueryValue;
 
 import org.springframework.stereotype.Component;
@@ -32,7 +34,8 @@ public final class KnowledgeActionOperations {
     public final KnowledgeDocumentRepository knowledgeDocument;
     public final KnowledgeChunkRepository knowledgeChunk;
     public final IndexJobRepository indexJob;
-    private final KnowledgeWriteAppService knowledgeWriteAppService;
+    private final KnowledgeDomainService knowledgeDomainService;
+    private final KnowledgeDomainParamAssembler knowledgeDomainParamAssembler;
     private final Transactions transactions;
     private final SyncEventPublisher events;
     private final FileOutAdaptor files;
@@ -40,7 +43,8 @@ public final class KnowledgeActionOperations {
     private final KnowledgeAppAssembler knowledgeAppAssembler;
 
     public KnowledgeActionOperations(
-            KnowledgeWriteAppService knowledgeWriteAppService,
+            KnowledgeDomainService knowledgeDomainService,
+            KnowledgeDomainParamAssembler knowledgeDomainParamAssembler,
             KnowledgeDocumentRepository knowledgeDocument,
             KnowledgeChunkRepository knowledgeChunk,
             IndexJobRepository indexJob,
@@ -49,7 +53,8 @@ public final class KnowledgeActionOperations {
             FileOutAdaptor files,
             FileCommandAppAssembler fileCommandAppAssembler,
             KnowledgeAppAssembler knowledgeAppAssembler) {
-        this.knowledgeWriteAppService = knowledgeWriteAppService;
+        this.knowledgeDomainService = knowledgeDomainService;
+        this.knowledgeDomainParamAssembler = knowledgeDomainParamAssembler;
         this.knowledgeDocument = knowledgeDocument;
         this.knowledgeChunk = knowledgeChunk;
         this.indexJob = indexJob;
@@ -137,14 +142,20 @@ public final class KnowledgeActionOperations {
                         }
                         document = new KnowledgeDocumentAggregate(document).reindex().entity();
                         Transactions.require(
-                                knowledgeWriteAppService.saveKnowledgeDocument(
-                                        new KnowledgeDocumentAggregate(document)));
+                                ApplicationFailures.required(
+                                knowledgeDomainService.saveKnowledgeDocument(
+                                        knowledgeDomainParamAssembler.knowledgeDocument(
+                                        new KnowledgeDocumentAggregate(document))))
+                        .saved());
                         job(document, "INGEST");
                     } else {
                         document = document.erase();
                         Transactions.require(
-                                knowledgeWriteAppService.saveKnowledgeDocument(
-                                        new KnowledgeDocumentAggregate(document)));
+                                ApplicationFailures.required(
+                                knowledgeDomainService.saveKnowledgeDocument(
+                                        knowledgeDomainParamAssembler.knowledgeDocument(
+                                        new KnowledgeDocumentAggregate(document))))
+                        .saved());
                         job(document, "DELETE");
                     }
                     // 4. 同事务记录用户提交序号与同步事件，推送不能代替持久化。
@@ -172,7 +183,10 @@ public final class KnowledgeActionOperations {
                                 java.time.LocalDateTime.now(java.time.ZoneOffset.UTC))
                         .entity();
         // 2. 持久化当前完整聚合，失败必须中断事务而非继续提交。
-        Transactions.require(knowledgeWriteAppService.saveIndexJob(new IndexJobAggregate(job)));
+        Transactions.require(ApplicationFailures.required(
+                                knowledgeDomainService.saveIndexJob(
+                                        knowledgeDomainParamAssembler.indexJob(new IndexJobAggregate(job))))
+                        .saved());
     }
 
     /**
@@ -231,8 +245,11 @@ public final class KnowledgeActionOperations {
                                 knowledgeAppAssembler.received(command, parsed).entity();
                         // 2. 持久化当前完整聚合，失败必须中断事务而非继续提交。
                         Transactions.require(
-                                knowledgeWriteAppService.saveKnowledgeDocument(
-                                        new KnowledgeDocumentAggregate(document)));
+                                ApplicationFailures.required(
+                                knowledgeDomainService.saveKnowledgeDocument(
+                                        knowledgeDomainParamAssembler.knowledgeDocument(
+                                        new KnowledgeDocumentAggregate(document))))
+                        .saved());
                         // 3. 更新本次处理的局部数据或上下文，后续步骤读取同一快照。
                         document = owned(command.userId(), document.publicId());
                         // 4. 执行job职责步骤，并把失败交给所属事务或入口处理。

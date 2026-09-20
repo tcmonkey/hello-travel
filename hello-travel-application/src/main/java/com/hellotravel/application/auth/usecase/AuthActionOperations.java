@@ -3,9 +3,10 @@ package com.hellotravel.application.auth.usecase;
 import com.hellotravel.application.auth.assembler.AuthAppAssembler;
 import com.hellotravel.application.auth.command.AuthCommand;
 import com.hellotravel.application.auth.result.AuthAppResult;
-import com.hellotravel.application.auth.AuthWriteAppService;
+import com.hellotravel.application.auth.assembler.AuthDomainParamAssembler;
 import com.hellotravel.application.exception.ApplicationErrorCode;
 import com.hellotravel.application.exception.ApplicationException;
+import com.hellotravel.application.support.ApplicationFailures;
 import com.hellotravel.application.auth.adaptor.SecurityAdaptor;
 import com.hellotravel.application.auth.assembler.SecurityCommandAppAssembler;
 import com.hellotravel.application.auth.command.SecurityCommand;
@@ -28,6 +29,7 @@ import com.hellotravel.domain.auth.repository.EmailChallengeRepository;
 import com.hellotravel.domain.auth.repository.LoginSessionRepository;
 import com.hellotravel.domain.auth.repository.RefreshReceiptRepository;
 import com.hellotravel.domain.auth.repository.UserAccountRepository;
+import com.hellotravel.domain.auth.service.AuthDomainService;
 import com.hellotravel.domain.query.model.value.QueryValue;
 import com.hellotravel.model.security.SecurityDO;
 
@@ -55,7 +57,8 @@ public final class AuthActionOperations {
     private final LoginSessionRepository loginSessionRepository;
     private final EmailChallengeRepository emailChallengeRepository;
     private final RefreshReceiptRepository refreshReceiptRepository;
-    private final AuthWriteAppService authWriteAppService;
+    private final AuthDomainService authDomainService;
+    private final AuthDomainParamAssembler authDomainParamAssembler;
     private final Transactions transactions;
     private final SyncEventPublisher events;
     private final SecurityAdaptor security;
@@ -65,7 +68,8 @@ public final class AuthActionOperations {
     /**
      * 组装认证用例共享的仓储、领域写入、事务与安全协作。
      *
-     * @param authWriteAppService 认证领域写入协作
+     * @param authDomainService 认证领域规则入口
+     * @param authDomainParamAssembler 认证聚合到领域参数的转换器
      * @param userAccountRepository 账号仓储
      * @param deviceRepository 设备仓储
      * @param loginSessionRepository 登录会话仓储
@@ -79,7 +83,8 @@ public final class AuthActionOperations {
      * @author AIGenerator
      */
     public AuthActionOperations(
-            AuthWriteAppService authWriteAppService,
+            AuthDomainService authDomainService,
+            AuthDomainParamAssembler authDomainParamAssembler,
             UserAccountRepository userAccountRepository,
             DeviceRepository deviceRepository,
             LoginSessionRepository loginSessionRepository,
@@ -90,7 +95,8 @@ public final class AuthActionOperations {
             SecurityAdaptor security,
             AuthAppAssembler authAppAssembler,
             SecurityCommandAppAssembler securityCommandAppAssembler) {
-        this.authWriteAppService = authWriteAppService;
+        this.authDomainService = authDomainService;
+        this.authDomainParamAssembler = authDomainParamAssembler;
         this.userAccountRepository = userAccountRepository;
         this.deviceRepository = deviceRepository;
         this.loginSessionRepository = loginSessionRepository;
@@ -187,9 +193,12 @@ public final class AuthActionOperations {
                             // 2. 依据实体当前状态与允许的操作处理分支，避免继续使用无效数据。
                             if ("ISSUED".equals(current.status())) {
                                 Transactions.require(
-                                        authWriteAppService.saveEmailChallenge(
+                                        ApplicationFailures.required(
+                                authDomainService.saveEmailChallenge(
+                                        authDomainParamAssembler.emailChallenge(
                                                 new EmailChallengeAggregate(current)
-                                                        .failedAttempt()));
+                                                        .failedAttempt())))
+                        .saved());
                             }
                             // 3. 提供本事务或回调的处理结果，完成责任由所属外层流程承接。
                             return null;
@@ -211,8 +220,11 @@ public final class AuthActionOperations {
         }
         // 3. 持久化当前完整聚合，失败必须中断事务而非继续提交。
         Transactions.require(
-                authWriteAppService.saveEmailChallenge(
-                        new EmailChallengeAggregate(current).consume()));
+                ApplicationFailures.required(
+                                authDomainService.saveEmailChallenge(
+                                        authDomainParamAssembler.emailChallenge(
+                        new EmailChallengeAggregate(current).consume())))
+                        .saved());
     }
 
     private String hashPassword(String password) {
@@ -280,9 +292,12 @@ public final class AuthActionOperations {
                     // 2. 逐项处理当前数据窗口，并在循环中核对可用状态与停止条件。
                     for (var old : previous) {
                         Transactions.require(
-                                authWriteAppService.saveEmailChallenge(
+                                ApplicationFailures.required(
+                                authDomainService.saveEmailChallenge(
+                                        authDomainParamAssembler.emailChallenge(
                                         new EmailChallengeAggregate(old.entity())
-                                                .delivery("REVOKED")));
+                                                .delivery("REVOKED"))))
+                        .saved());
                     }
                     // 3. 通过领域聚合语义准备业务快照，固定状态由实体封装。
                     EmailChallengeEntity created =
@@ -298,8 +313,11 @@ public final class AuthActionOperations {
                                     .entity();
                     // 4. 持久化当前完整聚合，失败必须中断事务而非继续提交。
                     Transactions.require(
-                            authWriteAppService.saveEmailChallenge(
-                                    new EmailChallengeAggregate(created)));
+                            ApplicationFailures.required(
+                                authDomainService.saveEmailChallenge(
+                                        authDomainParamAssembler.emailChallenge(
+                                    new EmailChallengeAggregate(created))))
+                        .saved());
                     // 5. 同事务登记可恢复后台任务，外部调用在提交之后执行。
                     events.outbox(null, "EMAIL", id, JsonUtil.encode(Map.of("challengeId", id)));
                     // 6. 提供本事务或回调的处理结果，完成责任由所属外层流程承接。
@@ -340,7 +358,10 @@ public final class AuthActionOperations {
                                     .entity();
                     // 3. 持久化当前完整聚合，失败必须中断事务而非继续提交。
                     Transactions.require(
-                            authWriteAppService.saveUserAccount(new UserAccountAggregate(created)));
+                            ApplicationFailures.required(
+                                authDomainService.saveUserAccount(
+                                        authDomainParamAssembler.userAccount(new UserAccountAggregate(created))))
+                        .saved());
                     // 4. 提供本事务或回调的处理结果，完成责任由所属外层流程承接。
                     return null;
                 });
@@ -407,7 +428,10 @@ public final class AuthActionOperations {
                     if (found.isEmpty()) {
                         DeviceEntity created =
                                 DeviceAggregate.browser(current.id(), deviceHash, now()).entity();
-                        Transactions.require(authWriteAppService.saveDevice(new DeviceAggregate(created)));
+                        Transactions.require(ApplicationFailures.required(
+                                authDomainService.saveDevice(
+                                        authDomainParamAssembler.device(new DeviceAggregate(created))))
+                        .saved());
                         device =
                                 deviceRepository
                                         .query(
@@ -432,9 +456,12 @@ public final class AuthActionOperations {
                     if (!active.isEmpty()) {
                         revoked = active.get(0).entity().publicId();
                         Transactions.require(
-                                authWriteAppService.saveLoginSession(
+                                ApplicationFailures.required(
+                                authDomainService.saveLoginSession(
+                                        authDomainParamAssembler.loginSession(
                                         new LoginSessionAggregate(active.get(0).entity())
-                                                .revoke("REPLACED")));
+                                                .revoke("REPLACED"))))
+                        .saved());
                     }
                     // 7. 通过领域聚合语义准备业务快照，固定状态由实体封装。
                     LoginSessionEntity created =
@@ -449,7 +476,10 @@ public final class AuthActionOperations {
                                     .entity();
                     // 8. 持久化当前完整聚合，失败必须中断事务而非继续提交。
                     Transactions.require(
-                            authWriteAppService.saveLoginSession(new LoginSessionAggregate(created)));
+                            ApplicationFailures.required(
+                                authDomainService.saveLoginSession(
+                                        authDomainParamAssembler.loginSession(new LoginSessionAggregate(created))))
+                        .saved());
                     // 9. 同事务记录用户提交序号与同步事件，推送不能代替持久化。
                     events.append(current, "session.replaced", sid, 0, revoked, "{}");
                     // 10. 读取登录会话，按当前用例条件限定查询窗口。
@@ -553,9 +583,12 @@ public final class AuthActionOperations {
                                         loginSessionRepository.findById(prior.id()).entity();
                                 // 2. 持久化当前完整聚合，失败必须中断事务而非继续提交。
                                 Transactions.require(
-                                        authWriteAppService.saveLoginSession(
+                                        ApplicationFailures.required(
+                                authDomainService.saveLoginSession(
+                                        authDomainParamAssembler.loginSession(
                                                 new LoginSessionAggregate(current)
-                                                        .revoke("REFRESH_REPLAY")));
+                                                        .revoke("REFRESH_REPLAY"))))
+                        .saved());
                                 // 3. 同事务记录用户提交序号与同步事件，推送不能代替持久化。
                                 events.append(
                                         owner,
@@ -605,7 +638,10 @@ public final class AuthActionOperations {
                                     .entity();
                     // 5. 持久化当前完整聚合，失败必须中断事务而非继续提交。
                     Transactions.require(
-                            authWriteAppService.saveRefreshReceipt(new RefreshReceiptAggregate(receipt)));
+                            ApplicationFailures.required(
+                                authDomainService.saveRefreshReceipt(
+                                        authDomainParamAssembler.refreshReceipt(new RefreshReceiptAggregate(receipt))))
+                        .saved());
                     // 6. 通过领域聚合语义准备业务快照，固定状态由实体封装。
                     LoginSessionEntity rotated =
                             new LoginSessionAggregate(stored)
@@ -617,7 +653,10 @@ public final class AuthActionOperations {
                                     .entity();
                     // 7. 持久化当前完整聚合，失败必须中断事务而非继续提交。
                     Transactions.require(
-                            authWriteAppService.saveLoginSession(new LoginSessionAggregate(rotated)));
+                            ApplicationFailures.required(
+                                authDomainService.saveLoginSession(
+                                        authDomainParamAssembler.loginSession(new LoginSessionAggregate(rotated))))
+                        .saved());
                     // 8. 同事务记录用户提交序号与同步事件，推送不能代替持久化。
                     events.append(
                             current,
@@ -651,8 +690,11 @@ public final class AuthActionOperations {
                             loginSessionRepository.findById(principal.sessionId()).entity();
                     // 2. 持久化当前完整聚合，失败必须中断事务而非继续提交。
                     Transactions.require(
-                            authWriteAppService.saveLoginSession(
-                                    new LoginSessionAggregate(stored).revoke("LOGOUT")));
+                            ApplicationFailures.required(
+                                authDomainService.saveLoginSession(
+                                        authDomainParamAssembler.loginSession(
+                                    new LoginSessionAggregate(stored).revoke("LOGOUT"))))
+                        .saved());
                     // 3. 同事务记录用户提交序号与同步事件，推送不能代替持久化。
                     events.append(
                             current,
@@ -699,8 +741,11 @@ public final class AuthActionOperations {
                             userAccountRepository.findById(current.id()).entity();
                     // 3. 持久化当前完整聚合，失败必须中断事务而非继续提交。
                     Transactions.require(
-                            authWriteAppService.saveUserAccount(
-                                    new UserAccountAggregate(locked).resetPassword(hash)));
+                            ApplicationFailures.required(
+                                authDomainService.saveUserAccount(
+                                        authDomainParamAssembler.userAccount(
+                                    new UserAccountAggregate(locked).resetPassword(hash))))
+                        .saved());
                     // 4. 逐项处理当前数据窗口，并在循环中核对可用状态与停止条件。
                     for (var active :
                             loginSessionRepository.query(
@@ -708,9 +753,12 @@ public final class AuthActionOperations {
                                             .where("user_id", "EQ", current.id())
                                             .where("status", "EQ", "ACTIVE"))) {
                         Transactions.require(
-                                authWriteAppService.saveLoginSession(
+                                ApplicationFailures.required(
+                                authDomainService.saveLoginSession(
+                                        authDomainParamAssembler.loginSession(
                                         new LoginSessionAggregate(active.entity())
-                                                .revoke("PASSWORD_RESET")));
+                                                .revoke("PASSWORD_RESET"))))
+                        .saved());
                     }
                     // 5. 同事务记录用户提交序号与同步事件，推送不能代替持久化。
                     events.append(

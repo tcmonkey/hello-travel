@@ -14,7 +14,7 @@ import org.springframework.stereotype.Component;
  * @author AIGenerator
  */
 @Component
-public final class SyncWriteAppAssembler {
+public final class SyncDomainParamAssembler {
 
     /**
      * 投影SyncEvent写入参数，聚合承担业务状态校验。
@@ -23,7 +23,7 @@ public final class SyncWriteAppAssembler {
      * @return 明确用途的转换结果
      * @author AIGenerator
      */
-    public SyncEventWriteParam write(SyncEventAggregate aggregate) {
+    public SyncEventWriteParam syncEvent(SyncEventAggregate aggregate) {
         return new SyncEventWriteParam(aggregate);
     }
 
@@ -45,7 +45,7 @@ public final class SyncWriteAppAssembler {
      * @return 明确用途的转换结果
      * @author AIGenerator
      */
-    public OutboxEventWriteParam write(OutboxEventAggregate aggregate) {
+    public OutboxEventWriteParam outboxEvent(OutboxEventAggregate aggregate) {
         return new OutboxEventWriteParam(aggregate);
     }
 }

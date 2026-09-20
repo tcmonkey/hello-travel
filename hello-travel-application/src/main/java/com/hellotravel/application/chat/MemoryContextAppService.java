@@ -1,11 +1,13 @@
 package com.hellotravel.application.chat;
 
-import com.hellotravel.application.chat.support.ChatWrites;
+import com.hellotravel.application.chat.assembler.ChatDomainParamAssembler;
+import com.hellotravel.application.chat.assembler.MemoryDomainParamAssembler;
 import com.hellotravel.application.chat.context.policy.ChatContextPolicy;
 import com.hellotravel.application.chat.adaptor.MemoryAgent;
 import com.hellotravel.application.chat.assembler.MemoryAgentAppAssembler;
 import com.hellotravel.application.exception.ApplicationErrorCode;
 import com.hellotravel.application.exception.ApplicationException;
+import com.hellotravel.application.support.ApplicationFailures;
 import com.hellotravel.util.JsonUtil;
 import com.hellotravel.application.chat.support.SyncEventPublisher;
 import com.hellotravel.application.exception.RunExecutionService;
@@ -20,6 +22,7 @@ import com.hellotravel.domain.chat.repository.ChatRunRepository;
 import com.hellotravel.domain.chat.repository.ConversationRepository;
 import com.hellotravel.domain.chat.repository.MessageRepository;
 import com.hellotravel.domain.chat.repository.ModelInvocationRepository;
+import com.hellotravel.domain.chat.service.ChatDomainService;
 import com.hellotravel.domain.memory.model.aggregate.MemoryFactAggregate;
 import com.hellotravel.domain.memory.model.aggregate.MemoryFactSourceAggregate;
 import com.hellotravel.domain.memory.model.aggregate.MemorySummaryAggregate;
@@ -30,6 +33,7 @@ import com.hellotravel.domain.memory.model.value.ContextBudgetValue;
 import com.hellotravel.domain.memory.repository.MemoryFactRepository;
 import com.hellotravel.domain.memory.repository.MemoryFactSourceRepository;
 import com.hellotravel.domain.memory.repository.MemorySummaryRepository;
+import com.hellotravel.domain.memory.service.MemoryDomainService;
 import com.hellotravel.domain.query.model.value.QueryValue;
 import com.hellotravel.model.chat.ChatModelDO;
 import com.hellotravel.model.chat.ChatModelStage;
@@ -57,8 +61,10 @@ public final class MemoryContextAppService {
     private final MessageRepository messageRepository;
     private final ChatRunRepository chatRunRepository;
     private final ModelInvocationRepository modelInvocationRepository;
-    private final MemoryWriteAppService memoryWriteAppService;
-    private final ChatWrites chatWrites;
+    private final MemoryDomainService memoryDomainService;
+    private final MemoryDomainParamAssembler memoryDomainParamAssembler;
+    private final ChatDomainService chatDomainService;
+    private final ChatDomainParamAssembler chatDomainParamAssembler;
     private final Transactions transactions;
     private final MemoryAgent memoryAgent;
     private final SyncEventPublisher events;
@@ -66,8 +72,10 @@ public final class MemoryContextAppService {
     private final MemoryAgentAppAssembler memoryAgentAppAssembler;
 
     public MemoryContextAppService(
-            MemoryWriteAppService memoryWriteAppService,
-            ChatWrites chatWrites,
+            MemoryDomainService memoryDomainService,
+            MemoryDomainParamAssembler memoryDomainParamAssembler,
+            ChatDomainService chatDomainService,
+            ChatDomainParamAssembler chatDomainParamAssembler,
             MemorySummaryRepository memorySummaryRepository,
             MemoryFactRepository memoryFactRepository,
             MemoryFactSourceRepository memoryFactSourceRepository,
@@ -80,8 +88,10 @@ public final class MemoryContextAppService {
             SyncEventPublisher events,
             ChatContextPolicy contextPolicy,
             MemoryAgentAppAssembler memoryAgentAppAssembler) {
-        this.memoryWriteAppService = memoryWriteAppService;
-        this.chatWrites = chatWrites;
+        this.memoryDomainService = memoryDomainService;
+        this.memoryDomainParamAssembler = memoryDomainParamAssembler;
+        this.chatDomainService = chatDomainService;
+        this.chatDomainParamAssembler = chatDomainParamAssembler;
         this.memorySummaryRepository = memorySummaryRepository;
         this.memoryFactRepository = memoryFactRepository;
         this.memoryFactSourceRepository = memoryFactSourceRepository;
@@ -343,7 +353,10 @@ public final class MemoryContextAppService {
                     // 3. 首次压缩创建来源范围明确的摘要；已有摘要沿用原始归属。
                     if (previous.isEmpty()) {
                         Transactions.require(
-                                memoryWriteAppService.saveMemorySummary(new MemorySummaryAggregate(entity)));
+                                ApplicationFailures.required(
+                                memoryDomainService.saveMemorySummary(
+                                        memoryDomainParamAssembler.memorySummary(new MemorySummaryAggregate(entity))))
+                        .saved());
                     }
                     // 4. 提供本事务或回调的处理结果，完成责任由所属外层流程承接。
                     return null;
@@ -467,16 +480,22 @@ public final class MemoryContextAppService {
                                                 QueryValue.all("id", 1000)
                                                         .where("fact_id", "EQ", old.id()))) {
                                     Transactions.require(
-                                            memoryWriteAppService.removeMemoryFactSource(
-                                                    evidence.entity().id()));
+                                            ApplicationFailures.required(
+                                memoryDomainService.removeMemoryFactSource(
+                                        memoryDomainParamAssembler.removeMemoryFactSource(
+                                                    evidence.entity().id())))
+                        .saved());
                                 }
                                 var revised =
                                         new MemoryFactAggregate(old)
                                                 .reviseExplicit(proposal, now())
                                                 .entity();
                                 Transactions.require(
-                                        memoryWriteAppService.saveMemoryFact(
-                                                new MemoryFactAggregate(revised)));
+                                        ApplicationFailures.required(
+                                memoryDomainService.saveMemoryFact(
+                                        memoryDomainParamAssembler.memoryFact(
+                                                new MemoryFactAggregate(revised))))
+                        .saved());
                                 var evidence =
                                         MemoryFactSourceAggregate.evidence(
                                                         run.userId(),
@@ -488,14 +507,20 @@ public final class MemoryContextAppService {
                                                         now())
                                                 .entity();
                                 Transactions.require(
-                                        memoryWriteAppService.saveMemoryFactSource(
-                                                new MemoryFactSourceAggregate(evidence)));
+                                        ApplicationFailures.required(
+                                memoryDomainService.saveMemoryFactSource(
+                                        memoryDomainParamAssembler.memoryFactSource(
+                                                new MemoryFactSourceAggregate(evidence))))
+                        .saved());
                                 continue;
                             }
                             MemoryFactEntity fact =
                                     MemoryFactAggregate.explicit(run, proposal, now()).entity();
                             Transactions.require(
-                                    memoryWriteAppService.saveMemoryFact(new MemoryFactAggregate(fact)));
+                                    ApplicationFailures.required(
+                                memoryDomainService.saveMemoryFact(
+                                        memoryDomainParamAssembler.memoryFact(new MemoryFactAggregate(fact))))
+                        .saved());
                             var saved =
                                     memoryFactRepository
                                             .query(
@@ -518,8 +543,11 @@ public final class MemoryContextAppService {
                                                             java.time.ZoneOffset.UTC))
                                             .entity();
                             Transactions.require(
-                                    memoryWriteAppService.saveMemoryFactSource(
-                                            new MemoryFactSourceAggregate(evidence)));
+                                    ApplicationFailures.required(
+                                memoryDomainService.saveMemoryFactSource(
+                                        memoryDomainParamAssembler.memoryFactSource(
+                                            new MemoryFactSourceAggregate(evidence))))
+                        .saved());
                         }
                     }
                     // 3. 同事务记录用户提交序号与同步事件，推送不能代替持久化。
@@ -552,7 +580,11 @@ public final class MemoryContextAppService {
                                     .entity();
                     // 2. 持久化当前完整聚合，失败必须中断事务而非继续提交。
                     Transactions.require(
-                            chatWrites.saveModelInvocation(new ModelInvocationAggregate(finished)));
+                            ApplicationFailures.required(
+                                    chatDomainService.saveModelInvocation(
+                                            chatDomainParamAssembler.modelInvocation(
+                                                    new ModelInvocationAggregate(finished))))
+                            .saved());
                     // 3. 提供本事务或回调的处理结果，完成责任由所属外层流程承接。
                     return null;
                 });
@@ -578,8 +610,11 @@ public final class MemoryContextAppService {
                                             .entity();
                             // 2. 持久化当前完整聚合，失败必须中断事务而非继续提交。
                             Transactions.require(
-                                    chatWrites.saveModelInvocation(
-                                            new ModelInvocationAggregate(invocation)));
+                                    ApplicationFailures.required(
+                                chatDomainService.saveModelInvocation(
+                                        chatDomainParamAssembler.modelInvocation(
+                                            new ModelInvocationAggregate(invocation))))
+                        .saved());
                             // 3. 提供本事务或回调的处理结果，完成责任由所属外层流程承接。
                             return invocation.publicId();
                         });

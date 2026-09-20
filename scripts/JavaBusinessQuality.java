@@ -95,6 +95,21 @@ public final class JavaBusinessQuality {
                                     "application collaborators must inject the exact Repository"
                                             + " ports they use");
                         }
+                        boolean genericWriteApplication =
+                                packageName.contains(".application.")
+                                        && (typeName.endsWith("Writes")
+                                                || (typeName.contains("Write")
+                                                        && typeName.endsWith("AppService")));
+                        if (genericWriteApplication) {
+                            fail(
+                                    "QUALITY-APPLICATION-ACTION",
+                                    unit.getLineMap()
+                                            .getLineNumber(
+                                                    positions.getStartPosition(unit, type)),
+                                    "application services must describe one business action;"
+                                            + " call domain services from that action instead of"
+                                            + " creating generic write services");
+                        }
                         boolean inputAdapter =
                                 packageName.matches(".*\\.adaptor\\..+\\.input(\\..*)?");
                         boolean misplacedController =

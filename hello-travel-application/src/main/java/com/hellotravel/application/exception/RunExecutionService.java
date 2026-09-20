@@ -1,6 +1,7 @@
 package com.hellotravel.application.exception;
 
-import com.hellotravel.application.chat.support.ChatWrites;
+import com.hellotravel.application.chat.assembler.ChatDomainParamAssembler;
+import com.hellotravel.application.support.ApplicationFailures;
 import com.hellotravel.util.JsonUtil;
 import com.hellotravel.application.chat.support.SyncEventPublisher;
 import com.hellotravel.application.tx.Transactions;
@@ -16,6 +17,7 @@ import com.hellotravel.domain.chat.repository.ChatRunRepository;
 import com.hellotravel.domain.chat.repository.ConversationRepository;
 import com.hellotravel.domain.chat.repository.MessageRepository;
 import com.hellotravel.domain.chat.repository.ModelInvocationRepository;
+import com.hellotravel.domain.chat.service.ChatDomainService;
 import com.hellotravel.domain.query.model.value.QueryValue;
 import com.hellotravel.model.chat.ChatModelDO;
 import com.hellotravel.model.travel.TravelAiContract;
@@ -38,19 +40,22 @@ public final class RunExecutionService {
     private final ConversationRepository conversationRepository;
     private final MessageRepository messageRepository;
     private final ModelInvocationRepository modelInvocationRepository;
-    private final ChatWrites chatWrites;
+    private final ChatDomainService chatDomainService;
+    private final ChatDomainParamAssembler chatDomainParamAssembler;
     private final Transactions transactions;
     private final SyncEventPublisher events;
 
     public RunExecutionService(
-            ChatWrites chatWrites,
+            ChatDomainService chatDomainService,
+            ChatDomainParamAssembler chatDomainParamAssembler,
             ChatRunRepository chatRunRepository,
             ConversationRepository conversationRepository,
             MessageRepository messageRepository,
             ModelInvocationRepository modelInvocationRepository,
             Transactions transactions,
             SyncEventPublisher events) {
-        this.chatWrites = chatWrites;
+        this.chatDomainService = chatDomainService;
+        this.chatDomainParamAssembler = chatDomainParamAssembler;
         this.chatRunRepository = chatRunRepository;
         this.conversationRepository = conversationRepository;
         this.messageRepository = messageRepository;
@@ -100,15 +105,21 @@ public final class RunExecutionService {
                     // 4. 通过领域聚合语义准备业务快照，固定状态由实体封装。
                     ChatRunEntity next = new ChatRunAggregate(current).claim(Ids.next()).entity();
                     // 5. 持久化当前完整聚合，失败必须中断事务而非继续提交。
-                    Transactions.require(chatWrites.saveChatRun(new ChatRunAggregate(next)));
+                    Transactions.require(ApplicationFailures.required(
+                                chatDomainService.saveChatRun(
+                                        chatDomainParamAssembler.chatRun(new ChatRunAggregate(next))))
+                        .saved());
                     // 6. 按可信内部标识读取消息当前快照。
                     MessageEntity output =
                             messageRepository.findById(next.assistantMessageId()).entity();
                     // 7. 持久化当前完整聚合，失败必须中断事务而非继续提交。
                     Transactions.require(
-                            chatWrites.saveMessage(
+                            ApplicationFailures.required(
+                                chatDomainService.saveMessage(
+                                        chatDomainParamAssembler.message(
                                     new MessageAggregate(output)
-                                            .progress(output.content(), "STREAMING", null)));
+                                            .progress(output.content(), "STREAMING", null))))
+                        .saved());
                     // 8. 同事务记录用户提交序号与同步事件，推送不能代替持久化。
                     events.append(
                             account,
@@ -164,7 +175,9 @@ public final class RunExecutionService {
                     ChatRunEntity current = requireCurrent(expected);
                     // 2. 持久化当前完整聚合，失败必须中断事务而非继续提交。
                     Transactions.require(
-                            chatWrites.saveChatRun(
+                            ApplicationFailures.required(
+                                chatDomainService.saveChatRun(
+                                        chatDomainParamAssembler.chatRun(
                                     new ChatRunAggregate(current)
                                             .checkpoint(
                                                     node,
@@ -174,7 +187,8 @@ public final class RunExecutionService {
                                                                     TravelAiContract.GRAPH_REVISION,
                                                                     "node",
                                                                     node)),
-                                                    budget)));
+                                                    budget))))
+                        .saved());
                     // 3. 同事务记录用户提交序号与同步事件，推送不能代替持久化。
                     events.append(
                             account,
@@ -207,12 +221,15 @@ public final class RunExecutionService {
                         // 每次草稿落库同时续租；lease仅由相同fence持有者推进。
                         // 2. 持久化当前完整聚合，失败必须中断事务而非继续提交。
                         Transactions.require(
-                                chatWrites.saveChatRun(
+                                ApplicationFailures.required(
+                                chatDomainService.saveChatRun(
+                                        chatDomainParamAssembler.chatRun(
                                         new ChatRunAggregate(current)
                                                 .checkpoint(
                                                         current.graphNode(),
                                                         current.stateJson(),
-                                                        current.contextSnapshotJson())));
+                                                        current.contextSnapshotJson()))))
+                        .saved());
                         // 3. 按可信内部标识读取消息当前快照。
                         MessageEntity output =
                                 messageRepository
@@ -220,9 +237,12 @@ public final class RunExecutionService {
                                         .entity();
                         // 4. 持久化当前完整聚合，失败必须中断事务而非继续提交。
                         Transactions.require(
-                                chatWrites.saveMessage(
+                                ApplicationFailures.required(
+                                chatDomainService.saveMessage(
+                                        chatDomainParamAssembler.message(
                                         new MessageAggregate(output)
-                                                .progress(text, "STREAMING", null)));
+                                                .progress(text, "STREAMING", null))))
+                        .saved());
                         // 5. 按可信内部标识读取对话当前快照。
                         ConversationEntity c =
                                 conversationRepository
@@ -281,7 +301,11 @@ public final class RunExecutionService {
                                     .entity();
                     // 3. 持久化当前完整聚合，失败必须中断事务而非继续提交。
                     Transactions.require(
-                            chatWrites.saveModelInvocation(new ModelInvocationAggregate(created)));
+                            ApplicationFailures.required(
+                                    chatDomainService.saveModelInvocation(
+                                            chatDomainParamAssembler.modelInvocation(
+                                                    new ModelInvocationAggregate(created))))
+                            .saved());
                     // 4. 提供本事务或回调的处理结果，完成责任由所属外层流程承接。
                     return created.publicId();
                 });
@@ -318,7 +342,10 @@ public final class RunExecutionService {
                                     now());
                     // 2. 持久化当前完整聚合，失败必须中断事务而非继续提交。
                     Transactions.require(
-                            chatWrites.saveModelInvocation(new ModelInvocationAggregate(next)));
+                            ApplicationFailures.required(
+                                chatDomainService.saveModelInvocation(
+                                        chatDomainParamAssembler.modelInvocation(new ModelInvocationAggregate(next))))
+                        .saved());
                     // 3. 提供本事务或回调的处理结果，完成责任由所属外层流程承接。
                     return null;
                 });
@@ -352,7 +379,10 @@ public final class RunExecutionService {
                                     .finish("COMPLETED", null)
                                     .entity();
                     // 2. 持久化当前完整聚合，失败必须中断事务而非继续提交。
-                    Transactions.require(chatWrites.saveChatRun(new ChatRunAggregate(finished)));
+                    Transactions.require(ApplicationFailures.required(
+                                chatDomainService.saveChatRun(
+                                        chatDomainParamAssembler.chatRun(new ChatRunAggregate(finished))))
+                        .saved());
                     // 3. 按可信内部标识读取消息当前快照。
                     MessageEntity output =
                             messageRepository
@@ -360,9 +390,12 @@ public final class RunExecutionService {
                                     .entity();
                     // 4. 持久化当前完整聚合，失败必须中断事务而非继续提交。
                     Transactions.require(
-                            chatWrites.saveMessage(
+                            ApplicationFailures.required(
+                                chatDomainService.saveMessage(
+                                        chatDomainParamAssembler.message(
                                     new MessageAggregate(output)
-                                            .progress(text, "COMPLETED", citations)));
+                                            .progress(text, "COMPLETED", citations))))
+                        .saved());
                     // 5. 按可信内部标识读取对话当前快照。
                     ConversationEntity c =
                             conversationRepository
@@ -405,19 +438,25 @@ public final class RunExecutionService {
                     if ("RUNNING".equals(current.status())
                             && current.leaseFence().equals(expected.leaseFence())) {
                         Transactions.require(
-                                chatWrites.saveChatRun(
-                                        new ChatRunAggregate(current).finish("FAILED", error)));
+                                ApplicationFailures.required(
+                                chatDomainService.saveChatRun(
+                                        chatDomainParamAssembler.chatRun(
+                                        new ChatRunAggregate(current).finish("FAILED", error))))
+                        .saved());
                         MessageEntity output =
                                 messageRepository
                                         .findById(current.assistantMessageId())
                                         .entity();
                         Transactions.require(
-                                chatWrites.saveMessage(
+                                ApplicationFailures.required(
+                                chatDomainService.saveMessage(
+                                        chatDomainParamAssembler.message(
                                         new MessageAggregate(output)
                                                 .progress(
                                                         output.content(),
                                                         "FAILED",
-                                                        output.citationsJson())));
+                                                        output.citationsJson()))))
+                        .saved());
                     }
                     // 3. 同事务记录用户提交序号与同步事件，推送不能代替持久化。
                     events.append(
@@ -453,20 +492,26 @@ public final class RunExecutionService {
                         if ("RUNNING".equals(current.status())
                                 && current.leaseUntil().isBefore(now())) {
                             Transactions.require(
-                                    chatWrites.saveChatRun(
+                                    ApplicationFailures.required(
+                                chatDomainService.saveChatRun(
+                                        chatDomainParamAssembler.chatRun(
                                             new ChatRunAggregate(current)
-                                                    .finish("INTERRUPTED", "LEASE_LOST")));
+                                                    .finish("INTERRUPTED", "LEASE_LOST"))))
+                        .saved());
                             MessageEntity output =
                                     messageRepository
                                             .findById(current.assistantMessageId())
                                             .entity();
                             Transactions.require(
-                                    chatWrites.saveMessage(
+                                    ApplicationFailures.required(
+                                chatDomainService.saveMessage(
+                                        chatDomainParamAssembler.message(
                                             new MessageAggregate(output)
                                                     .progress(
                                                             output.content(),
                                                             "INTERRUPTED",
-                                                            output.citationsJson())));
+                                                            output.citationsJson()))))
+                        .saved());
                         }
                         // 3. 同事务记录用户提交序号与同步事件，推送不能代替持久化。
                         events.append(
@@ -503,21 +548,27 @@ public final class RunExecutionService {
                         if ("ACCEPTED".equals(current.status())
                                 && current.updatedAt().isBefore(now().minusMinutes(15))) {
                             Transactions.require(
-                                    chatWrites.saveChatRun(
+                                    ApplicationFailures.required(
+                                chatDomainService.saveChatRun(
+                                        chatDomainParamAssembler.chatRun(
                                             new ChatRunAggregate(current)
-                                                    .finish("INTERRUPTED", "DISPATCH_UNKNOWN")));
+                                                    .finish("INTERRUPTED", "DISPATCH_UNKNOWN"))))
+                        .saved());
                             var answer =
                                     messageRepository
                                             .findById(current.assistantMessageId())
                                             .entity();
                             if (answer.deletedAt() == null) {
                                 Transactions.require(
-                                        chatWrites.saveMessage(
+                                        ApplicationFailures.required(
+                                chatDomainService.saveMessage(
+                                        chatDomainParamAssembler.message(
                                                 new MessageAggregate(answer)
                                                         .progress(
                                                                 answer.content(),
                                                                 "INTERRUPTED",
-                                                                answer.citationsJson())));
+                                                                answer.citationsJson()))))
+                        .saved());
                             }
                         }
                         // 3. 同事务记录用户提交序号与同步事件，推送不能代替持久化。

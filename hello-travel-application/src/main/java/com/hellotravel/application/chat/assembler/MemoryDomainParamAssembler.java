@@ -16,7 +16,7 @@ import org.springframework.stereotype.Component;
  * @author AIGenerator
  */
 @Component
-public final class MemoryWriteAppAssembler {
+public final class MemoryDomainParamAssembler {
 
     /**
      * 投影MemorySummary写入参数，聚合承担业务状态校验。
@@ -25,7 +25,7 @@ public final class MemoryWriteAppAssembler {
      * @return 明确用途的转换结果
      * @author AIGenerator
      */
-    public MemorySummaryWriteParam write(MemorySummaryAggregate aggregate) {
+    public MemorySummaryWriteParam memorySummary(MemorySummaryAggregate aggregate) {
         return new MemorySummaryWriteParam(aggregate);
     }
 
@@ -36,7 +36,7 @@ public final class MemoryWriteAppAssembler {
      * @return 明确用途的转换结果
      * @author AIGenerator
      */
-    public MemoryFactWriteParam write(MemoryFactAggregate aggregate) {
+    public MemoryFactWriteParam memoryFact(MemoryFactAggregate aggregate) {
         return new MemoryFactWriteParam(aggregate);
     }
 
@@ -47,7 +47,7 @@ public final class MemoryWriteAppAssembler {
      * @return 明确用途的转换结果
      * @author AIGenerator
      */
-    public MemoryFactSourceWriteParam write(MemoryFactSourceAggregate aggregate) {
+    public MemoryFactSourceWriteParam memoryFactSource(MemoryFactSourceAggregate aggregate) {
         return new MemoryFactSourceWriteParam(aggregate);
     }
 

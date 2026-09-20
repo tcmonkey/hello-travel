@@ -15,7 +15,7 @@ import org.springframework.stereotype.Component;
  * @author AIGenerator
  */
 @Component
-public final class KnowledgeWriteAppAssembler {
+public final class KnowledgeDomainParamAssembler {
 
     /**
      * 投影KnowledgeDocument写入参数，聚合承担业务状态校验。
@@ -24,7 +24,7 @@ public final class KnowledgeWriteAppAssembler {
      * @return 明确用途的转换结果
      * @author AIGenerator
      */
-    public KnowledgeDocumentWriteParam write(KnowledgeDocumentAggregate aggregate) {
+    public KnowledgeDocumentWriteParam knowledgeDocument(KnowledgeDocumentAggregate aggregate) {
         return new KnowledgeDocumentWriteParam(aggregate);
     }
 
@@ -35,7 +35,7 @@ public final class KnowledgeWriteAppAssembler {
      * @return 明确用途的转换结果
      * @author AIGenerator
      */
-    public KnowledgeChunkWriteParam write(KnowledgeChunkAggregate aggregate) {
+    public KnowledgeChunkWriteParam knowledgeChunk(KnowledgeChunkAggregate aggregate) {
         return new KnowledgeChunkWriteParam(aggregate);
     }
 
@@ -46,7 +46,7 @@ public final class KnowledgeWriteAppAssembler {
      * @return 明确用途的转换结果
      * @author AIGenerator
      */
-    public IndexJobWriteParam write(IndexJobAggregate aggregate) {
+    public IndexJobWriteParam indexJob(IndexJobAggregate aggregate) {
         return new IndexJobWriteParam(aggregate);
     }
 }
