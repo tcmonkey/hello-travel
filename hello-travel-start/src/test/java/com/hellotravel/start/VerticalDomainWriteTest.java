@@ -50,6 +50,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 /** 业务垂直拆分的归属、完整写入、失败分类和跨域事务回归；不访问真实数据库。 */
 class VerticalDomainWriteTest {
@@ -231,6 +232,64 @@ class VerticalDomainWriteTest {
         verify(eventRepository).save(event);
         verify(manager).rollback(any());
         verify(manager, never()).commit(any());
+    }
+
+    @Test
+    void firstVerifiedEmailAccountIsCreatedAndAllocatedBeforeLoginSessionWork() {
+        var accountRepository = mock(UserAccountRepository.class);
+        var device = mock(DeviceRepository.class);
+        var session = mock(LoginSessionRepository.class);
+        var challenge = mock(EmailChallengeRepository.class);
+        var refresh = mock(RefreshReceiptRepository.class);
+        var authDomainService =
+                new AuthDomainService(accountRepository, device, session, challenge, refresh);
+        var manager = mock(PlatformTransactionManager.class);
+        when(manager.getTransaction(any())).thenAnswer(invocation -> new SimpleTransactionStatus());
+        var transactions =
+                new Transactions(
+                        authDomainService,
+                        new AuthDomainParamAssembler(),
+                        manager,
+                        accountRepository);
+        var now = java.time.LocalDateTime.now(java.time.ZoneOffset.UTC);
+        var initial = UserAccountAggregate.emailVerified("first@example.test", now, now, now);
+        var stored = new AtomicReference<UserAccountAggregate>();
+        when(accountRepository.query(any()))
+                .thenAnswer(
+                        invocation ->
+                                stored.get() == null ? List.of() : List.of(stored.get()));
+        when(accountRepository.findById(1L)).thenAnswer(invocation -> stored.get());
+        when(accountRepository.save(any()))
+                .thenAnswer(
+                        invocation -> {
+                            var aggregate = invocation.getArgument(0, UserAccountAggregate.class);
+                            if (aggregate.entity().id() == null) {
+                                var entity = aggregate.entity();
+                                stored.set(
+                                        new UserAccountAggregate(
+                                                new UserAccountEntity(
+                                                        1L,
+                                                        entity.publicId(),
+                                                        entity.emailNormalized(),
+                                                        entity.passwordHash(),
+                                                        entity.emailVerifiedAt(),
+                                                        entity.status(),
+                                                        entity.authEpoch(),
+                                                        entity.syncSeq(),
+                                                        entity.createdAt(),
+                                                        entity.updatedAt(),
+                                                        entity.version())));
+                            } else {
+                                stored.set(aggregate);
+                            }
+                            return true;
+                        });
+        var allocated = transactions.ensureAccountAndMutate(initial, current -> current);
+        assertEquals(1L, allocated.id());
+        assertEquals(1L, allocated.syncSeq());
+        assertEquals(null, allocated.passwordHash());
+        assertEquals(1L, stored.get().entity().syncSeq());
+        verify(manager).commit(any());
     }
 
     private static List<Method> entries(Class<?> type) {

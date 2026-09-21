@@ -8,8 +8,8 @@ import com.hellotravel.domain.exception.DomainException;
  *
  * @param id 内部主键，不直接作为前端数值ID
  * @param publicId 对外ULID字符串标识
- * @param emailNormalized 目标邮箱，注册前可无账号
- * @param purpose 注册、登录或重置用途
+ * @param emailNormalized 目标邮箱，登录码签发时可无账号
+ * @param purpose 登录或密码设置/重置用途
  * @param codeHmac 含挑战ID、邮箱和用途的验证码HMAC
  * @param codeKeyVersion 验证码校验密钥版本标识，无密钥值
  * @param deliveryCiphertext 待发送验证码AEAD密文封装，发送后清除
@@ -197,7 +197,7 @@ public record EmailChallengeEntity(
      *
      * @param publicId 业务公开标识
      * @param emailNormalized 应用规范化后的唯一邮箱
-     * @param purpose 注册、登录或重置用途
+     * @param purpose 登录或密码设置/重置用途
      * @param codeHmac 含挑战ID、邮箱和用途的验证码HMAC
      * @param deliveryCiphertext 待发送验证码AEAD密文封装，发送后清除
      * @param expiresAt 有时间适用性的事实到期时间

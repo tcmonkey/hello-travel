@@ -34,7 +34,7 @@ public class EmailChallengePO {
     private String publicId;
 
     /**
-     * 目标邮箱，注册前可无账号。
+     * 目标邮箱，登录码签发时可无账号。
      *
      * @author AIGenerator
      */
@@ -42,7 +42,7 @@ public class EmailChallengePO {
     private String emailNormalized;
 
     /**
-     * 注册、登录或重置用途。
+     * 登录或密码设置/重置用途。
      *
      * @author AIGenerator
      */

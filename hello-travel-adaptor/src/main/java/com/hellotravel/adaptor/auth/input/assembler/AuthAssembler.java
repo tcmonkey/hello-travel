@@ -6,8 +6,10 @@ import com.hellotravel.adaptor.common.HttpIdentity;
 import com.hellotravel.adaptor.common.HttpProtocol;
 import com.hellotravel.application.auth.command.AuthCommand;
 import com.hellotravel.application.auth.result.AuthAppResult;
+import com.hellotravel.application.auth.result.ChallengeStatusAppResult;
 import com.hellotravel.client.auth.request.AuthRequest;
 import com.hellotravel.client.auth.response.AuthResponse;
+import com.hellotravel.client.auth.response.ChallengeStatusResponse;
 
 import jakarta.servlet.http.HttpServletRequest;
 
@@ -95,6 +97,17 @@ public final class AuthAssembler {
     }
 
     /**
+     * 投影验证码投递状态，不携带收件邮箱和任何验证码载荷。
+     *
+     * @param result 应用层状态结果
+     * @return 明确用途的转换结果
+     * @author AIGenerator
+     */
+    public ChallengeStatusResponse toChallengeStatus(ChallengeStatusAppResult result) {
+        return new ChallengeStatusResponse(result.challengeId(), result.status());
+    }
+
+    /**
      * 解释允许的认证路由。
      *
      * @param action HTTP动作名称
@@ -104,7 +117,6 @@ public final class AuthAssembler {
     public String action(String action) {
         return switch (action) {
             case "challenge" -> "CHALLENGE";
-            case "register" -> "REGISTER";
             case "login" -> "LOGIN";
             case "refresh" -> "REFRESH";
             case "reset" -> "RESET";

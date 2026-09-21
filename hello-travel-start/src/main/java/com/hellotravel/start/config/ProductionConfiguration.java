@@ -56,9 +56,10 @@ public class ProductionConfiguration {
                 throw new IllegalStateException("production requires precise HTTPS origins");
             }
         }
-        // 6. 已配置SMTP时必须启用STARTTLS，拒绝不安全生产配置。
+        // 6. 已配置SMTP时必须启用STARTTLS或隐式TLS，拒绝不安全生产配置。
         if (environment.containsProperty("SMTP_HOST")
-                && !environment.getProperty("SMTP_STARTTLS", Boolean.class, true)) {
+                && !environment.getProperty("SMTP_STARTTLS", Boolean.class, true)
+                && !environment.getProperty("SMTP_SSL", Boolean.class, false)) {
             throw new IllegalStateException("production SMTP requires TLS");
         }
     }

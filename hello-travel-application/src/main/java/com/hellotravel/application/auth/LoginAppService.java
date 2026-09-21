@@ -13,6 +13,7 @@ import com.hellotravel.application.support.ApplicationFailures;
 import com.hellotravel.application.tx.Transactions;
 import com.hellotravel.common.identity.Ids;
 import com.hellotravel.domain.auth.model.aggregate.DeviceAggregate;
+import com.hellotravel.domain.auth.model.aggregate.UserAccountAggregate;
 import com.hellotravel.domain.auth.model.aggregate.LoginSessionAggregate;
 import com.hellotravel.domain.auth.model.entity.DeviceEntity;
 import com.hellotravel.domain.auth.model.entity.EmailChallengeEntity;
@@ -104,109 +105,149 @@ public final class LoginAppService extends AuthCredentialSupport implements Auth
     String address = email(command.email());
     // 2. 执行当前主体及用途的频控，超限提前中止。
     limit(command, "login:" + address);
-    // 3. 保留当前来源或状态快照，后续核对并发变更与重复执行。
+    // 3. 固定登录方式和当前账号快照，验证码登录允许账号尚不存在。
+    boolean codeLogin = command.challengeId() != null && !command.challengeId().isBlank();
     UserAccountEntity snapshot = account(address);
-    EmailChallengeEntity verified = null;
-    // 4. 根据是否携带邮箱证明选择验证码或密码验证路径。
-    if (command.challengeId() != null && !command.challengeId().isBlank()) {
-      verified = proof(command, "LOGIN", address);
-    } else {
+    // 4. 验证码路径先确认邮箱归属，密码路径使用等成本校验保护账号存在性。
+    if (!codeLogin) {
       boolean valid = secure(securityCommandAppAssembler.passwordProof(command, snapshot)).valid();
-      if (!valid) {
+      if (!valid || snapshot == null || !"ACTIVE".equals(snapshot.status())) {
         throw new ApplicationException(ApplicationErrorCode.UNAUTHORIZED);
       }
+      return issueForExistingAccount(command, snapshot, null, true);
     }
-    // 5. 本浏览器设备尚未登记时创建归属当前账号的设备实例。
-    if (snapshot == null || !"ACTIVE".equals(snapshot.status())) {
-      throw new ApplicationException(ApplicationErrorCode.UNAUTHORIZED);
+    EmailChallengeEntity verified = proof(command, "LOGIN", address);
+    // 5. 已有账号直接签发会话；首次有效验证码在同一事务中创建账号并签发会话。
+    if (snapshot != null) {
+      return issueForExistingAccount(command, snapshot, verified, false);
     }
-    // 6. 固定外部校验结果，事务内再次核对账号代次。
-    EmailChallengeEntity codeProof = verified;
-    String access = Ids.token(), refresh = Ids.token(), csrf = Ids.token(), sid = Ids.next();
-    // 7. 将已读取快照转为本用例视图，凭据与内部字段按协议隔离。
+    UserAccountAggregate initial =
+        UserAccountAggregate.emailVerified(
+            address,
+            now(),
+            java.time.LocalDateTime.now(java.time.ZoneOffset.UTC),
+            java.time.LocalDateTime.now(java.time.ZoneOffset.UTC));
+    return transactions.ensureAccountAndMutate(
+        initial,
+        current -> issueSession(command, current, verified, null, false));
+  }
+
+  /**
+   * 为已有账号在版本受控事务内签发当前浏览器会话。
+   *
+   * @author AIGenerator
+   * @param command 已由输入层转换的命令
+   * @param snapshot 验证前读取的账号快照
+   * @param codeProof 已验证的登录验证码；密码登录为空
+   * @param passwordLogin 是否按密码快照复核
+   * @return 当前动作的应用结果
+   */
+  private AuthAppResult issueForExistingAccount(
+      AuthCommand command,
+      UserAccountEntity snapshot,
+      EmailChallengeEntity codeProof,
+      boolean passwordLogin) {
+    // 1. 通过账号提交序列串行化当前设备会话替换与同步事件。
     return transactions.mutate(
         snapshot.id(),
-        current -> {
-          // 1. 再次核对密码快照与账号认证代次，阻断重置后的旧校验结果。
-          if (!current.passwordHash().equals(snapshot.passwordHash())
-              || !current.authEpoch().equals(snapshot.authEpoch())) {
-            throw new ApplicationException(ApplicationErrorCode.UNAUTHORIZED);
-          }
-          // 2. 验证码登录在签发会话事务中消费证明，失败随业务一起回滚。
-          if (codeProof != null) {
-            consume(codeProof);
-          }
-          // 3. 取得浏览器设备标识的不可逆摘要，供本段后续处理使用。
-          byte[] deviceHash = Ids.hash(command.deviceKey());
-          var found =
-              deviceRepository.query(
-                  QueryValue.all("id", 1)
-                      .where("user_id", "EQ", current.id())
-                      .where("device_key_hash", "EQ", deviceHash));
-          DeviceEntity device;
-          // 4. 本浏览器设备尚未登记时创建归属当前账号的设备实例。
-          if (found.isEmpty()) {
-            DeviceEntity created =
-                DeviceAggregate.browser(current.id(), deviceHash, now()).entity();
-            Transactions.require(
-                ApplicationFailures.required(
-                        authDomainService.saveDevice(
-                            authDomainParamAssembler.device(new DeviceAggregate(created))))
-                    .saved());
-            device =
-                deviceRepository
-                    .query(QueryValue.all("id", 1).where("public_id", "EQ", created.publicId()))
-                    .get(0)
-                    .entity();
-          } else {
-            device = found.get(0).entity();
-          }
-          // 5. 读取登录会话，按当前用例条件限定查询窗口。
-          var active =
-              loginSessionRepository.query(
-                  QueryValue.all("id", 1)
-                      .where("device_id", "EQ", device.id())
-                      .where("status", "EQ", "ACTIVE"));
-          String revoked = null;
-          // 6. 同浏览器设备已有活动会话时撤销旧会话，其他设备会话继续有效。
-          if (!active.isEmpty()) {
-            revoked = active.get(0).entity().publicId();
-            Transactions.require(
-                ApplicationFailures.required(
-                        authDomainService.saveLoginSession(
-                            authDomainParamAssembler.loginSession(
-                                new LoginSessionAggregate(active.get(0).entity())
-                                    .revoke("REPLACED"))))
-                    .saved());
-          }
-          // 7. 通过领域聚合语义准备业务快照，固定状态由实体封装。
-          LoginSessionEntity created =
-              LoginSessionAggregate.issue(
-                      current,
-                      device,
-                      sid,
-                      Ids.hash(access),
-                      Ids.hash(refresh),
-                      Ids.hash(csrf),
-                      now())
-                  .entity();
-          // 8. 持久化当前完整聚合，失败必须中断事务而非继续提交。
-          Transactions.require(
-              ApplicationFailures.required(
-                      authDomainService.saveLoginSession(
-                          authDomainParamAssembler.loginSession(
-                              new LoginSessionAggregate(created))))
-                  .saved());
-          // 9. 同事务记录用户提交序号与同步事件，推送不能代替持久化。
-          events.append(current, "session.replaced", sid, 0, revoked, "{}");
-          // 10. 读取登录会话，按当前用例条件限定查询窗口。
-          var stored =
-              loginSessionRepository
-                  .query(QueryValue.all("id", 1).where("public_id", "EQ", sid))
-                  .get(0)
-                  .entity();
-          // 11. 将已读取快照转为本用例视图，凭据与内部字段按协议隔离。
-          return authAppAssembler.session(current, stored, access, refresh, csrf);
-        });
+        current -> issueSession(command, current, codeProof, snapshot, passwordLogin));
+  }
+
+  /**
+   * 在调用方已开启的短事务内消费验证码、替换本设备会话并组装认证结果。
+   *
+   * @author AIGenerator
+   * @param command 已由输入层转换的命令
+   * @param current 已分配同步序列的当前账号
+   * @param codeProof 已验证的登录验证码；密码登录为空
+   * @param passwordSnapshot 密码验证使用的账号快照；验证码登录为空
+   * @param passwordLogin 是否按密码快照复核
+   * @return 当前动作的应用结果
+   */
+  private AuthAppResult issueSession(
+      AuthCommand command,
+      UserAccountEntity current,
+      EmailChallengeEntity codeProof,
+      UserAccountEntity passwordSnapshot,
+      boolean passwordLogin) {
+    // 1. 密码登录重新核对密码摘要和认证代次，阻断重置后的旧校验结果。
+    if (passwordLogin
+        && (!java.util.Objects.equals(current.passwordHash(), passwordSnapshot.passwordHash())
+            || !current.authEpoch().equals(passwordSnapshot.authEpoch()))) {
+      throw new ApplicationException(ApplicationErrorCode.UNAUTHORIZED);
+    }
+    // 2. 验证码登录在签发会话事务中消费证明，失败随账号创建和会话一起回滚。
+    if (codeProof != null) {
+      consume(codeProof);
+    }
+    // 3. 生成当前会话的随机凭据，持久层只保存不可逆摘要。
+    String access = Ids.token(), refresh = Ids.token(), csrf = Ids.token(), sid = Ids.next();
+    // 4. 取得浏览器设备标识的不可逆摘要，供本段后续处理使用。
+    byte[] deviceHash = Ids.hash(command.deviceKey());
+    var found =
+        deviceRepository.query(
+            QueryValue.all("id", 1)
+                .where("user_id", "EQ", current.id())
+                .where("device_key_hash", "EQ", deviceHash));
+    DeviceEntity device;
+    // 5. 本浏览器设备尚未登记时创建归属当前账号的设备实例。
+    if (found.isEmpty()) {
+      DeviceEntity created = DeviceAggregate.browser(current.id(), deviceHash, now()).entity();
+      Transactions.require(
+          ApplicationFailures.required(
+                  authDomainService.saveDevice(
+                      authDomainParamAssembler.device(new DeviceAggregate(created))))
+              .saved());
+      device =
+          deviceRepository
+              .query(QueryValue.all("id", 1).where("public_id", "EQ", created.publicId()))
+              .get(0)
+              .entity();
+    } else {
+      device = found.get(0).entity();
+    }
+    // 6. 读取当前浏览器设备的活动会话，准备按设备粒度替换。
+    var active =
+        loginSessionRepository.query(
+            QueryValue.all("id", 1)
+                .where("device_id", "EQ", device.id())
+                .where("status", "EQ", "ACTIVE"));
+    String revoked = null;
+    // 7. 同浏览器设备已有活动会话时撤销旧会话，其他设备会话继续有效。
+    if (!active.isEmpty()) {
+      revoked = active.get(0).entity().publicId();
+      Transactions.require(
+          ApplicationFailures.required(
+                  authDomainService.saveLoginSession(
+                      authDomainParamAssembler.loginSession(
+                          new LoginSessionAggregate(active.get(0).entity()).revoke("REPLACED"))))
+              .saved());
+    }
+    // 8. 通过领域聚合语义准备当前设备的新会话。
+    LoginSessionEntity created =
+        LoginSessionAggregate.issue(
+                current,
+                device,
+                sid,
+                Ids.hash(access),
+                Ids.hash(refresh),
+                Ids.hash(csrf),
+                now())
+            .entity();
+    // 9. 持久化新会话并与验证码消费、旧会话撤销保持同一事务。
+    Transactions.require(
+        ApplicationFailures.required(
+                authDomainService.saveLoginSession(
+                    authDomainParamAssembler.loginSession(new LoginSessionAggregate(created))))
+            .saved());
+    // 10. 记录有序同步事件和发件箱，供当前账号其他设备感知会话替换。
+    events.append(current, "session.replaced", sid, 0, revoked, "{}");
+    // 11. 读取持久化会话并将凭据与内部字段按协议隔离后返回。
+    var stored =
+        loginSessionRepository
+            .query(QueryValue.all("id", 1).where("public_id", "EQ", sid))
+            .get(0)
+            .entity();
+    return authAppAssembler.session(current, stored, access, refresh, csrf);
   }
 }

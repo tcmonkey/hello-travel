@@ -4,7 +4,7 @@
 
 ## 认证
 
-`POST /auth/{challenge,register,login,refresh,reset,logout}`，body字段：email/password/challengeId/code/purpose。purpose为REGISTER/LOGIN/RESET_PASSWORD。邮箱验证码登录用于已注册账号，注册须验证邮箱并设置12～128字符密码。
+`POST /auth/{challenge,login,refresh,reset,logout}`，body字段：email/password/challengeId/code/purpose。purpose为LOGIN/RESET_PASSWORD。邮箱验证码登录同时适用于首次和既有用户：首次有效LOGIN码原子创建账号；密码可通过RESET_PASSWORD验证码设置或重置，长度为12～128字符。
 
 所有写入要求精确允许的Origin。鉴权请求携带 `Authorization: Bearer <access>` 与 `X-Session-ID`；刷新另带 `X-CSRF-Token` 和HttpOnly Cookie。同设备Cookie为服务端签名随机设备标识。Cookie替换不会改变旧页面的SID；SID先于CSRF验证，旧页面不会撤销新SID。访问15分钟、登录绝对7天、验证码5分钟/5次。限流依赖Redis，Redis不可用时失败关闭。
 

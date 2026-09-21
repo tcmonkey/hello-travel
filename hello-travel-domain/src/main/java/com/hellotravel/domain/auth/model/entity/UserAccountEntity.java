@@ -10,7 +10,7 @@ import com.hellotravel.domain.exception.DomainException;
  * @param id 内部主键，不直接作为前端数值ID
  * @param publicId 对外ULID字符串标识
  * @param emailNormalized 应用规范化后的唯一邮箱
- * @param passwordHash 带算法和参数的加盐密码哈希，不存明文
+ * @param passwordHash 可选的带算法和参数的加盐密码哈希，不存明文
  * @param emailVerifiedAt 邮箱验证成功时间
  * @param status 账号状态
  * @param authEpoch 全设备撤销版本，重置密码时递增
@@ -111,27 +111,23 @@ public record UserAccountEntity(
     }
 
     /**
-     * 创建邮箱已验证的新账号并固定初始认证代次，固定状态由实体封装。
+     * 创建通过邮箱验证码确认归属的新账号并固定初始认证代次，密码可稍后设置。
      *
      * @param emailNormalized 应用规范化后的唯一邮箱
-     * @param passwordHash 带算法和参数的加盐密码哈希，不存明文
      * @param emailVerifiedAt 邮箱验证成功时间
      * @param createdAt 创建时间
      * @param updatedAt 当前变更时间
      * @return 保持归属与版本的业务快照
      * @author AIGenerator
      */
-    public static UserAccountEntity registered(
+    public static UserAccountEntity emailVerified(
             String emailNormalized,
-            String passwordHash,
             java.time.LocalDateTime emailVerifiedAt,
             java.time.LocalDateTime createdAt,
             java.time.LocalDateTime updatedAt) {
-        // 1. 拒绝不完整的已验证邮箱和密码摘要，不能先创建无效账号再补填证明。
+        // 1. 拒绝不完整的已验证邮箱，密码可由后续设置动作补充。
         if (emailNormalized == null
                 || emailNormalized.isBlank()
-                || passwordHash == null
-                || passwordHash.isBlank()
                 || emailVerifiedAt == null) {
             throw new IllegalArgumentException("verified account");
         }
@@ -140,7 +136,7 @@ public record UserAccountEntity(
                 null,
                 Ids.next(),
                 emailNormalized,
-                passwordHash,
+                null,
                 emailVerifiedAt,
                 "ACTIVE",
                 0L,

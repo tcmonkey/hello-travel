@@ -60,3 +60,21 @@ logging:
     dev.langchain4j: WARN
     io.milvus: WARN
     org.springframework.mail: WARN
+
+# 本机开发配置：按本地开发约定明文维护；生产环境由部署配置覆盖。
+AMAP_MAPS_API_KEY: 'aef8d4fda2dbac21a6644fc9d8a8441a'
+DASHSCOPE_API_KEY: 'sk-ws-H.EDELPDD.bVBR.MEQCIDbgzsDjirGndtBVEtnYONG9zOAb80WtVUv_FuMIhryXAiACmTf96FnspWMJZE9GB-o4Fg_ZiKOzYTG5oq9k8RJ2Cg'
+DEVICE_SIGNING_KEY: 'PtjxmBchVymz3Fbi5oAZJoORC1b+9d3Sb2PD5C30Epc='
+MYSQL_PASSWORD: 'smile@123'
+MYSQL_USERNAME: 'root'
+OTP_DELIVERY_KEY: 'Evj9ZI5IKUfGougpsXiLaRGj3Kh260TCYmKms8wMnVY='
+OTP_HMAC_KEY: 'fh4VS3LDA609L2inelWRmgEJPBTThyko5Ghg1ve5eUM='
+SMTP_STARTTLS: false
+SMTP_SSL: true
+
+# 注册、邮箱登录和找回密码需要真实SMTP；请按邮件服务商参数填写。
+SMTP_HOST: smtp.163.com
+SMTP_PORT: 465
+SMTP_USERNAME: xiaosheng513253074@163.com
+SMTP_PASSWORD: RSMzTEr6QFDLLpjH
+SMTP_FROM: xiaosheng513253074@163.com

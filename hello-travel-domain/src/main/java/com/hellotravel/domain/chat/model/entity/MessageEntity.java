@@ -161,7 +161,7 @@ public record MessageEntity(
                 conversation.id(),
                 conversation.lastMessageSeq() + 2,
                 "ASSISTANT",
-                null,
+                "ACCEPTED",
                 "",
                 null,
                 null,

@@ -71,10 +71,11 @@ class DomainModelQualityTest {
         assertThrows(IllegalArgumentException.class, () -> conversation.rename("x".repeat(121)));
         assertThrows(
                 IllegalArgumentException.class,
-                () -> UserAccountAggregate.registered("a@example.test", "hash", null, now, now));
-        var account = UserAccountAggregate.registered("a@example.test", "hash", now, now, now);
+                () -> UserAccountAggregate.emailVerified("a@example.test", null, now, now));
+        var account = UserAccountAggregate.emailVerified("a@example.test", now, now, now);
         assertEquals("ACTIVE", account.entity().status());
         assertEquals(0L, account.entity().authEpoch());
+        assertEquals(null, account.entity().passwordHash());
     }
 
     @Test
@@ -125,12 +126,14 @@ class DomainModelQualityTest {
         assertEquals("USER", input.role());
         assertEquals(6L, input.messageSeq());
         assertEquals(7L, output.messageSeq());
+        // 2. 助手占位消息在入库前已拥有可持久化的初始状态，后台领取后再切换为生成中。
+        assertEquals("ACCEPTED", output.status());
         assertThrows(
                 IllegalArgumentException.class,
                 () ->
                         ChatRunAggregate.accepted(
                                 conversation, 1L, "request", new byte[32], input, output, TIME));
-        // 2. 正常消息对绑定当前会话和记忆代次，跨账号消息被拒绝。
+        // 3. 正常消息对绑定当前会话和记忆代次，跨账号消息被拒绝。
         var storedInput = copy(input, Map.of("id", 2L));
         var storedOutput = copy(output, Map.of("id", 3L));
         var run =

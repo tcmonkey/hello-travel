@@ -34,7 +34,7 @@ public class OutboxEventPO {
     private String publicId;
 
     /**
-     * 可选账号归属；注册验证码可尚无账号。
+     * 可选账号归属；首次登录验证码可尚无账号。
      *
      * @author AIGenerator
      */

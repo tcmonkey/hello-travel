@@ -31,6 +31,7 @@ import com.hellotravel.adaptor.chat.output.aiservice.TravelIntentAiService;
 import com.hellotravel.adaptor.chat.output.converter.ChatModelConverter;
 import com.hellotravel.application.auth.result.AuthAppResult;
 import com.hellotravel.application.auth.AuthAppService;
+import com.hellotravel.application.auth.ChallengeStatusAppService;
 import com.hellotravel.application.exception.ApplicationErrorCode;
 import com.hellotravel.application.exception.ApplicationException;
 import com.hellotravel.application.knowledge.assembler.KnowledgeAppAssembler;
@@ -201,7 +202,11 @@ class MappingBoundaryTest {
         when(application.authenticate(any()))
                 .thenReturn(Result.failure(DomainErrorCode.CONTEXT_LIMIT));
         var result =
-                new AuthController(application, cookies, new AuthAssembler())
+                new AuthController(
+                                application,
+                                mock(ChallengeStatusAppService.class),
+                                cookies,
+                                new AuthAssembler())
                         .authenticate(
                                 "login",
                                 new AuthRequest("a@example.com", "password", null, null, null),
@@ -369,7 +374,11 @@ class MappingBoundaryTest {
         var application = mock(AuthAppService.class);
         var cookies = mock(AuthCookies.class);
         var result =
-                new AuthController(application, cookies, new AuthAssembler())
+                new AuthController(
+                                application,
+                                mock(ChallengeStatusAppService.class),
+                                cookies,
+                                new AuthAssembler())
                         .authenticate(
                                 "unknown",
                                 new AuthRequest(null, null, null, null, null),

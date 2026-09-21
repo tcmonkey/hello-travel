@@ -90,8 +90,11 @@ public final class SessionFilter extends OncePerRequestFilter {
                 }
                 String path = request.getRequestURI();
                 boolean open =
-                        List.of("challenge", "register", "login", "refresh", "reset").stream()
-                                .anyMatch(action -> path.equals("/api/v1/auth/" + action));
+                        List.of("challenge", "login", "refresh", "reset").stream()
+                                .anyMatch(action -> path.equals("/api/v1/auth/" + action))
+                                || ("GET".equals(request.getMethod())
+                                        && path.matches(
+                                                "/api/v1/auth/challenge/[0-9A-HJKMNP-TV-Z]{26}/status"));
                 if (!open) {
                     var command = authAssembler.check(request);
                     var result = application.authenticate(command);

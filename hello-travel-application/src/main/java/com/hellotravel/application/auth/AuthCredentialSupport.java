@@ -210,7 +210,7 @@ abstract class AuthCredentialSupport {
     if (command.challengeId() == null
         || command.code() == null
         || !command.code().matches("[0-9]{6}")) {
-      throw new ApplicationException(ApplicationErrorCode.UNAUTHORIZED);
+      throw new ApplicationException(ApplicationErrorCode.EMAIL_CHALLENGE_UNAVAILABLE);
     }
     // 2. 读取邮箱验证码，按当前用例条件限定查询窗口。
     var found =
@@ -218,7 +218,7 @@ abstract class AuthCredentialSupport {
             QueryValue.all("id", 1).where("public_id", "EQ", command.challengeId()));
     // 3. 验证码记录缺失时统一拒绝邮箱证明。
     if (found.isEmpty()) {
-      throw new ApplicationException(ApplicationErrorCode.UNAUTHORIZED);
+      throw new ApplicationException(ApplicationErrorCode.EMAIL_CHALLENGE_UNAVAILABLE);
     }
     // 4. 取得当前对话或验证码快照，供本段后续处理使用。
     EmailChallengeEntity c = found.get(0).entity();
@@ -255,7 +255,7 @@ abstract class AuthCredentialSupport {
               return null;
             });
       }
-      throw new ApplicationException(ApplicationErrorCode.UNAUTHORIZED);
+      throw new ApplicationException(ApplicationErrorCode.EMAIL_CHALLENGE_UNAVAILABLE);
     }
     // 6. 返回本段实际处理结果，保持本层输出契约。
     return c;

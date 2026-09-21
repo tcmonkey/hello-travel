@@ -8,6 +8,7 @@ import com.hellotravel.domain.auth.model.aggregate.UserAccountAggregate;
 import com.hellotravel.domain.auth.model.entity.UserAccountEntity;
 import com.hellotravel.domain.auth.repository.UserAccountRepository;
 import com.hellotravel.domain.auth.service.AuthDomainService;
+import com.hellotravel.domain.query.model.value.QueryValue;
 
 import org.springframework.dao.TransientDataAccessException;
 import org.springframework.stereotype.Component;
@@ -96,24 +97,8 @@ public final class Transactions {
                             // 1. 按可信内部标识读取账号当前快照。
                             UserAccountAggregate stored =
                                     userAccountRepository.findById(userId);
-                            // 2. 账号不存在或不活动时拒绝进入写事务，防止停用后的请求继续提交。
-                            if (stored == null || !"ACTIVE".equals(stored.entity().status())) {
-                                throw new ApplicationException(ApplicationErrorCode.UNAUTHORIZED);
-                            }
-                            // 3. 通过领域聚合语义准备业务快照，固定状态由实体封装。
-                            UserAccountEntity next =
-                                    new UserAccountAggregate(stored.entity())
-                                            .advanceSync()
-                                            .entity();
-                            // 4. 持久化当前完整聚合，失败必须中断事务而非继续提交。
-                            require(
-                                    ApplicationFailures.required(
-                                                    authDomainService.saveUserAccount(
-                                                            authDomainParamAssembler.userAccount(
-                                                                    new UserAccountAggregate(next))))
-                                            .saved());
-                            // 5. 提供本事务或回调的处理结果，完成责任由所属外层流程承接。
-                            return operation.apply(next);
+                            // 2. 取得账号提交序列并在当前事务内执行业务操作。
+                            return mutateStored(stored, operation);
                         });
             } catch (ApplicationException exception) {
                 if (exception.errorCode() != ApplicationErrorCode.CONFLICT || attempt == 2) {
@@ -127,6 +112,91 @@ public final class Transactions {
         }
         // 2. 以稳定异常中断当前内部处理，由所属入口转换安全失败。
         throw new ApplicationException(ApplicationErrorCode.CONFLICT);
+    }
+
+    /**
+     * 为首次邮箱验证登录创建或读取账号，并在同一事务内完成会话相关业务变更。
+     *
+     * @author AIGenerator
+     * @param initialAccount 经验证码确认的初始账号聚合
+     * @param operation 使用已分配提交序列账号的后续业务操作
+     * @param <T> 业务载荷类型
+     * @return 当前操作的业务结果
+     */
+    public <T> T ensureAccountAndMutate(
+            UserAccountAggregate initialAccount, Function<UserAccountEntity, T> operation) {
+        // 1. 重试唯一邮箱创建和账号版本竞争，避免首次并发登录产生重复账号。
+        for (int attempt = 0; attempt < 3; attempt++) {
+            try {
+                return plain(
+                        () -> {
+                            // 1. 先按邮箱读取当前账号；已存在时直接复用，避免重复创建。
+                            var found = userAccountRepository.query(
+                                    QueryValue.all("id", 1)
+                                            .where(
+                                                    "email_normalized",
+                                                    "EQ",
+                                                    initialAccount.entity().emailNormalized()));
+                            UserAccountAggregate stored;
+                            // 2. 不存在时保存已验证账号，并在当前事务内重新读取受数据库唯一约束保护的记录。
+                            if (found.isEmpty()) {
+                                require(ApplicationFailures.required(
+                                                authDomainService.saveUserAccount(
+                                                        authDomainParamAssembler.userAccount(initialAccount)))
+                                        .saved());
+                                found = userAccountRepository.query(
+                                        QueryValue.all("id", 1)
+                                                .where(
+                                                        "email_normalized",
+                                                        "EQ",
+                                                        initialAccount.entity().emailNormalized()));
+                            }
+                            // 3. 创建后的账号必须可被读取；否则中止整体事务而不消费验证码。
+                            if (found.isEmpty()) {
+                                throw new ApplicationException(ApplicationErrorCode.CONFLICT);
+                            }
+                            stored = found.get(0);
+                            // 4. 分配账号同步序列并在同一事务中完成会话签发等后续业务动作。
+                            return mutateStored(stored, operation);
+                        });
+            } catch (ApplicationException exception) {
+                if (exception.errorCode() != ApplicationErrorCode.CONFLICT || attempt == 2) {
+                    throw exception;
+                }
+            } catch (TransientDataAccessException exception) {
+                if (attempt == 2) {
+                    throw new ApplicationException(ApplicationErrorCode.CONFLICT);
+                }
+            }
+        }
+        // 2. 以稳定异常中断当前内部处理，由所属入口转换安全失败。
+        throw new ApplicationException(ApplicationErrorCode.CONFLICT);
+    }
+
+    /**
+     * 取得账号提交序列并在当前事务中执行后续业务变更。
+     *
+     * @author AIGenerator
+     * @param stored 已读取的账号聚合
+     * @param operation 使用已分配提交序列账号的后续业务操作
+     * @param <T> 业务载荷类型
+     * @return 当前操作的业务结果
+     */
+    private <T> T mutateStored(
+            UserAccountAggregate stored, Function<UserAccountEntity, T> operation) {
+        // 1. 账号不存在或不活动时拒绝进入写事务，防止停用后的请求继续提交。
+        if (stored == null || !"ACTIVE".equals(stored.entity().status())) {
+            throw new ApplicationException(ApplicationErrorCode.UNAUTHORIZED);
+        }
+        // 2. 通过领域聚合语义准备业务快照，固定状态由实体封装。
+        UserAccountEntity next = new UserAccountAggregate(stored.entity()).advanceSync().entity();
+        // 3. 持久化当前完整聚合，失败必须中断事务而非继续提交。
+        require(ApplicationFailures.required(
+                        authDomainService.saveUserAccount(
+                                authDomainParamAssembler.userAccount(new UserAccountAggregate(next))))
+                .saved());
+        // 4. 提供本事务或回调的处理结果，完成责任由所属外层流程承接。
+        return operation.apply(next);
     }
 
     /**

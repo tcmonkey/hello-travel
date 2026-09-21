@@ -15,15 +15,16 @@
 要求Java17、Maven、Node24，以及本机MySQL8.4、Redis、Milvus。项目专用MySQL数据库名包含短横线，SQL使用反引号引用。
 
 ```sh
-python3 scripts/setup_local.py
-# 按.env.example在.env.local补充配置，尤其真实SMTP。
+# 在hello-travel-start/src/main/resources/application.yml补充真实SMTP配置。
+# 587通常使用SMTP_STARTTLS: true；465通常使用SMTP_SSL: true且SMTP_STARTTLS: false。
+# IDEA直接Debug Application即可使用本地明文配置。
 python3 scripts/dev.py backend
 # 另一个终端，在同级前端项目启动
 cd ../hello-travel-app
 npm run dev
 ```
 
-打开 `http://127.0.0.1:5173`。脚本只安全读取 `.zprofile` 的允许变量和忽略提交的 `.env.local` 字面值，不source配置、不输出密钥；现有百炼、高德和MySQL变量可直接沿用。后台本次已经通过Flyway创建17张业务表；新环境首次启动通过Flyway建表，禁止clean、baseline或重建既有数据。缺少SMTP时注册验证码、邮箱登录和重置密码明确不可用；没有模拟验证码后门。
+打开 `http://127.0.0.1:5173`。本地配置直接维护在启动模块的 `application.yml`，IDE直接Debug和开发脚本均不读取Shell环境文件。后台本次已经通过Flyway创建17张业务表；新环境首次启动通过Flyway建表，禁止clean、baseline或重建既有数据。首次邮箱验证码登录会自动创建账号；缺少SMTP时邮箱登录和密码设置/重置明确不可用；没有模拟验证码后门。
 
 Cookie在本机HTTP使用 `COOKIE_SECURE=false`，生产HTTPS必须true并配置精确 `ALLOWED_ORIGINS`、真实邮件、独立安全密钥、数据库TLS和凭据权限。生产配置不等于已完成部署验证。
 

@@ -73,25 +73,23 @@ public record UserAccountAggregate(UserAccountEntity entity) {
     }
 
     /**
-     * 创建邮箱已验证的新账号并固定初始认证代次；聚合委托实体，不重复存储标量状态。
+     * 创建邮箱验证完成的新账号并固定初始认证代次；密码由后续设置动作写入。
      *
      * @param emailNormalized 应用规范化后的唯一邮箱
-     * @param passwordHash 带算法和参数的加盐密码哈希，不存明文
      * @param emailVerifiedAt 邮箱验证成功时间
      * @param createdAt 创建时间
      * @param updatedAt 当前变更时间
      * @return 保持归属与版本的业务快照
      * @author AIGenerator
      */
-    public static UserAccountAggregate registered(
+    public static UserAccountAggregate emailVerified(
             String emailNormalized,
-            String passwordHash,
             java.time.LocalDateTime emailVerifiedAt,
             java.time.LocalDateTime createdAt,
             java.time.LocalDateTime updatedAt) {
-        // 1. 创建邮箱已验证的新账号并固定初始认证代次，具体变更委托实体。
+        // 1. 创建邮箱验证完成的新账号并固定初始认证代次，具体变更委托实体。
         return new UserAccountAggregate(
-                UserAccountEntity.registered(
-                        emailNormalized, passwordHash, emailVerifiedAt, createdAt, updatedAt));
+                UserAccountEntity.emailVerified(
+                        emailNormalized, emailVerifiedAt, createdAt, updatedAt));
     }
 }

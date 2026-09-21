@@ -103,19 +103,20 @@ public final class ChallengeAppService extends AuthCredentialSupport implements 
   public AuthAppResult execute(AuthCommand command) {
     // 1. 规范化邮箱并限制输入长度。
     String address = email(command.email());
-    // 2. 仅接受注册、登录和密码重置三种验证码用途。
-    if (!Set.of("REGISTER", "LOGIN", "RESET_PASSWORD").contains(command.purpose())) {
+    // 2. 仅接受统一登录和密码设置/重置两种验证码用途。
+    if (!Set.of("LOGIN", "RESET_PASSWORD").contains(command.purpose())) {
       throw new ApplicationException(ApplicationErrorCode.INVALID);
     }
-    // 3. 核对安全端口返回的验证或限流结果，失败提前中止。
+    // 3. 统一登录码不按账号是否存在分支，避免首次用户被拒绝或泄露账号状态。
+    // 4. 核对安全端口返回的验证或限流结果，失败提前中止。
     if (!secure(securityCommandAppAssembler.mailAvailable()).valid()) {
       throw new ApplicationException(ApplicationErrorCode.UNAVAILABLE);
     }
-    // 4. 执行当前主体及用途的频控，超限提前中止。
-    limit(command, "issue:" + address + ":" + command.purpose());
     // 5. 执行当前主体及用途的频控，超限提前中止。
+    limit(command, "issue:" + address + ":" + command.purpose());
+    // 6. 执行当前主体及用途的频控，超限提前中止。
     limit(command, "issue-ip");
-    // 6. 生成本次业务的公开标识，内部数据库主键保持由仓储分配。
+    // 7. 生成本次业务的公开标识，内部数据库主键保持由仓储分配。
     String id = Ids.next();
     String code = secure(securityCommandAppAssembler.otp()).value();
     byte[] hmac =
@@ -127,7 +128,7 @@ public final class ChallengeAppService extends AuthCredentialSupport implements 
                     .value());
     byte[] encrypted =
         Base64.getDecoder().decode(secure(securityCommandAppAssembler.encrypt(code, id)).value());
-    // 7. 进入受控事务处理，结果与回滚责任保持清晰。
+    // 8. 进入受控事务处理，结果与回滚责任保持清晰。
     transactions.plain(
         () -> {
           // 1. 读取邮箱验证码，按当前用例条件限定查询窗口。
@@ -170,7 +171,7 @@ public final class ChallengeAppService extends AuthCredentialSupport implements 
           // 6. 提供本事务或回调的处理结果，完成责任由所属外层流程承接。
           return null;
         });
-    // 8. 返回本段实际处理结果，保持本层输出契约。
+    // 9. 返回本段实际处理结果，保持本层输出契约。
     return authAppAssembler.challenge(id);
   }
 }

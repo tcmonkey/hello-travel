@@ -9,7 +9,7 @@ import com.hellotravel.domain.exception.DomainException;
  *
  * @param id 内部主键，不直接作为前端数值ID
  * @param publicId 对外ULID字符串标识
- * @param userId 可选账号归属；注册验证码可尚无账号
+ * @param userId 可选账号归属；首次登录验证码可尚无账号
  * @param eventType 推送、开始生成、提取记忆或验证码投递等事件
  * @param dedupeKey 事件投递幂等键
  * @param payloadJson 只存受限任务引用，验证码密文在challenge表

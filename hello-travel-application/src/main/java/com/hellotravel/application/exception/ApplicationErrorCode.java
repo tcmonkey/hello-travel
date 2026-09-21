@@ -22,6 +22,12 @@ public enum ApplicationErrorCode implements ErrorCode {
      */
     UNAUTHORIZED(401, "登录已失效，请重新登录"),
     /**
+     * 定义EMAIL_CHALLENGE_UNAVAILABLE错误分类。
+     *
+     * @author AIGenerator
+     */
+    EMAIL_CHALLENGE_UNAVAILABLE(400, "验证码无效、已过期或未成功投递，请重新获取"),
+    /**
      * 定义SESSION_REPLACED错误分类。
      *
      * @author AIGenerator

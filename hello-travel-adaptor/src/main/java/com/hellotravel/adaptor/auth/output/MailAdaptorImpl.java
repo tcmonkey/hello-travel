@@ -8,10 +8,14 @@ import com.hellotravel.common.error.Failures;
 import com.hellotravel.common.result.Result;
 import com.hellotravel.model.auth.MailDO;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.core.env.Environment;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSenderImpl;
 import org.springframework.stereotype.Component;
+
+import org.springframework.util.StringUtils;
 
 /**
  * 真实SMTP验证码发送；缺少配置失败关闭，不提供固定验证码后门。
@@ -21,6 +25,12 @@ import org.springframework.stereotype.Component;
 @Component
 public final class MailAdaptorImpl implements MailAdaptor {
 
+    /**
+     * 邮件投递的脱敏运行诊断日志。
+     *
+     * @author AIGenerator
+     */
+    private static final Logger LOGGER = LoggerFactory.getLogger(MailAdaptorImpl.class);
     private final Environment environment;
     private final MailConverter mailConverter;
 
@@ -39,8 +49,14 @@ public final class MailAdaptorImpl implements MailAdaptor {
     public Result<MailDO> deliver(MailCommand mailCommand) {
         try {
             // 1. SMTP配置不完整时明确返回未配置结果，避免伪报投递成功。
-            if (environment.getProperty("SMTP_HOST") == null
-                    || environment.getProperty("SMTP_FROM") == null) {
+            String host = environment.getProperty("SMTP_HOST");
+            String from = environment.getProperty("SMTP_FROM");
+            String username = environment.getProperty("SMTP_USERNAME");
+            String password = environment.getProperty("SMTP_PASSWORD");
+            if (!StringUtils.hasText(host)
+                    || !StringUtils.hasText(from)
+                    || !StringUtils.hasText(username)
+                    || !StringUtils.hasText(password)) {
                 return Result.failure(AdaptorErrorCode.UNAVAILABLE);
             }
             // 2. 在异常捕获或资源释放边界内完成本段处理，失败不得伪装为成功。
@@ -48,21 +64,24 @@ public final class MailAdaptorImpl implements MailAdaptor {
                 // 1. 取得配置的邮件发件地址，供本段后续处理使用。
                 var sender = new JavaMailSenderImpl();
                 // 2. 映射本段快照字段，业务状态规则不放入PO赋值。
-                sender.setHost(environment.getRequiredProperty("SMTP_HOST"));
-                sender.setPort(environment.getProperty("SMTP_PORT", Integer.class, 587));
-                sender.setUsername(environment.getProperty("SMTP_USERNAME"));
-                sender.setPassword(environment.getProperty("SMTP_PASSWORD"));
+                sender.setHost(host);
+                int port = environment.getProperty("SMTP_PORT", Integer.class, 587);
+                boolean ssl = environment.getProperty("SMTP_SSL", Boolean.class, port == 465);
+                boolean startTls = environment.getProperty("SMTP_STARTTLS", Boolean.class, !ssl);
+                sender.setPort(port);
+                sender.setUsername(username);
+                sender.setPassword(password);
                 // 3. 取得本服务的运行配置，供本段后续处理使用。
                 var properties = sender.getJavaMailProperties();
                 // 4. 映射本段快照字段，业务状态规则不放入PO赋值。
-                properties.setProperty(
-                        "mail.smtp.auth", Boolean.toString(sender.getUsername() != null));
+                properties.setProperty("mail.smtp.auth", "true");
+                properties.setProperty("mail.smtp.ssl.enable", Boolean.toString(ssl));
                 properties.setProperty(
                         "mail.smtp.starttls.enable",
-                        environment.getProperty("SMTP_STARTTLS", "true"));
+                        Boolean.toString(!ssl && startTls));
                 properties.setProperty(
                         "mail.smtp.starttls.required",
-                        environment.getProperty("SMTP_STARTTLS", "true"));
+                        Boolean.toString(!ssl && startTls));
                 properties.setProperty("mail.smtp.connectiontimeout", "5000");
                 properties.setProperty("mail.smtp.timeout", "10000");
                 properties.setProperty("mail.smtp.writetimeout", "10000");
@@ -70,7 +89,7 @@ public final class MailAdaptorImpl implements MailAdaptor {
                 // 5. 取得本轮消息快照，供本段后续处理使用。
                 SimpleMailMessage message = new SimpleMailMessage();
                 // 6. 映射本段快照字段，业务状态规则不放入PO赋值。
-                message.setFrom(environment.getRequiredProperty("SMTP_FROM"));
+                message.setFrom(from);
                 message.setTo(mailCommand.email());
                 message.setSubject("Hello Travel 邮箱验证码");
                 message.setText(
@@ -83,6 +102,10 @@ public final class MailAdaptorImpl implements MailAdaptor {
                 // 8. 将本层成功数据封装为标准结果，保持对外模型隔离。
                 return Result.success(mailConverter.accepted());
             } catch (Exception exception) {
+                LOGGER.warn(
+                        "SMTP delivery failed for challenge {}, category={}",
+                        mailCommand.challengeId(),
+                        exception.getClass().getSimpleName());
                 return Result.failure(AdaptorErrorCode.UNAVAILABLE);
             }
         } catch (Exception exception) {

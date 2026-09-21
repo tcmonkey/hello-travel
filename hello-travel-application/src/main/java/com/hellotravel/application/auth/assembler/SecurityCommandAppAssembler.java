@@ -135,6 +135,8 @@ public final class SecurityCommandAppAssembler {
     public SecurityCommand passwordProof(AuthCommand command, UserAccountEntity snapshot) {
         return verifyPassword(
                 command.password() == null ? "" : command.password(),
-                snapshot == null ? DUMMY_PASSWORD_HASH : snapshot.passwordHash());
+                snapshot == null || snapshot.passwordHash() == null
+                        ? DUMMY_PASSWORD_HASH
+                        : snapshot.passwordHash());
     }
 }
