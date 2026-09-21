@@ -26,6 +26,13 @@ public final class ChatContextPolicy {
     private static final int AUXILIARY_OUTPUT_LIMIT = 2048;
 
     /**
+     * 默认摘要输入预算，供未覆盖模型策略的运行环境使用。
+     *
+     * @author AIGenerator
+     */
+    private static final int DEFAULT_COMPRESSION_INPUT_LIMIT = 96_000;
+
+    /**
      * 当前对话模型的不可变窗口及预留。
      *
      * @author AIGenerator
@@ -50,15 +57,21 @@ public final class ChatContextPolicy {
         this.limits =
                 ContextBudgetValue.policy(
                         environment.getProperty(
-                                "travel.model.context-window", Integer.class, 32768),
+                                "travel.model.context-window", Integer.class, 131072),
                         environment.getProperty(
-                                "travel.model.output-reserve", Integer.class, 4096),
+                                "travel.model.output-reserve", Integer.class, 8192),
                         environment.getProperty(
                                 "travel.model.safety-reserve", Integer.class, 4096));
         // 2. 单独限制摘要输入，防止辅助任务占满完整模型窗口。
-        this.compressionInputLimit =
+        Integer configuredCompressionLimit =
                 environment.getProperty(
-                        "travel.model.compression-input-limit", Integer.class, 20000);
+                        "travel.model.compression-input-limit", Integer.class);
+        // 2. 未显式设置摘要预算时，随较小的自定义窗口收敛；显式值仍严格拒绝越界。
+        this.compressionInputLimit =
+                configuredCompressionLimit == null
+                        ? Math.min(DEFAULT_COMPRESSION_INPUT_LIMIT, availableInputCapacity())
+                        : configuredCompressionLimit;
+        // 3. 阻止摘要任务挤占回答和安全预留，避免运行中才发现配置不可执行。
         if (compressionInputLimit < 1
                 || !limits.withInput(compressionInputLimit).fits()
                 || !limits.fits()) {
@@ -85,6 +98,17 @@ public final class ChatContextPolicy {
      */
     public int outputReserve() {
         return limits.outputReserve();
+    }
+
+    /**
+     * 计算当前策略中可分配给输入的最大容量。
+     *
+     * @return 除去回答和安全预留后的输入容量
+     * @author AIGenerator
+     */
+    private int availableInputCapacity() {
+        // 1. 所有字段已由领域值对象校验，减法不可能产生负数。
+        return limits.window() - limits.outputReserve() - limits.safetyReserve();
     }
 
     /**

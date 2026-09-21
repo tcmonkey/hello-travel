@@ -50,7 +50,7 @@ public class AiConfiguration {
                 .maxRetries(0)
                 .maxCompletionTokens(
                         environment.getProperty(
-                                "travel.model.output-reserve", Integer.class, 4096))
+                                "travel.model.output-reserve", Integer.class, 8192))
                 .logRequests(false)
                 .logResponses(false)
                 .build();
@@ -79,7 +79,7 @@ public class AiConfiguration {
                 .timeout(Duration.ofSeconds(90))
                 .maxCompletionTokens(
                         environment.getProperty(
-                                "travel.model.output-reserve", Integer.class, 4096))
+                                "travel.model.output-reserve", Integer.class, 8192))
                 .logRequests(false)
                 .logResponses(false)
                 .build();

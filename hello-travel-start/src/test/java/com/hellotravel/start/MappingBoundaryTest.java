@@ -481,7 +481,7 @@ class MappingBoundaryTest {
                 new TravelIntentRecognitionAdaptorImpl(
                         aiService, new ChatContextPolicy(modelEnvironment));
         var rejected =
-                agent.recognize(new TravelIntentAppAssembler().command("X".repeat(32768)));
+                agent.recognize(new TravelIntentAppAssembler().command("X".repeat(131072)));
         assertEquals("CONTEXT_LIMIT", rejected.code());
         verifyNoInteractions(aiService);
     }
@@ -496,7 +496,7 @@ class MappingBoundaryTest {
         var provider = new TravelIntentRecognitionAdaptorImpl(aiService, policy);
         assertEquals(
                 "CONTEXT_LIMIT",
-                provider.recognize(new TravelIntentAppAssembler().command("X".repeat(32768))).code());
+                provider.recognize(new TravelIntentAppAssembler().command("X".repeat(131072))).code());
         verifyNoInteractions(aiService);
         var small =
                 new ChatContextPolicy(

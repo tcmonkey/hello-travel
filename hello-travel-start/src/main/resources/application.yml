@@ -61,6 +61,13 @@ logging:
     io.milvus: WARN
     org.springframework.mail: WARN
 
+travel:
+  model:
+    context-window: 131072
+    output-reserve: 8192
+    safety-reserve: 4096
+    compression-input-limit: 96000
+
 # 本机开发配置：按本地开发约定明文维护；生产环境由部署配置覆盖。
 AMAP_MAPS_API_KEY: 'aef8d4fda2dbac21a6644fc9d8a8441a'
 DASHSCOPE_API_KEY: 'sk-ws-H.EDELPDD.bVBR.MEQCIDbgzsDjirGndtBVEtnYONG9zOAb80WtVUv_FuMIhryXAiACmTf96FnspWMJZE9GB-o4Fg_ZiKOzYTG5oq9k8RJ2Cg'
