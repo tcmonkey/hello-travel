@@ -11,7 +11,7 @@ import dev.langchain4j.service.spring.AiServiceWiringMode;
  *
  * @author AIGenerator
  */
-@AiService(wiringMode = AiServiceWiringMode.EXPLICIT, chatModel = "travelChatModel")
+@AiService(wiringMode = AiServiceWiringMode.EXPLICIT, chatModel = "openAiChatModel")
 public interface MemoryAiService {
 
     /**

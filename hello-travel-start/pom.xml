@@ -46,7 +46,8 @@
         </dependency>
         <dependency>
             <groupId>dev.langchain4j</groupId>
-            <artifactId>langchain4j-open-ai</artifactId>
+            <artifactId>langchain4j-open-ai-spring-boot-starter</artifactId>
+            <version>${langchain4j.spring.version}</version>
         </dependency>
         <dependency>
             <groupId>dev.langchain4j</groupId>

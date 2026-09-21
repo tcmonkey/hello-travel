@@ -390,13 +390,7 @@ class MappingBoundaryTest {
 
     @Test
     void configuredBudgetDisplayAndEnforcementUseOnePolicy() {
-        var environment =
-                new org.springframework.mock.env.MockEnvironment()
-                        .withProperty("travel.model.context-window", "20000")
-                        .withProperty("travel.model.output-reserve", "3000")
-                        .withProperty("travel.model.safety-reserve", "2000")
-                        .withProperty("travel.model.compression-input-limit", "10000");
-        var policy = new ChatContextPolicy(environment);
+        var policy = new ChatContextPolicy(20000, 3000, 2000, 10000);
         var budget = policy.budget(15000);
         assertTrue(budget.fits());
         assertFalse(policy.budget(15001).fits());
@@ -411,9 +405,7 @@ class MappingBoundaryTest {
         assertThrows(
                 ApplicationException.class,
                 () ->
-                        new ChatContextPolicy(
-                                environment.withProperty(
-                                        "travel.model.compression-input-limit", "19000")));
+                        new ChatContextPolicy(20000, 3000, 2000, 19000));
     }
 
     @Test
@@ -440,23 +432,8 @@ class MappingBoundaryTest {
     }
 
     @Test
-    void startupEnvironmentNamesResolveToTheSameBudgetPolicy() {
-        var environment = new org.springframework.core.env.StandardEnvironment();
-        environment
-                .getPropertySources()
-                .addFirst(
-                        new org.springframework.core.env.SystemEnvironmentPropertySource(
-                                "budget-test",
-                                java.util.Map.of(
-                                        "TRAVEL_MODEL_CONTEXT_WINDOW",
-                                        "20000",
-                                        "TRAVEL_MODEL_OUTPUT_RESERVE",
-                                        "3000",
-                                        "TRAVEL_MODEL_SAFETY_RESERVE",
-                                        "2000",
-                                        "TRAVEL_MODEL_COMPRESSION_INPUT_LIMIT",
-                                        "10000")));
-        var policy = new ChatContextPolicy(environment);
+    void configuredBudgetValuesRemainAnImmutablePolicy() {
+        var policy = new ChatContextPolicy(20000, 3000, 2000, 10000);
         assertEquals(20000, policy.budget(0).window());
         assertEquals(3000, policy.outputReserve());
         assertEquals(10000, policy.compressionInputLimit());
@@ -464,22 +441,17 @@ class MappingBoundaryTest {
 
     @Test
     void outputBoundaryKeepsConverterClassificationAndRejectsBeforeIO() {
-        var environment = mock(org.springframework.core.env.Environment.class);
         var vector =
                 new VectorOutAdaptorImpl(
-                        environment, new VectorConverter());
+                        "http://127.0.0.1:19530", "", new VectorConverter());
         var result =
                 vector.index(
                         new VectorCommand("DELETE", "forged-id", DOCUMENT, 1L, List.of(), null));
         assertEquals("INVALID", result.code());
-        verifyNoInteractions(environment);
-        var modelEnvironment =
-                new org.springframework.mock.env.MockEnvironment()
-                        .withProperty("DASHSCOPE_API_KEY", "unused-placeholder");
         var aiService = mock(TravelIntentAiService.class);
         var agent =
                 new TravelIntentRecognitionAdaptorImpl(
-                        aiService, new ChatContextPolicy(modelEnvironment));
+                        aiService, new ChatContextPolicy(131072, 8192, 4096, 96000));
         var rejected =
                 agent.recognize(new TravelIntentAppAssembler().command("X".repeat(131072)));
         assertEquals("CONTEXT_LIMIT", rejected.code());
@@ -488,19 +460,14 @@ class MappingBoundaryTest {
 
     @Test
     void oversizedChatAndIntentAreRejectedBeforePaidProviderIO() {
-        var environment =
-                new org.springframework.mock.env.MockEnvironment()
-                        .withProperty("DASHSCOPE_API_KEY", "unused-placeholder");
-        var policy = new ChatContextPolicy(environment);
+        var policy = new ChatContextPolicy(131072, 8192, 4096, 96000);
         var aiService = mock(TravelIntentAiService.class);
         var provider = new TravelIntentRecognitionAdaptorImpl(aiService, policy);
         assertEquals(
                 "CONTEXT_LIMIT",
                 provider.recognize(new TravelIntentAppAssembler().command("X".repeat(131072))).code());
         verifyNoInteractions(aiService);
-        var small =
-                new ChatContextPolicy(
-                        environment.withProperty("travel.model.output-reserve", "1000"));
+        var small = new ChatContextPolicy(131072, 1000, 4096, 96000);
         assertEquals(1000, small.outputLimit(ChatModelStage.INTENT));
     }
 
@@ -513,9 +480,9 @@ class MappingBoundaryTest {
         var agent =
                 new TravelDialogueAdaptorImpl(
                         aiService,
-                        new ChatContextPolicy(new org.springframework.mock.env.MockEnvironment()),
+                        new ChatContextPolicy(131072, 8192, 4096, 96000),
                         new ChatModelConverter(),
-                        new org.springframework.mock.env.MockEnvironment());
+                        "qwen-plus");
 
         var result =
                 agent.answer(

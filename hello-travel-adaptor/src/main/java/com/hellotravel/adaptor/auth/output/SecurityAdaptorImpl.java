@@ -9,7 +9,7 @@ import com.hellotravel.common.identity.Ids;
 import com.hellotravel.common.result.Result;
 import com.hellotravel.model.security.SecurityDO;
 
-import org.springframework.core.env.Environment;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.security.crypto.argon2.Argon2PasswordEncoder;
@@ -34,15 +34,24 @@ import javax.crypto.spec.SecretKeySpec;
 @Component
 public final class SecurityAdaptorImpl implements SecurityAdaptor {
 
-    private final Environment environment;
+    private final String otpHmacKey;
+    private final String otpDeliveryKey;
+    private final String deviceSigningKey;
+    private final String mailFrom;
     private final StringRedisTemplate redis;
     private final SecurityConverter securityConverter;
 
     public SecurityAdaptorImpl(
-            Environment environment,
+            @Value("\u0024{travel.security.otp-hmac-key}") String otpHmacKey,
+            @Value("\u0024{travel.security.otp-delivery-key}") String otpDeliveryKey,
+            @Value("\u0024{travel.security.device-signing-key}") String deviceSigningKey,
+            @Value("\u0024{travel.mail.from}") String mailFrom,
             StringRedisTemplate redis,
             SecurityConverter securityConverter) {
-        this.environment = environment;
+        this.otpHmacKey = otpHmacKey;
+        this.otpDeliveryKey = otpDeliveryKey;
+        this.deviceSigningKey = deviceSigningKey;
+        this.mailFrom = mailFrom;
         this.redis = redis;
         this.securityConverter = securityConverter;
     }
@@ -81,7 +90,7 @@ public final class SecurityAdaptorImpl implements SecurityAdaptor {
                                                         hmac(
                                                                 securityCommand.value(),
                                                                 securityCommand.scope(),
-                                                                "OTP_HMAC_KEY")));
+                                                                otpHmacKey)));
                         case "SIGN_DEVICE" ->
                                 securityConverter.value(
                                         Base64.getUrlEncoder()
@@ -90,7 +99,7 @@ public final class SecurityAdaptorImpl implements SecurityAdaptor {
                                                         hmac(
                                                                 securityCommand.value(),
                                                                 "device",
-                                                                "DEVICE_SIGNING_KEY")));
+                                                                deviceSigningKey)));
                         case "ENCRYPT" ->
                                 securityConverter.value(
                                         encrypt(securityCommand.value(), securityCommand.scope()));
@@ -99,8 +108,7 @@ public final class SecurityAdaptorImpl implements SecurityAdaptor {
                                         decrypt(securityCommand.value(), securityCommand.scope()));
                         case "MAIL_AVAILABLE" ->
                                 securityConverter.verification(
-                                        environment.containsProperty("SMTP_HOST")
-                                                && environment.containsProperty("SMTP_FROM"));
+                                        mailFrom != null && !mailFrom.isBlank());
                         case "LIMIT" ->
                                 securityConverter.verification(
                                         limit(securityCommand.value(), securityCommand.scope()));
@@ -115,9 +123,8 @@ public final class SecurityAdaptorImpl implements SecurityAdaptor {
         return new Argon2PasswordEncoder(16, 32, 1, 19456, 2);
     }
 
-    private byte[] key(String name) {
+    private byte[] key(String value) {
         // 1. 取得本次预算或解析后的业务值，供本段后续处理使用。
-        String value = environment.getProperty(name);
         // 2. 缺少安全操作输入时拒绝计算，不将空值作为有效凭据。
         if (value == null) {
             throw new IllegalStateException("missing security key");
@@ -132,11 +139,11 @@ public final class SecurityAdaptorImpl implements SecurityAdaptor {
         return key;
     }
 
-    private byte[] hmac(String value, String scope, String keyName) throws Exception {
+    private byte[] hmac(String value, String scope, String keyValue) throws Exception {
         // 1. 取得用于生成不可逆证明的认证码实例，供本段后续处理使用。
         Mac mac = Mac.getInstance("HmacSHA256");
         // 2. 执行init职责步骤，并把失败交给所属事务或入口处理。
-        mac.init(new SecretKeySpec(key(keyName), "HmacSHA256"));
+        mac.init(new SecretKeySpec(key(keyValue), "HmacSHA256"));
         // 3. 返回本段实际处理结果，保持本层输出契约。
         return mac.doFinal((scope + "|" + value).getBytes(StandardCharsets.UTF_8));
     }
@@ -151,7 +158,7 @@ public final class SecurityAdaptorImpl implements SecurityAdaptor {
         // 4. 执行init职责步骤，并把失败交给所属事务或入口处理。
         cipher.init(
                 Cipher.ENCRYPT_MODE,
-                new SecretKeySpec(key("OTP_DELIVERY_KEY"), "AES"),
+                new SecretKeySpec(key(otpDeliveryKey), "AES"),
                 new GCMParameterSpec(128, nonce));
         // 5. 执行updateAAD职责步骤，并把失败交给所属事务或入口处理。
         cipher.updateAAD(scope.getBytes(StandardCharsets.UTF_8));
@@ -173,7 +180,7 @@ public final class SecurityAdaptorImpl implements SecurityAdaptor {
         // 2. 执行init职责步骤，并把失败交给所属事务或入口处理。
         cipher.init(
                 Cipher.DECRYPT_MODE,
-                new SecretKeySpec(key("OTP_DELIVERY_KEY"), "AES"),
+                new SecretKeySpec(key(otpDeliveryKey), "AES"),
                 new GCMParameterSpec(128, bytes, 0, 12));
         // 3. 执行updateAAD职责步骤，并把失败交给所属事务或入口处理。
         cipher.updateAAD(scope.getBytes(StandardCharsets.UTF_8));

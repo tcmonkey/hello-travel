@@ -19,7 +19,7 @@ import io.milvus.v2.service.collection.request.DescribeCollectionReq;
 import io.milvus.v2.service.collection.request.HasCollectionReq;
 import io.milvus.v2.service.collection.request.LoadCollectionReq;
 
-import org.springframework.core.env.Environment;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -35,7 +35,8 @@ import java.util.concurrent.TimeUnit;
 @Component
 public final class VectorOutAdaptorImpl implements VectorOutAdaptor {
 
-    private final Environment environment;
+    private final String milvusUri;
+    private final String milvusToken;
 
     /**
      * 保存cached对应的有界运行状态。
@@ -47,8 +48,11 @@ public final class VectorOutAdaptorImpl implements VectorOutAdaptor {
     private final VectorConverter vectorConverter;
 
     public VectorOutAdaptorImpl(
-            Environment environment, VectorConverter vectorConverter) {
-        this.environment = environment;
+            @Value("\u0024{travel.knowledge.milvus-uri}") String milvusUri,
+            @Value("\u0024{travel.knowledge.milvus-token}") String milvusToken,
+            VectorConverter vectorConverter) {
+        this.milvusUri = milvusUri;
+        this.milvusToken = milvusToken;
         this.vectorConverter = vectorConverter;
     }
 
@@ -117,12 +121,11 @@ public final class VectorOutAdaptorImpl implements VectorOutAdaptor {
         // 2. 取得待完成的请求构建器，供本段后续处理使用。
         var builder =
                 ConnectConfig.builder()
-                        .uri(environment.getProperty("MILVUS_URI", "http://127.0.0.1:19530"))
+                        .uri(milvusUri)
                         .connectTimeoutMs(3000);
-        String token = environment.getProperty("MILVUS_TOKEN");
         // 3. 配置鉴权令牌时才设置Milvus访问凭据。
-        if (token != null && !token.isBlank()) {
-            builder.token(token);
+        if (milvusToken != null && !milvusToken.isBlank()) {
+            builder.token(milvusToken);
         }
         // 4. 更新本次处理的局部数据或上下文，后续步骤读取同一快照。
         cached = new MilvusClientV2(builder.build()).withTimeout(15, TimeUnit.SECONDS);

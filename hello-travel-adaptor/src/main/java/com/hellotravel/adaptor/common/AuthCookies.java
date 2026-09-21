@@ -11,7 +11,7 @@ import com.hellotravel.common.identity.Ids;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 
-import org.springframework.core.env.Environment;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseCookie;
 import org.springframework.stereotype.Component;
 
@@ -24,15 +24,15 @@ import org.springframework.stereotype.Component;
 public final class AuthCookies {
 
     private final SecurityAdaptor security;
-    private final Environment environment;
+    private final boolean cookieSecure;
     private final SecurityCommandAppAssembler securityCommandAppAssembler;
 
     public AuthCookies(
             SecurityAdaptor security,
-            Environment environment,
+            @Value("\u0024{travel.security.cookie-secure}") boolean cookieSecure,
             SecurityCommandAppAssembler securityCommandAppAssembler) {
         this.security = security;
-        this.environment = environment;
+        this.cookieSecure = cookieSecure;
         this.securityCommandAppAssembler = securityCommandAppAssembler;
     }
 
@@ -100,13 +100,12 @@ public final class AuthCookies {
      */
     private void cookie(HttpServletResponse response, String name, String value, long seconds) {
         // 1. 取得安全端口的证明结果，供本段后续处理使用。
-        boolean secure = environment.getProperty("COOKIE_SECURE", Boolean.class, false);
         // 2. 执行addHeader职责步骤，并把失败交给所属事务或入口处理。
         response.addHeader(
                 "Set-Cookie",
                 ResponseCookie.from(name, value)
                         .httpOnly(true)
-                        .secure(secure)
+                        .secure(cookieSecure)
                         .sameSite("Strict")
                         .path("/api/v1")
                         .maxAge(seconds)

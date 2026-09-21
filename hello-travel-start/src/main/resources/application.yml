@@ -1,6 +1,6 @@
 server:
   address: 127.0.0.1
-  port: ${PORT:8080}
+  port: 8080
   shutdown: graceful
   tomcat:
     threads:
@@ -17,9 +17,9 @@ spring:
   lifecycle:
     timeout-per-shutdown-phase: 20s
   datasource:
-    url: jdbc:mysql://${MYSQL_HOST:127.0.0.1}:${MYSQL_PORT:3306}/hello-travel?useUnicode=true&characterEncoding=UTF-8&serverTimezone=UTC&connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true&useSSL=false&allowPublicKeyRetrieval=false
-    username: ${MYSQL_USERNAME}
-    password: ${MYSQL_PASSWORD}
+    url: jdbc:mysql://127.0.0.1:3306/hello-travel?useUnicode=true&characterEncoding=UTF-8&serverTimezone=UTC&connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true&useSSL=false&allowPublicKeyRetrieval=false
+    username: root
+    password: 'smile@123'
     hikari:
       maximum-pool-size: 12
       minimum-idle: 2
@@ -27,9 +27,9 @@ spring:
       validation-timeout: 1000
   data:
     redis:
-      host: ${REDIS_HOST:127.0.0.1}
-      port: ${REDIS_PORT:6379}
-      password: ${REDIS_PASSWORD:}
+      host: 127.0.0.1
+      port: 6379
+      password: ''
       timeout: 2s
       connect-timeout: 2s
   flyway:
@@ -42,6 +42,19 @@ spring:
       max-request-size: 11MB
   jackson:
     default-property-inclusion: non_null
+  mail:
+    host: smtp.163.com
+    port: 465
+    username: xiaosheng513253074@163.com
+    password: 'RSMzTEr6QFDLLpjH'
+    properties:
+      "[mail.smtp.auth]": true
+      "[mail.smtp.ssl.enable]": true
+      "[mail.smtp.starttls.enable]": false
+      "[mail.smtp.starttls.required]": false
+      "[mail.smtp.connectiontimeout]": 5000
+      "[mail.smtp.timeout]": 10000
+      "[mail.smtp.writetimeout]": 10000
 mybatis-plus:
   configuration:
     map-underscore-to-camel-case: true
@@ -61,27 +74,55 @@ logging:
     io.milvus: WARN
     org.springframework.mail: WARN
 
+langchain4j:
+  open-ai:
+    chat-model:
+      base-url: https://dashscope.aliyuncs.com/compatible-mode/v1
+      api-key: 'sk-ws-H.EDELPDD.bVBR.MEQCIDbgzsDjirGndtBVEtnYONG9zOAb80WtVUv_FuMIhryXAiACmTf96FnspWMJZE9GB-o4Fg_ZiKOzYTG5oq9k8RJ2Cg'
+      model-name: qwen-plus
+      timeout: 45s
+      max-completion-tokens: 8192
+      max-retries: 0
+      log-requests: false
+      log-responses: false
+    streaming-chat-model:
+      base-url: https://dashscope.aliyuncs.com/compatible-mode/v1
+      api-key: 'sk-ws-H.EDELPDD.bVBR.MEQCIDbgzsDjirGndtBVEtnYONG9zOAb80WtVUv_FuMIhryXAiACmTf96FnspWMJZE9GB-o4Fg_ZiKOzYTG5oq9k8RJ2Cg'
+      model-name: qwen-plus
+      timeout: 90s
+      max-completion-tokens: 8192
+      max-retries: 0
+      log-requests: false
+      log-responses: false
+    embedding-model:
+      base-url: https://dashscope.aliyuncs.com/compatible-mode/v1
+      api-key: 'sk-ws-H.EDELPDD.bVBR.MEQCIDbgzsDjirGndtBVEtnYONG9zOAb80WtVUv_FuMIhryXAiACmTf96FnspWMJZE9GB-o4Fg_ZiKOzYTG5oq9k8RJ2Cg'
+      model-name: text-embedding-v4
+      dimensions: 1024
+      timeout: 30s
+      max-retries: 0
+      log-requests: false
+      log-responses: false
+
 travel:
   model:
     context-window: 131072
     output-reserve: 8192
     safety-reserve: 4096
     compression-input-limit: 96000
-
-# 本机开发配置：按本地开发约定明文维护；生产环境由部署配置覆盖。
-AMAP_MAPS_API_KEY: 'aef8d4fda2dbac21a6644fc9d8a8441a'
-DASHSCOPE_API_KEY: 'sk-ws-H.EDELPDD.bVBR.MEQCIDbgzsDjirGndtBVEtnYONG9zOAb80WtVUv_FuMIhryXAiACmTf96FnspWMJZE9GB-o4Fg_ZiKOzYTG5oq9k8RJ2Cg'
-DEVICE_SIGNING_KEY: 'PtjxmBchVymz3Fbi5oAZJoORC1b+9d3Sb2PD5C30Epc='
-MYSQL_PASSWORD: 'smile@123'
-MYSQL_USERNAME: 'root'
-OTP_DELIVERY_KEY: 'Evj9ZI5IKUfGougpsXiLaRGj3Kh260TCYmKms8wMnVY='
-OTP_HMAC_KEY: 'fh4VS3LDA609L2inelWRmgEJPBTThyko5Ghg1ve5eUM='
-SMTP_STARTTLS: false
-SMTP_SSL: true
-
-# 注册、邮箱登录和找回密码需要真实SMTP；请按邮件服务商参数填写。
-SMTP_HOST: smtp.163.com
-SMTP_PORT: 465
-SMTP_USERNAME: xiaosheng513253074@163.com
-SMTP_PASSWORD: RSMzTEr6QFDLLpjH
-SMTP_FROM: xiaosheng513253074@163.com
+  security:
+    otp-hmac-key: 'fh4VS3LDA609L2inelWRmgEJPBTThyko5Ghg1ve5eUM='
+    otp-delivery-key: 'Evj9ZI5IKUfGougpsXiLaRGj3Kh260TCYmKms8wMnVY='
+    device-signing-key: 'PtjxmBchVymz3Fbi5oAZJoORC1b+9d3Sb2PD5C30Epc='
+    cookie-secure: false
+    allowed-origins: http://localhost:5173,http://127.0.0.1:5173,http://localhost:8080,http://127.0.0.1:8080
+  mail:
+    from: xiaosheng513253074@163.com
+    smtp-ssl: true
+    smtp-starttls: false
+  knowledge:
+    files-directory: var/files
+    milvus-uri: http://127.0.0.1:19530
+    milvus-token: ''
+  amap:
+    api-key: 'aef8d4fda2dbac21a6644fc9d8a8441a'

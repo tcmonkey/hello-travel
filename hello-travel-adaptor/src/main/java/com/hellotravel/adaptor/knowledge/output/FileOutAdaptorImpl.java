@@ -13,7 +13,7 @@ import com.hellotravel.model.knowledge.FileDO;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.text.PDFTextStripper;
-import org.springframework.core.env.Environment;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.nio.ByteBuffer;
@@ -32,7 +32,7 @@ import java.util.Locale;
 @Component
 public final class FileOutAdaptorImpl implements FileOutAdaptor {
 
-    private final Environment environment;
+    private final String filesDirectory;
 
     /**
      * 有界附件解析并发，保护单机内存。
@@ -43,8 +43,10 @@ public final class FileOutAdaptorImpl implements FileOutAdaptor {
 
     private final FileConverter fileConverter;
 
-    public FileOutAdaptorImpl(Environment environment, FileConverter fileConverter) {
-        this.environment = environment;
+    public FileOutAdaptorImpl(
+            @Value("\u0024{travel.knowledge.files-directory}") String filesDirectory,
+            FileConverter fileConverter) {
+        this.filesDirectory = filesDirectory;
         this.fileConverter = fileConverter;
     }
 
@@ -65,7 +67,7 @@ public final class FileOutAdaptorImpl implements FileOutAdaptor {
             try {
                 // 1. 取得配置的私有文件根目录，供本段后续处理使用。
                 Path root =
-                        Path.of(environment.getProperty("FILES_DIR", "var/files"))
+                        Path.of(filesDirectory)
                                 .toAbsolutePath()
                                 .normalize();
                 // 2. 执行createDirectories职责步骤，并把失败交给所属事务或入口处理。

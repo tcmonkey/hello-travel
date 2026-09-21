@@ -11,7 +11,7 @@ import com.hellotravel.common.result.Result;
 import com.hellotravel.model.chat.ChatModelDO;
 import com.hellotravel.model.chat.ChatModelStage;
 
-import org.springframework.core.env.Environment;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
@@ -29,17 +29,17 @@ public final class TravelDialogueAdaptorImpl implements TravelDialogueAdaptor {
     private final TravelDialogueAiService travelDialogueAiService;
     private final ChatContextPolicy chatContextPolicy;
     private final ChatModelConverter chatModelConverter;
-    private final Environment environment;
+    private final String modelName;
 
     public TravelDialogueAdaptorImpl(
             TravelDialogueAiService travelDialogueAiService,
             ChatContextPolicy chatContextPolicy,
             ChatModelConverter chatModelConverter,
-            Environment environment) {
+            @Value("\u0024{langchain4j.open-ai.chat-model.model-name}") String modelName) {
         this.travelDialogueAiService = travelDialogueAiService;
         this.chatContextPolicy = chatContextPolicy;
         this.chatModelConverter = chatModelConverter;
-        this.environment = environment;
+        this.modelName = modelName;
     }
 
     /**
@@ -85,7 +85,7 @@ public final class TravelDialogueAdaptorImpl implements TravelDialogueAdaptor {
                 return Result.failure(AdaptorErrorCode.UNAVAILABLE);
             }
             return Result.success(chatModelConverter.response(
-                    text.toString(), environment.getProperty("CHAT_MODEL", "qwen-plus")));
+                    text.toString(), modelName));
         } catch (Exception exception) {
             return Failures.capture(exception, AdaptorErrorCode.UNAVAILABLE);
         }

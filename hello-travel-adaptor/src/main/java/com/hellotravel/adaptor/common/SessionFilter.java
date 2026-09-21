@@ -16,7 +16,7 @@ import jakarta.servlet.http.HttpServletResponse;
 
 import org.slf4j.MDC;
 import org.springframework.core.annotation.Order;
-import org.springframework.core.env.Environment;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
@@ -32,19 +32,48 @@ import java.util.List;
 @Order(10)
 public final class SessionFilter extends OncePerRequestFilter {
 
+    /**
+     * 认证业务动作入口。
+     *
+     * @author AIGenerator
+     */
     private final AuthAppService application;
+    /**
+     * 过滤器失败响应的 JSON 序列化器。
+     *
+     * @author AIGenerator
+     */
     private final ObjectMapper mapper;
-    private final Environment environment;
+    /**
+     * 允许发起受保护写请求的浏览器源列表。
+     *
+     * @author AIGenerator
+     */
+    private final List<String> allowedOrigins;
+    /**
+     * HTTP 请求到认证命令的组装器。
+     *
+     * @author AIGenerator
+     */
     private final AuthAssembler authAssembler;
 
+    /**
+     * 创建会话过滤器并装配固定依赖。
+     *
+     * @author AIGenerator
+     * @param application 认证业务动作入口
+     * @param mapper 失败响应序列化器
+     * @param allowedOrigins 允许的浏览器源配置
+     * @param authAssembler 认证命令组装器
+     */
     public SessionFilter(
             AuthAppService application,
             ObjectMapper mapper,
-            Environment environment,
+            @Value("\u0024{travel.security.allowed-origins}") String allowedOrigins,
             AuthAssembler authAssembler) {
         this.application = application;
         this.mapper = mapper;
-        this.environment = environment;
+        this.allowedOrigins = List.of(allowedOrigins.split(","));
         this.authAssembler = authAssembler;
     }
 
@@ -76,15 +105,7 @@ public final class SessionFilter extends OncePerRequestFilter {
             if (request.getRequestURI().startsWith("/api/v1/")) {
                 if (!"GET".equals(request.getMethod()) && !"HEAD".equals(request.getMethod())) {
                     String origin = request.getHeader("Origin");
-                    var allowed =
-                            List.of(
-                                    environment
-                                            .getProperty(
-                                                    "ALLOWED_ORIGINS",
-                                                    "http://localhost:5173,http://127.0.0.1:5173,http://loca"
-                                                        + "lhost:8080,http://127.0.0.1:8080")
-                                            .split(","));
-                    if (origin == null || !allowed.contains(origin)) {
+                    if (origin == null || !allowedOrigins.contains(origin)) {
                         throw new AdaptorException(AdaptorErrorCode.UNAUTHORIZED);
                     }
                 }

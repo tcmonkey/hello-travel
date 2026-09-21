@@ -15,8 +15,8 @@ import reactor.core.publisher.Flux;
  */
 @AiService(
         wiringMode = AiServiceWiringMode.EXPLICIT,
-        chatModel = "travelChatModel",
-        streamingChatModel = "travelStreamingChatModel")
+        chatModel = "openAiChatModel",
+        streamingChatModel = "openAiStreamingChatModel")
 public interface TravelDialogueAiService {
 
     /**

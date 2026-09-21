@@ -12,7 +12,7 @@ import com.hellotravel.common.result.Result;
 import com.hellotravel.model.travel.TravelPlanGenerationDO;
 import com.hellotravel.model.chat.ChatModelStage;
 
-import org.springframework.core.env.Environment;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -28,17 +28,17 @@ public final class TravelPlanGenerationAdaptorImpl implements TravelPlanGenerati
     private final TravelPlanAiService travelPlanAiService;
     private final ChatContextPolicy chatContextPolicy;
     private final TravelPlanConverter travelPlanConverter;
-    private final Environment environment;
+    private final String modelName;
 
     public TravelPlanGenerationAdaptorImpl(
             TravelPlanAiService travelPlanAiService,
             ChatContextPolicy chatContextPolicy,
             TravelPlanConverter travelPlanConverter,
-            Environment environment) {
+            @Value("\u0024{langchain4j.open-ai.chat-model.model-name}") String modelName) {
         this.travelPlanAiService = travelPlanAiService;
         this.chatContextPolicy = chatContextPolicy;
         this.travelPlanConverter = travelPlanConverter;
-        this.environment = environment;
+        this.modelName = modelName;
     }
 
     /**
@@ -70,7 +70,7 @@ public final class TravelPlanGenerationAdaptorImpl implements TravelPlanGenerati
                 return Result.failure(AdaptorErrorCode.UNAVAILABLE);
             }
             return Result.success(travelPlanConverter.generation(
-                    draft, environment.getProperty("CHAT_MODEL", "qwen-plus")));
+                    draft, modelName));
         } catch (Exception exception) {
             return Failures.capture(exception, AdaptorErrorCode.UNAVAILABLE);
         }
@@ -109,7 +109,7 @@ public final class TravelPlanGenerationAdaptorImpl implements TravelPlanGenerati
                 return Result.failure(AdaptorErrorCode.UNAVAILABLE);
             }
             return Result.success(travelPlanConverter.generation(
-                    draft, environment.getProperty("CHAT_MODEL", "qwen-plus")));
+                    draft, modelName));
         } catch (Exception exception) {
             return Failures.capture(exception, AdaptorErrorCode.UNAVAILABLE);
         }

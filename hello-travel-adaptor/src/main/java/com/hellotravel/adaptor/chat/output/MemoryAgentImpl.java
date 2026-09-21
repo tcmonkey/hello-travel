@@ -11,7 +11,7 @@ import com.hellotravel.common.result.Result;
 import com.hellotravel.model.chat.ChatModelDO;
 import com.hellotravel.model.chat.ChatModelStage;
 
-import org.springframework.core.env.Environment;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -27,17 +27,17 @@ public final class MemoryAgentImpl implements MemoryAgent {
 
     private final MemoryAiService aiService;
     private final ChatContextPolicy contextPolicy;
-    private final Environment environment;
+    private final String modelName;
     private final ChatModelConverter converter;
 
     public MemoryAgentImpl(
             MemoryAiService aiService,
             ChatContextPolicy contextPolicy,
-            Environment environment,
+            @Value("\u0024{langchain4j.open-ai.chat-model.model-name}") String modelName,
             ChatModelConverter converter) {
         this.aiService = aiService;
         this.contextPolicy = contextPolicy;
-        this.environment = environment;
+        this.modelName = modelName;
         this.converter = converter;
     }
 
@@ -89,7 +89,7 @@ public final class MemoryAgentImpl implements MemoryAgent {
             String text = operation.apply(command.input(), command.instructions());
             // 3. 高阶服务未暴露usage时保持未知，不伪造计费数据。
             return Result.success(
-                    converter.response(text, environment.getProperty("CHAT_MODEL", "qwen-plus")));
+                    converter.response(text, modelName));
         } catch (Exception exception) {
             return Failures.capture(exception, AdaptorErrorCode.UNAVAILABLE);
         }

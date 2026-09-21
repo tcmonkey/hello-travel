@@ -10,7 +10,7 @@ import com.hellotravel.common.error.Failures;
 import com.hellotravel.common.result.Result;
 import com.hellotravel.model.travel.TravelDO;
 
-import org.springframework.core.env.Environment;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.net.http.HttpClient;
@@ -27,7 +27,7 @@ import java.util.Map;
 @Component
 public final class TravelFactQueryAdaptorImpl implements TravelFactQueryAdaptor {
 
-    private final Environment environment;
+    private final String apiKey;
     private final TravelFactConverter travelOutputConverter;
 
     /**
@@ -42,8 +42,9 @@ public final class TravelFactQueryAdaptorImpl implements TravelFactQueryAdaptor 
                     .build();
 
     public TravelFactQueryAdaptorImpl(
-            Environment environment, TravelFactConverter travelOutputConverter) {
-        this.environment = environment;
+            @Value("\u0024{travel.amap.api-key}") String apiKey,
+            TravelFactConverter travelOutputConverter) {
+        this.apiKey = apiKey;
         this.travelOutputConverter = travelOutputConverter;
     }
 
@@ -58,7 +59,7 @@ public final class TravelFactQueryAdaptorImpl implements TravelFactQueryAdaptor 
     public Result<TravelDO> query(TravelFactQueryCommand travelFactQueryCommand) {
         try {
             // 1. 准备当前操作的存储或签名标识。
-            String key = environment.getProperty("AMAP_MAPS_API_KEY");
+            String key = apiKey;
             // 2. 缺少高德凭据时返回未配置结果，由用例向用户说明实时事实不可用。
             if (key == null || key.isBlank()) {
                 return Result.success(travelOutputConverter.notConfigured());

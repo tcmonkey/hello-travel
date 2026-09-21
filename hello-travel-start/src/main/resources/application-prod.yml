@@ -1,7 +1,0 @@
-COOKIE_SECURE: true
-# 本期不执行生产发布，此配置只提供部署时的严格覆盖。
-spring:
-  datasource:
-    url: jdbc:mysql://${MYSQL_HOST}:${MYSQL_PORT:3306}/hello-travel?sslMode=VERIFY_IDENTITY&serverTimezone=UTC&connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true&allowPublicKeyRetrieval=false
-server:
-  forward-headers-strategy: none

@@ -26,7 +26,7 @@ public final class KnowledgeEmbeddingAgentImpl implements KnowledgeEmbeddingAgen
     private final KnowledgeEmbeddingConverter converter;
 
     public KnowledgeEmbeddingAgentImpl(
-            @Qualifier("knowledgeEmbeddingModel") EmbeddingModel embeddingModel,
+            @Qualifier("openAiEmbeddingModel") EmbeddingModel embeddingModel,
             KnowledgeEmbeddingConverter converter) {
         this.embeddingModel = embeddingModel;
         this.converter = converter;
