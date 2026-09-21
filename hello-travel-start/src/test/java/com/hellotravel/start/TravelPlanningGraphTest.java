@@ -103,8 +103,37 @@ class TravelPlanningGraphTest {
 
         assertTrue(result.success());
         assertTrue(result.data().revisionCount() == 2);
-        assertTrue(result.data().answer().contains("预估总费用超出用户预算"));
+        assertTrue(result.data().answer().contains("没有通过可执行性校验"));
         verify(fixture.plan(), times(2)).revise(any());
+    }
+
+    @Test
+    void insufficientTransitGapIsNormalizedBeforePlanValidation() {
+        // 1. 构造活动内容和事实标记均有效、仅接驳时间不足的模型草稿。
+        var fixture = fixture();
+        var context = context(fixture.run(), completeIntent());
+        var first = new TravelPlanItemDO(
+                "09:00", "10:00", "陶瓷博物馆", "参观", "步行", 10,
+                new BigDecimal("20"), "official-1", true, "");
+        var second = new TravelPlanItemDO(
+                "10:05", "11:05", "御窑博物馆", "参观", "驾车", 20,
+                new BigDecimal("30"), "official-2", true, "");
+        var draft = new TravelPlanDraftDO(
+                "景德镇一日行",
+                "陶瓷文化主题路线",
+                List.of(new TravelPlanDayDO("2026-10-01", "景德镇", List.of(first, second))),
+                new BigDecimal("50"),
+                List.of("提前预约"),
+                List.of("注意天气变化"),
+                List.of());
+        when(fixture.plan().generate(any())).thenReturn(Result.success(generation(draft)));
+
+        // 2. 执行规划图并核对第二项仅顺延时间后可直接渲染，无须模型重试。
+        var result = fixture.graph().execute(context);
+
+        assertTrue(result.success());
+        assertTrue(result.data().answer().contains("10:20-11:20"));
+        verify(fixture.plan(), never()).revise(any());
     }
 
     @Test

@@ -15,6 +15,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.context.request.async.AsyncRequestNotUsableException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 /**
@@ -31,6 +32,21 @@ public final class HttpErrors {
      * @author AIGenerator
      */
     private static final Logger LOGGER = LoggerFactory.getLogger(HttpErrors.class);
+
+    /**
+     * 客户端在SSE写入期间断开时不再尝试写入JSON错误响应。
+     *
+     * @author AIGenerator
+     * @param exception 已不可写的异步请求异常
+     */
+    @ExceptionHandler(AsyncRequestNotUsableException.class)
+    public void disconnected(AsyncRequestNotUsableException exception) {
+        // 1. 已提交的SSE响应不能再协商JSON消息转换器，只记录可预期的连接关闭。
+        LOGGER.debug(
+                "async_request_closed type={} traceId={}",
+                exception.getClass().getSimpleName(),
+                MDC.get("traceId"));
+    }
 
     /**
      * 映射业务失败为对应HTTP状态。

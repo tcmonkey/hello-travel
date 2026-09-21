@@ -7,6 +7,7 @@ import com.hellotravel.domain.exception.DomainErrorCode;
 import com.hellotravel.domain.exception.DomainException;
 import com.hellotravel.domain.travel.model.param.TravelPlanDraftValidationParam;
 import com.hellotravel.domain.travel.model.param.TravelPlanRequestValidationParam;
+import com.hellotravel.domain.travel.model.param.TravelPlanScheduleNormalizationParam;
 import com.hellotravel.model.travel.TravelIntentDO;
 import com.hellotravel.model.travel.TravelPlanDayDO;
 import com.hellotravel.model.travel.TravelPlanDraftDO;
@@ -18,6 +19,7 @@ import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.format.DateTimeParseException;
+import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -31,6 +33,13 @@ import java.util.Set;
  */
 @DomainService
 public final class TravelPlanDomainService {
+
+    /**
+     * 统一输出模型时间字段的小时分钟格式。
+     *
+     * @author AIGenerator
+     */
+    private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm");
 
     /**
      * 核对进入规划图前的必要旅行信息。
@@ -130,6 +139,111 @@ public final class TravelPlanDomainService {
         } catch (Exception exception) {
             return Failures.capture(exception, DomainErrorCode.FAILED);
         }
+    }
+
+    /**
+     * 仅顺延模型草稿中接驳时间不足的后续活动，保留活动内容、费用与事实标记。
+     *
+     * @param param 领域操作参数
+     * @return 已规整的草稿；其他结构问题仍交由草稿校验和模型修订处理
+     * @author AIGenerator
+     */
+    public Result<TravelPlanDraftDO> normalizeSchedule(
+            TravelPlanScheduleNormalizationParam param) {
+        try {
+            // 1. 空草稿没有可规整的排程，交由既有草稿校验返回明确失败。
+            if (param == null || param.draft() == null) {
+                throw new DomainException(DomainErrorCode.INVALID);
+            }
+            TravelPlanDraftDO draft = param.draft();
+            // 2. 逐日顺序规整时间，绝不改写地点、活动、费用或来源等模型事实内容。
+            List<TravelPlanDayDO> normalizedDays = draft.days().stream()
+                    .map(this::normalizeDaySchedule)
+                    .toList();
+            // 3. 返回不可变的新草稿，后续仍须经过完整领域校验才能向用户展示。
+            return Result.success(new TravelPlanDraftDO(
+                    draft.title(),
+                    draft.summary(),
+                    normalizedDays,
+                    draft.estimatedTotal(),
+                    draft.priorities(),
+                    draft.reminders(),
+                    draft.unverifiedItems()));
+        } catch (Exception exception) {
+            return Failures.capture(exception, DomainErrorCode.FAILED);
+        }
+    }
+
+    private TravelPlanDayDO normalizeDaySchedule(TravelPlanDayDO day) {
+        // 1. 不完整的日期对象保留原样，避免规整器掩盖必须由校验器发现的结构错误。
+        if (day == null || day.items().isEmpty()) {
+            return day;
+        }
+        LocalTime previousEnd = null;
+        List<TravelPlanItemDO> normalizedItems = new ArrayList<>();
+        for (TravelPlanItemDO item : day.items()) {
+            // 2. 每项只在开始、结束和接驳分钟都可解析时顺延，其他问题保留给后续修订。
+            ScheduleItem scheduleItem = normalizeItemSchedule(item, previousEnd);
+            normalizedItems.add(scheduleItem.item());
+            previousEnd = scheduleItem.endTime();
+        }
+        // 2. 使用规整后的活动替换当天列表，日期和城市保持模型原始语义。
+        return new TravelPlanDayDO(day.date(), day.city(), normalizedItems);
+    }
+
+    private ScheduleItem normalizeItemSchedule(TravelPlanItemDO item, LocalTime previousEnd) {
+        // 1. 首项或缺少接驳分钟的活动不擅自调整，其完整性仍由领域校验负责。
+        if (item == null || previousEnd == null || item.transitMinutes() == null
+                || item.transitMinutes() < 0) {
+            return new ScheduleItem(item, parseEndTime(item));
+        }
+        // 2. 可规整活动才进入时间计算，解析失败时保持原值等待领域校验。
+        try {
+            // 1. 解析活动原始起止时间，无法解析时不掩盖模型草稿的问题。
+            LocalTime start = LocalTime.parse(item.startTime());
+            LocalTime end = LocalTime.parse(item.endTime());
+            if (!end.isAfter(start)) {
+                return new ScheduleItem(item, end);
+            }
+            // 2. 计算上一项结束加接驳后的最早开始时刻，只有不足时才整体顺延本项。
+            LocalTime earliestStart = previousEnd.plusMinutes(item.transitMinutes());
+            if (!start.isBefore(earliestStart)) {
+                return new ScheduleItem(item, end);
+            }
+            LocalTime normalizedEnd = earliestStart.plusMinutes(
+                    Duration.between(start, end).toMinutes());
+            if (normalizedEnd.isBefore(earliestStart)) {
+                return new ScheduleItem(item, end);
+            }
+            // 3. 仅替换时间字段，防止排程规整器越界修改模型输出的业务内容。
+            return new ScheduleItem(
+                    new TravelPlanItemDO(
+                            TIME_FORMATTER.format(earliestStart),
+                            TIME_FORMATTER.format(normalizedEnd),
+                            item.place(),
+                            item.activity(),
+                            item.transport(),
+                            item.transitMinutes(),
+                            item.estimatedCost(),
+                            item.sourceId(),
+                            item.verified(),
+                            item.verificationNote()),
+                    normalizedEnd);
+        } catch (DateTimeParseException | NullPointerException exception) {
+            return new ScheduleItem(item, parseEndTime(item));
+        }
+    }
+
+    private LocalTime parseEndTime(TravelPlanItemDO item) {
+        // 1. 无法解析的结束时间不能成为下一项排程基线，保留原草稿等待领域校验。
+        try {
+            return item == null ? null : LocalTime.parse(item.endTime());
+        } catch (DateTimeParseException | NullPointerException exception) {
+            return null;
+        }
+    }
+
+    private record ScheduleItem(TravelPlanItemDO item, LocalTime endTime) {
     }
 
     private void validateRequestRange(

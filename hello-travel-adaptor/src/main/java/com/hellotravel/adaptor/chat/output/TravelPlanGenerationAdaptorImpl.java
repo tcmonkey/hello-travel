@@ -14,6 +14,8 @@ import com.hellotravel.model.chat.ChatModelStage;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.List;
 
@@ -24,6 +26,13 @@ import java.util.List;
  */
 @Component
 public final class TravelPlanGenerationAdaptorImpl implements TravelPlanGenerationAdaptor {
+
+    /**
+     * 记录不包含提示词和密钥的模型调用失败证据。
+     *
+     * @author AIGenerator
+     */
+    private static final Logger LOGGER = LoggerFactory.getLogger(TravelPlanGenerationAdaptorImpl.class);
 
     private final TravelPlanAiService travelPlanAiService;
     private final ChatContextPolicy chatContextPolicy;
@@ -72,6 +81,12 @@ public final class TravelPlanGenerationAdaptorImpl implements TravelPlanGenerati
             return Result.success(travelPlanConverter.generation(
                     draft, modelName));
         } catch (Exception exception) {
+            // 3. 记录阶段和根因供运行排障，正文与认证信息不进入日志。
+            LOGGER.warn(
+                    "travel_plan_model_failed stage={} cause_type={}",
+                    ChatModelStage.PLAN_DRAFT,
+                    exception.getClass().getName(),
+                    exception);
             return Failures.capture(exception, AdaptorErrorCode.UNAVAILABLE);
         }
     }
@@ -111,6 +126,12 @@ public final class TravelPlanGenerationAdaptorImpl implements TravelPlanGenerati
             return Result.success(travelPlanConverter.generation(
                     draft, modelName));
         } catch (Exception exception) {
+            // 3. 记录阶段和根因供运行排障，正文与认证信息不进入日志。
+            LOGGER.warn(
+                    "travel_plan_model_failed stage={} cause_type={}",
+                    ChatModelStage.PLAN_REVISION,
+                    exception.getClass().getName(),
+                    exception);
             return Failures.capture(exception, AdaptorErrorCode.UNAVAILABLE);
         }
     }

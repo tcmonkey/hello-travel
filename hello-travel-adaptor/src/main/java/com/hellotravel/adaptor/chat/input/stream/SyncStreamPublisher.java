@@ -152,8 +152,8 @@ public final class SyncStreamPublisher {
       subscriptions.remove(id);
       try {
         sub.emitter.send(SseEmitter.event().name("reset").data("reconnect"));
-      } catch (java.io.IOException ignored) {
-        /* 已断开的连接通过游标重连。 */
+      } catch (Exception sendFailure) {
+        // 5. 客户端已断开或响应不可写时不再尝试发送第二个SSE事件。
       }
       sub.emitter.complete();
     } finally {

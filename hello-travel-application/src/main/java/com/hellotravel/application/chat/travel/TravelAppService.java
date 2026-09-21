@@ -111,7 +111,7 @@ public final class TravelAppService {
                 ContextBudgetValue.estimate(context.input()));
         long started = System.nanoTime();
         var result = travelIntentRecognitionAdaptor.recognize(
-                travelIntentAppAssembler.command(context.input()));
+                travelIntentAppAssembler.command(context));
         // 2. 保存成功或失败证据；结构化意图不作为模型回答正文持久化。
         boolean complete = result != null && result.success() && result.data() != null;
         runExecutionService.invocationComplete(
@@ -127,17 +127,30 @@ public final class TravelAppService {
     }
 
     private TravelIntentMode route(TravelIntentDO intent) {
-        // 1. 优先采用结构化模型返回的受限枚举，不在调用链散落字符串动作。
+        // 1. 已具备计划关键槽位时优先进入规划，防止模型将补充信息错误降级为闲聊。
+        if (hasPlanningDetails(intent)) {
+            return TravelIntentMode.PLANNING;
+        }
+        // 2. 采用结构化模型返回的受限枚举，不在调用链散落字符串动作。
         if (intent.mode() != null) {
             return intent.mode();
         }
-        // 2. 有日期或天数的完整方案诉求进入规划；仅有实时事实标记进入事实问答。
-        if (intent.days() != null || intent.startDate() != null || intent.endDate() != null) {
-            return TravelIntentMode.PLANNING;
-        }
+        // 3. 无明确模式时仅有实时事实标记进入事实问答，其余保持普通对话。
         return intent.weather() || intent.route() || intent.knowledge()
                 ? TravelIntentMode.FACT_QUERY
                 : TravelIntentMode.DIALOGUE;
+    }
+
+    private boolean hasPlanningDetails(TravelIntentDO intent) {
+        // 1. 日期或游玩天数表明用户已给出可编排行程的时间范围。
+        boolean hasSchedule = intent.days() != null
+                || intent.startDate() != null
+                || intent.endDate() != null;
+        // 2. 目的地或人数至少有一项时，结构化结果已具备继续规划而非闲聊的业务语义。
+        boolean hasTravelSubject = (intent.destination() != null && !intent.destination().isBlank())
+                || intent.travelers() != null;
+        // 3. 只有时间和旅行主体同时存在才强制进入计划图，避免普通日期问答被误路由。
+        return hasSchedule && hasTravelSubject;
     }
 
     private void finalizeAnswer(TravelConversationContext context) {

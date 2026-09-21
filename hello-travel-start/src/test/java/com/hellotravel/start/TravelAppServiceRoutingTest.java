@@ -1,6 +1,7 @@
 package com.hellotravel.start;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -24,6 +25,7 @@ import com.hellotravel.application.chat.travel.TravelAppService;
 import com.hellotravel.application.exception.ApplicationErrorCode;
 import com.hellotravel.common.result.Result;
 import com.hellotravel.domain.chat.model.entity.ChatRunEntity;
+import com.hellotravel.domain.chat.model.entity.MessageEntity;
 import com.hellotravel.model.travel.TravelIntentDO;
 import com.hellotravel.model.travel.TravelIntentMode;
 import com.hellotravel.model.chat.ChatModelStage;
@@ -39,6 +41,27 @@ import java.util.List;
  * @author AIGenerator
  */
 class TravelAppServiceRoutingTest {
+
+    @org.junit.jupiter.api.Test
+    void combinesEarlierUserRequirementsBeforeIntentRecognition() {
+        // 1. 构造先给出目的地、后补充人数和出行日期的同一会话快照。
+        TravelConversationContext context = new TravelConversationContext(mock(ChatRunEntity.class));
+        context.load(
+                "两人9月25日出发，计划两天。",
+                List.of(
+                        message(1L, "USER", "目的地是景德镇。"),
+                        message(2L, "ASSISTANT", "请补充出行人数和时间。")),
+                "",
+                "");
+
+        // 2. 组装模型命令并核对历史用户字段、当前补充均可被抽取。
+        String input = new TravelIntentAppAssembler().command(context).input();
+
+        assertTrue(input.contains("目的地是景德镇。"));
+        assertTrue(input.contains("两人9月25日出发，计划两天。"));
+        // 3. 助手追问不属于用户确认事实，不能反向污染旅行意图。
+        assertFalse(input.contains("请补充出行人数和时间。"));
+    }
 
     @org.junit.jupiter.api.Test
     void preservesApplicationFailureClassificationAndMarksClaimedRun() {
@@ -137,5 +160,23 @@ class TravelAppServiceRoutingTest {
                 false,
                 false,
                 false);
+    }
+
+    private MessageEntity message(Long sequence, String role, String content) {
+        // 1. 建立仅用于多轮意图组装的最小持久化消息快照。
+        return new MessageEntity(
+                sequence,
+                "message-" + sequence,
+                1L,
+                1L,
+                sequence,
+                role,
+                "COMPLETED",
+                content,
+                null,
+                null,
+                null,
+                null,
+                1L);
     }
 }

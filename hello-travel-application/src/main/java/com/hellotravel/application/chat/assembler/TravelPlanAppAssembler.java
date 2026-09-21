@@ -7,6 +7,7 @@ import com.hellotravel.application.chat.command.TravelPlanRevisionCommand;
 import com.hellotravel.util.JsonUtil;
 import com.hellotravel.domain.travel.model.param.TravelPlanDraftValidationParam;
 import com.hellotravel.domain.travel.model.param.TravelPlanRequestValidationParam;
+import com.hellotravel.domain.travel.model.param.TravelPlanScheduleNormalizationParam;
 import com.hellotravel.model.travel.TravelPlanDayDO;
 import com.hellotravel.model.travel.TravelPlanItemDO;
 
@@ -102,6 +103,18 @@ public final class TravelPlanAppAssembler {
     }
 
     /**
+     * 组装旅行草稿排程规整参数。
+     *
+     * @param context 当前旅行上下文
+     * @return 排程规整参数
+     * @author AIGenerator
+     */
+    public TravelPlanScheduleNormalizationParam scheduleNormalization(
+            TravelConversationContext context) {
+        return new TravelPlanScheduleNormalizationParam(context.draft());
+    }
+
+    /**
      * 渲染用户需要补充的信息。
      *
      * @param context 当前旅行上下文
@@ -109,12 +122,14 @@ public final class TravelPlanAppAssembler {
      * @author AIGenerator
      */
     public String clarify(TravelConversationContext context) {
-        // 1. 优先使用用户可直接补充的问题，没有问题时展示仍未修正的规则违规。
-        String questions = context.validation().questions().isEmpty()
-                ? String.join("\n", context.validation().violations())
-                : String.join("\n", context.validation().questions());
-        // 2. 返回确定性追问，不为缺失信息再次调用模型或自行猜测。
-        return "为了给你生成可执行的旅行计划，还需要补充：\n" + questions;
+        // 1. 只有需求校验产生的问题才能作为用户追问，避免泄漏内部草稿校验细节。
+        if (!context.validation().questions().isEmpty()) {
+            return "为了给你生成可执行的旅行计划，还需要补充：\n"
+                    + String.join("\n", context.validation().questions());
+        }
+        // 2. 草稿多次修订仍未通过时保留失败事实，但不把接驳等技术性违规当作用户需求。
+        return "我已收到你的旅行需求，但本轮自动排程没有通过可执行性校验，"
+                + "因此没有展示可能不可靠的草稿。请稍后重试，或补充预算、出发地和偏好后让我重新规划。";
     }
 
     /**
