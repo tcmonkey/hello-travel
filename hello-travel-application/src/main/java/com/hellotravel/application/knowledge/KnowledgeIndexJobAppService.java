@@ -2,16 +2,15 @@ package com.hellotravel.application.knowledge;
 
 import com.hellotravel.application.exception.ApplicationErrorCode;
 import com.hellotravel.application.exception.ApplicationException;
-import com.hellotravel.application.knowledge.adaptor.FileOutAdaptor;
-import com.hellotravel.application.knowledge.assembler.FileCommandAppAssembler;
 import com.hellotravel.application.knowledge.adaptor.VectorOutAdaptor;
 import com.hellotravel.application.knowledge.assembler.KnowledgeEmbeddingAppAssembler;
 import com.hellotravel.application.knowledge.assembler.KnowledgeDomainParamAssembler;
 import com.hellotravel.application.knowledge.assembler.VectorCommandAppAssembler;
 import com.hellotravel.application.knowledge.command.VectorItemCommand;
 import com.hellotravel.application.knowledge.adaptor.KnowledgeEmbeddingAgent;
-import com.hellotravel.util.JsonUtil;
 import com.hellotravel.application.chat.support.SyncEventPublisher;
+import com.hellotravel.util.file.FileStorageException;
+import com.hellotravel.util.file.FileStorageUtil;
 import com.hellotravel.application.tx.Transactions;
 import com.hellotravel.application.support.ApplicationFailures;
 import com.hellotravel.common.identity.Ids;
@@ -52,7 +51,7 @@ public final class KnowledgeIndexJobAppService {
     private final SyncEventPublisher events;
     private final KnowledgeEmbeddingAgent embeddingAgent;
     private final VectorOutAdaptor vectors;
-    private final FileOutAdaptor files;
+    private final FileStorageUtil files;
 
     /**
      * 私有文件分批扫描游标。
@@ -70,7 +69,6 @@ public final class KnowledgeIndexJobAppService {
     private final java.util.concurrent.atomic.AtomicLong reconcileCursor =
             new java.util.concurrent.atomic.AtomicLong();
 
-    private final FileCommandAppAssembler fileCommandAppAssembler;
     private final KnowledgeEmbeddingAppAssembler embeddingAssembler;
     private final VectorCommandAppAssembler vectorCommandAppAssembler;
 
@@ -85,8 +83,7 @@ public final class KnowledgeIndexJobAppService {
             SyncEventPublisher events,
             KnowledgeEmbeddingAgent embeddingAgent,
             VectorOutAdaptor vectors,
-            FileOutAdaptor files,
-            FileCommandAppAssembler fileCommandAppAssembler,
+            FileStorageUtil files,
             KnowledgeEmbeddingAppAssembler embeddingAssembler,
             VectorCommandAppAssembler vectorCommandAppAssembler) {
         this.knowledgeDomainService = knowledgeDomainService;
@@ -100,7 +97,6 @@ public final class KnowledgeIndexJobAppService {
         this.embeddingAgent = embeddingAgent;
         this.vectors = vectors;
         this.files = files;
-        this.fileCommandAppAssembler = fileCommandAppAssembler;
         this.embeddingAssembler = embeddingAssembler;
         this.vectorCommandAppAssembler = vectorCommandAppAssembler;
     }
@@ -307,8 +303,9 @@ public final class KnowledgeIndexJobAppService {
                 if (!reconciled.success()) {
                     return;
                 }
-                var erased = files.store(fileCommandAppAssembler.delete(doc.storageKey()));
-                if (!erased.success()) {
+                try {
+                    files.delete(doc.storageKey());
+                } catch (FileStorageException exception) {
                     return;
                 }
                 transactions.mutate(
@@ -370,30 +367,28 @@ public final class KnowledgeIndexJobAppService {
     }
 
     private void sweepOrphans() {
-        // 1. 取得本段结果并准备本层转换，随后显式核对成功状态。
-        var result = files.store(fileCommandAppAssembler.scan(fileCursor.get()));
-        // 2. 依据下层标准结果的成功状态处理分支，避免继续使用无效数据。
-        if (!result.success()) {
-            return;
-        }
-        // 3. 取得本次外部数据返回的候选条目，供本段后续处理使用。
-        var entries = JsonUtil.read(result.data().text());
-        // 4. 没有私有文件时复位扫描游标，下次从首个文件重新检查。
-        if (entries.isEmpty()) {
-            fileCursor.set("");
-        }
-        // 5. 逐项处理当前数据窗口，并在循环中核对可用状态与停止条件。
-        for (var entry : entries) {
-            String key = entry.path("key").asText();
-            fileCursor.set(key);
-            if (entry.path("modified").asLong() > System.currentTimeMillis() - 86400000L) {
-                continue;
+        try {
+            // 1. 从内部文件工具读取受控文件窗口，不再通过业务适配器包装本地能力。
+            var entries = files.scan(fileCursor.get());
+            // 2. 没有私有文件时复位扫描游标，下次从首个文件重新检查。
+            if (entries.isEmpty()) {
+                fileCursor.set("");
             }
-            if (knowledgeDocument
-                    .query(QueryValue.all("id", 1).where("storage_key", "EQ", key))
-                    .isEmpty()) {
-                files.store(fileCommandAppAssembler.delete(key));
+            // 3. 逐项检查已过保护期且没有知识库记录的文件。
+            for (var entry : entries) {
+                String key = entry.storageKey();
+                fileCursor.set(key);
+                if (entry.modifiedAt() > System.currentTimeMillis() - 86400000L) {
+                    continue;
+                }
+                if (knowledgeDocument
+                        .query(QueryValue.all("id", 1).where("storage_key", "EQ", key))
+                        .isEmpty()) {
+                    files.delete(key);
+                }
             }
+        } catch (FileStorageException ignored) {
+            // 4. 后台清理失败等待下一轮，不影响用户请求或索引主链路。
         }
     }
 
@@ -441,7 +436,11 @@ public final class KnowledgeIndexJobAppService {
         // 2. 执行require职责步骤，并把失败交给所属事务或入口处理。
         require(vectors.index(vectorCommandAppAssembler.delete(owner, document)).success());
         // 3. 执行require职责步骤，并把失败交给所属事务或入口处理。
-        require(files.store(fileCommandAppAssembler.delete(document.storageKey())).success());
+        try {
+            files.delete(document.storageKey());
+        } catch (FileStorageException exception) {
+            throw new ApplicationException(ApplicationErrorCode.UNAVAILABLE);
+        }
         // 4. 以当前租约栅栏完成任务并记录稳定终态。
         finish(job, true, null);
         // 5. 返回本段实际处理结果，保持本层输出契约。

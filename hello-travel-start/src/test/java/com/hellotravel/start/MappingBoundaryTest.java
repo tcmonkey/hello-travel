@@ -422,7 +422,7 @@ class MappingBoundaryTest {
                         0,
                         100);
         var parsed =
-                new com.hellotravel.model.knowledge.FileDO(
+                new com.hellotravel.util.file.FileStorageUtil.StoredFile(
                         "file-key", "text/plain", new byte[] {2}, "policy");
         var document = new KnowledgeAppAssembler().received(command, parsed).entity();
         assertEquals(KnowledgeIndexPolicy.model(), document.embeddingModel());

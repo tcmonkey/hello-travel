@@ -6,7 +6,7 @@ import com.hellotravel.application.knowledge.result.DocumentAppResult;
 import com.hellotravel.application.knowledge.result.KnowledgeAppResult;
 import com.hellotravel.domain.knowledge.model.aggregate.KnowledgeDocumentAggregate;
 import com.hellotravel.domain.knowledge.model.entity.KnowledgeDocumentEntity;
-import com.hellotravel.model.knowledge.FileDO;
+import com.hellotravel.util.file.FileStorageUtil;
 
 import org.springframework.stereotype.Component;
 
@@ -86,11 +86,12 @@ public final class KnowledgeAppAssembler {
      * 将受理命令和落盘结果整体投影为领域文档，固定索引配置来自选定策略。
      *
      * @param command 本次转换的command快照
-     * @param parsed 本次转换的parsed快照
+     * @param stored 本地文件工具返回的受控存储结果
      * @return 明确用途的转换结果
      * @author AIGenerator
      */
-    public KnowledgeDocumentAggregate received(KnowledgeCommand command, FileDO parsed) {
+    public KnowledgeDocumentAggregate received(
+            KnowledgeCommand command, FileStorageUtil.StoredFile stored) {
         // 1. 本次入库使用同一个UTC时点，避免分别取得时间形成无意义偏差。
         var now = java.time.LocalDateTime.now(java.time.ZoneOffset.UTC);
         // 2. 映射完整受理资料，实体负责初始状态，供应商元数据由应用策略选择。
@@ -98,11 +99,11 @@ public final class KnowledgeAppAssembler {
                 command.userId(),
                 command.filename().substring(0, Math.min(200, command.filename().length())),
                 command.filename(),
-                parsed.mime(),
-                parsed.storageKey(),
+                stored.mime(),
+                stored.storageKey(),
                 (long) command.bytes().length,
-                parsed.hash(),
-                parsed.text(),
+                stored.hash(),
+                stored.text(),
                 command.sourceUrl(),
                 KnowledgeIndexPolicy.profile(),
                 now,

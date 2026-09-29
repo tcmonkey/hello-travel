@@ -3,14 +3,14 @@ package com.hellotravel.application.knowledge;
 import com.hellotravel.application.chat.support.SyncEventPublisher;
 import com.hellotravel.application.exception.ApplicationErrorCode;
 import com.hellotravel.application.exception.ApplicationException;
-import com.hellotravel.application.knowledge.adaptor.FileOutAdaptor;
-import com.hellotravel.application.knowledge.assembler.FileCommandAppAssembler;
 import com.hellotravel.application.knowledge.assembler.KnowledgeAppAssembler;
 import com.hellotravel.application.knowledge.assembler.KnowledgeDomainParamAssembler;
 import com.hellotravel.application.knowledge.command.KnowledgeCommand;
 import com.hellotravel.application.knowledge.result.KnowledgeAppResult;
 import com.hellotravel.application.support.ApplicationFailures;
 import com.hellotravel.application.tx.Transactions;
+import com.hellotravel.util.file.FileStorageException;
+import com.hellotravel.util.file.FileStorageUtil;
 import com.hellotravel.domain.knowledge.model.aggregate.KnowledgeDocumentAggregate;
 import com.hellotravel.domain.knowledge.repository.IndexJobRepository;
 import com.hellotravel.domain.knowledge.repository.KnowledgeChunkRepository;
@@ -28,6 +28,13 @@ public final class UploadKnowledgeDocumentAppService extends KnowledgeDocumentSu
     implements KnowledgeActionHandler {
 
   /**
+   * 仅由上传动作使用的内部本地文件工具。
+   *
+   * @author AIGenerator
+   */
+  private final FileStorageUtil files;
+
+  /**
    * 注入该业务动作所需的受控协作。
    *
    * @param knowledgeDomainService 注入的受控协作。
@@ -37,8 +44,7 @@ public final class UploadKnowledgeDocumentAppService extends KnowledgeDocumentSu
    * @param indexJob 注入的受控协作。
    * @param transactions 注入的受控协作。
    * @param events 注入的受控协作。
-   * @param files 注入的受控协作。
-   * @param fileCommandAppAssembler 注入的受控协作。
+   * @param files 本地文件通用工具。
    * @param knowledgeAppAssembler 注入的受控协作。
    * @author AIGenerator
    */
@@ -50,8 +56,7 @@ public final class UploadKnowledgeDocumentAppService extends KnowledgeDocumentSu
       IndexJobRepository indexJob,
       Transactions transactions,
       SyncEventPublisher events,
-      FileOutAdaptor files,
-      FileCommandAppAssembler fileCommandAppAssembler,
+      FileStorageUtil files,
       KnowledgeAppAssembler knowledgeAppAssembler) {
     super(
         knowledgeDomainService,
@@ -61,9 +66,8 @@ public final class UploadKnowledgeDocumentAppService extends KnowledgeDocumentSu
         indexJob,
         transactions,
         events,
-        files,
-        fileCommandAppAssembler,
         knowledgeAppAssembler);
+    this.files = files;
   }
 
   /**
@@ -96,15 +100,9 @@ public final class UploadKnowledgeDocumentAppService extends KnowledgeDocumentSu
         throw new ApplicationException(ApplicationErrorCode.INVALID);
       }
     }
-    // 2. 取得本段结果并准备本层转换，随后显式核对成功状态。
-    var result = files.store(fileCommandAppAssembler.save(command));
-    // 3. 核对下层标准结果的成功状态，失败中止当前处理。
-    if (!result.success()) {
-      throw new ApplicationException(ApplicationErrorCode.INVALID);
-    }
-    // 4. 解析受限附件，格式与容量约束由解析步骤核对。
-    var parsed = result.data();
-    // 5. 在异常捕获或资源释放边界内完成本段处理，失败不得伪装为成功。
+    // 2. 调用内部文件工具完成受限解析与原子保存，业务层保留文件结果的使用决定。
+    var parsed = store(command);
+    // 3. 在异常边界内持久化知识库聚合，失败时补偿本次落盘文件。
     try {
       return transactions.mutate(
           command.userId(),
@@ -129,8 +127,33 @@ public final class UploadKnowledgeDocumentAppService extends KnowledgeDocumentSu
             return knowledgeAppAssembler.single(document, true);
           });
     } catch (RuntimeException exception) {
-      files.store(fileCommandAppAssembler.delete(parsed.storageKey()));
+      deleteQuietly(parsed.storageKey());
       throw exception;
     }
   }
+
+  private FileStorageUtil.StoredFile store(KnowledgeCommand command) {
+    try {
+      // 1. 使用通用文件工具处理字节与格式，知识库规则不进入工具实现。
+      return files.store(command.filename(), command.bytes());
+    } catch (FileStorageException exception) {
+      // 2. 将技术工具失败转换为当前应用动作可公开的稳定错误。
+      throw new ApplicationException(
+          exception.reason() == FileStorageException.Reason.INVALID
+              ? ApplicationErrorCode.INVALID
+              : exception.reason() == FileStorageException.Reason.BUSY
+                  ? ApplicationErrorCode.RATE_LIMITED
+                  : ApplicationErrorCode.UNAVAILABLE);
+    }
+  }
+
+  private void deleteQuietly(String storageKey) {
+    try {
+      // 1. 补偿只清理本次已落盘文件，原始业务异常仍由调用方保留。
+      files.delete(storageKey);
+    } catch (FileStorageException ignored) {
+      // 2. 记录由外层统一异常链路完成，补偿失败不能覆盖原始事务失败。
+    }
+  }
+
 }

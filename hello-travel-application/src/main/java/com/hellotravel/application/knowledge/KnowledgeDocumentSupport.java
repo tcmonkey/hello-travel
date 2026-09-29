@@ -3,8 +3,6 @@ package com.hellotravel.application.knowledge;
 import com.hellotravel.application.chat.support.SyncEventPublisher;
 import com.hellotravel.application.exception.ApplicationErrorCode;
 import com.hellotravel.application.exception.ApplicationException;
-import com.hellotravel.application.knowledge.adaptor.FileOutAdaptor;
-import com.hellotravel.application.knowledge.assembler.FileCommandAppAssembler;
 import com.hellotravel.application.knowledge.assembler.KnowledgeAppAssembler;
 import com.hellotravel.application.knowledge.assembler.KnowledgeDomainParamAssembler;
 import com.hellotravel.application.support.ApplicationFailures;
@@ -79,20 +77,6 @@ abstract class KnowledgeDocumentSupport {
    *
    * @author AIGenerator
    */
-  protected final FileOutAdaptor files;
-
-  /**
-   * 跨动作复用的受控依赖。
-   *
-   * @author AIGenerator
-   */
-  protected final FileCommandAppAssembler fileCommandAppAssembler;
-
-  /**
-   * 跨动作复用的受控依赖。
-   *
-   * @author AIGenerator
-   */
   protected final KnowledgeAppAssembler knowledgeAppAssembler;
 
   protected KnowledgeDocumentSupport(
@@ -103,8 +87,6 @@ abstract class KnowledgeDocumentSupport {
       IndexJobRepository indexJob,
       Transactions transactions,
       SyncEventPublisher events,
-      FileOutAdaptor files,
-      FileCommandAppAssembler fileCommandAppAssembler,
       KnowledgeAppAssembler knowledgeAppAssembler) {
     this.knowledgeDomainService = knowledgeDomainService;
     this.knowledgeDomainParamAssembler = knowledgeDomainParamAssembler;
@@ -113,8 +95,6 @@ abstract class KnowledgeDocumentSupport {
     this.indexJob = indexJob;
     this.transactions = transactions;
     this.events = events;
-    this.files = files;
-    this.fileCommandAppAssembler = fileCommandAppAssembler;
     this.knowledgeAppAssembler = knowledgeAppAssembler;
   }
 

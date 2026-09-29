@@ -1,8 +1,6 @@
 package com.hellotravel.application.knowledge;
 
 import com.hellotravel.application.chat.support.SyncEventPublisher;
-import com.hellotravel.application.knowledge.adaptor.FileOutAdaptor;
-import com.hellotravel.application.knowledge.assembler.FileCommandAppAssembler;
 import com.hellotravel.application.knowledge.assembler.KnowledgeAppAssembler;
 import com.hellotravel.application.knowledge.assembler.KnowledgeDomainParamAssembler;
 import com.hellotravel.application.knowledge.command.KnowledgeCommand;
@@ -33,8 +31,6 @@ public final class ReadKnowledgeDocumentAppService extends KnowledgeDocumentSupp
    * @param indexJob 注入的受控协作。
    * @param transactions 注入的受控协作。
    * @param events 注入的受控协作。
-   * @param files 注入的受控协作。
-   * @param fileCommandAppAssembler 注入的受控协作。
    * @param knowledgeAppAssembler 注入的受控协作。
    * @author AIGenerator
    */
@@ -46,8 +42,6 @@ public final class ReadKnowledgeDocumentAppService extends KnowledgeDocumentSupp
       IndexJobRepository indexJob,
       Transactions transactions,
       SyncEventPublisher events,
-      FileOutAdaptor files,
-      FileCommandAppAssembler fileCommandAppAssembler,
       KnowledgeAppAssembler knowledgeAppAssembler) {
     super(
         knowledgeDomainService,
@@ -57,8 +51,6 @@ public final class ReadKnowledgeDocumentAppService extends KnowledgeDocumentSupp
         indexJob,
         transactions,
         events,
-        files,
-        fileCommandAppAssembler,
         knowledgeAppAssembler);
   }
 
