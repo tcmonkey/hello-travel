@@ -14,7 +14,6 @@ import com.hellotravel.model.chat.ChatModelStage;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
-import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.CancellationException;
 
@@ -59,7 +58,7 @@ public final class TravelDialogueAdaptorImpl implements TravelDialogueAdaptor {
                     ChatModelStage.DIALOGUE)) {
                 return Result.failure(AdaptorErrorCode.CONTEXT_LIMIT);
             }
-            // 2. 累积流式正文并把节流后的完整草稿交给应用层进度回调。
+            // 2. 累积流式正文并把节流后的完整草稿交给应用层；等待上限统一由模型客户端配置收口。
             StringBuilder text = new StringBuilder();
             travelDialogueAiService.answer(
                             travelDialogueCommand.input(),
@@ -79,7 +78,7 @@ public final class TravelDialogueAdaptorImpl implements TravelDialogueAdaptor {
                                 }
                             })
                     .then()
-                    .block(Duration.ofSeconds(95));
+                    .block();
             // 3. 空流不能提交为成功回答；供应商未返回usage时保持未知。
             if (text.isEmpty()) {
                 return Result.failure(AdaptorErrorCode.UNAVAILABLE);
